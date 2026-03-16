@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { Activity, ShieldAlert, CheckCircle2, Clock, CheckSquare, Square, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { MouseEvent } from "react";
@@ -45,6 +46,50 @@ export function PickCard({
   onToggleSelect,
   liveStatus,
 }: PickProps) {
+  const [countdown, setCountdown] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!gameTime) return;
+
+    const updateCountdown = () => {
+      try {
+        // Construct a parseable date string
+        let datePart = gameDate || "Today";
+        if (datePart === "Today") {
+          const now = new Date();
+          datePart = `${now.getMonth() + 1}/${now.getDate()}/${now.getFullYear()}`;
+        } else if (datePart === "Tomorrow") {
+          const tomorrow = new Date();
+          tomorrow.setDate(tomorrow.getDate() + 1);
+          datePart = `${tomorrow.getMonth() + 1}/${tomorrow.getDate()}/${tomorrow.getFullYear()}`;
+        }
+
+        const startTime = new Date(`${datePart} ${gameTime}`).getTime();
+        const now = Date.now();
+        const diff = startTime - now;
+
+        if (isNaN(startTime) || diff <= 0) {
+          setCountdown(null);
+          return;
+        }
+
+        const h = Math.floor(diff / (1000 * 60 * 60));
+        const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        const s = Math.floor((diff % (1000 * 60)) / 1000);
+
+        if (h > 0) setCountdown(`${h}h ${m}m`);
+        else if (m > 0) setCountdown(`${m}m ${s}s`);
+        else setCountdown(`${s}s`);
+      } catch (err) {
+        setCountdown(null);
+      }
+    };
+
+    updateCountdown();
+    const timer = setInterval(updateCountdown, 1000);
+    return () => clearInterval(timer);
+  }, [gameDate, gameTime]);
+
   const isHighConfidence = confidence >= 9.0;
 
   const isWinning = liveStatus === "WINNING" || liveStatus === "WON";
@@ -112,8 +157,13 @@ export function PickCard({
                   </span>
                 )}
                 {gameTime && (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-muted-foreground bg-secondary/50 border border-border px-2 py-0.5 rounded-full">
-                    <Clock className="w-3 h-3" />{gameDate ? `${gameDate} • ` : ""}{gameTime} ET
+                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-muted-foreground bg-secondary/50 border border-border px-2 py-0.5 rounded-full whitespace-nowrap min-w-[80px] justify-center">
+                    <Clock className="w-3 h-3" />
+                    {countdown ? (
+                      <span className="text-primary font-black tabular-nums">{countdown}</span>
+                    ) : (
+                      <>{gameDate ? `${gameDate} • ` : ""}{gameTime} ET</>
+                    )}
                   </span>
                 )}
               </div>

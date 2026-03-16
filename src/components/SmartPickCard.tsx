@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Pick } from "@/lib/picksData";
 import { PreGameValidation, LiveGameTracking } from "@/lib/types";
 import { Activity, Clock, CheckCircle2, ShieldAlert, ExternalLink, RefreshCw, CircleDot, CheckSquare, ListChecks, AlertCircle } from "lucide-react";
@@ -46,6 +46,32 @@ const getSeasonLabel = (validation: PreGameValidation) => {
 
 function PreGameCard({ pick, validation, isSelected, onToggleSelect }: { pick: Pick; validation: PreGameValidation; isSelected?: boolean; onToggleSelect?: () => void }) {
   const [showAudit, setShowAudit] = useState(false);
+  const [countdown, setCountdown] = useState<string | null>(null);
+
+  useEffect(() => {
+    const updateCountdown = () => {
+      const startTime = new Date(validation.event_date_utc).getTime();
+      const now = Date.now();
+      const diff = startTime - now;
+
+      if (diff <= 0) {
+        setCountdown(null);
+        return;
+      }
+
+      const h = Math.floor(diff / (1000 * 60 * 60));
+      const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const s = Math.floor((diff % (1000 * 60)) / 1000);
+
+      if (h > 0) setCountdown(`${h}h ${m}m`);
+      else if (m > 0) setCountdown(`${m}m ${s}s`);
+      else setCountdown(`${s}s`);
+    };
+
+    updateCountdown();
+    const timer = setInterval(updateCountdown, 1000);
+    return () => clearInterval(timer);
+  }, [validation.event_date_utc]);
   
   const handleOutboundClick = async (e: MouseEvent<HTMLAnchorElement>) => {
     try {
@@ -106,8 +132,13 @@ function PreGameCard({ pick, validation, isSelected, onToggleSelect }: { pick: P
                 {pick.isPremium && (
                   <span className="text-[9px] font-bold bg-primary text-primary-foreground px-2 py-0.5 rounded uppercase">PREMIUM</span>
                 )}
-                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-muted-foreground bg-secondary/50 border border-border px-2 py-0.5 rounded-full whitespace-nowrap">
-                  <Clock className="w-3 h-3" />{validation.display_time_local}
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-muted-foreground bg-secondary/50 border border-border px-2 py-0.5 rounded-full whitespace-nowrap min-w-[70px] justify-center">
+                  <Clock className="w-3 h-3" />
+                  {countdown ? (
+                    <span className="text-primary font-black tabular-nums">{countdown}</span>
+                  ) : (
+                    validation.display_time_local
+                  )}
                 </span>
               </div>
             </div>
