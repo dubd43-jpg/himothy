@@ -270,6 +270,17 @@ function PreGameCard({ pick, validation, isSelected, onToggleSelect }: { pick: P
           </p>
         </div>
 
+        {pick.fadeReasoning && (
+           <div className="mt-1 pb-1 border-t border-border/30 pt-2">
+             <div className="flex items-center gap-1.5 text-xs font-bold text-red-400 mb-1">
+               <ShieldAlert className="w-3.5 h-3.5" /> Fading Opponent
+             </div>
+             <p className="text-xs text-muted-foreground leading-relaxed font-medium italic">
+               {pick.fadeReasoning}
+             </p>
+           </div>
+        )}
+
         {/* Parlay Legs Section */}
         {pick.legs && pick.legs.length > 0 && (
           <div className="mt-1 bg-primary/5 border border-primary/20 rounded-lg p-3">
@@ -465,6 +476,24 @@ function LiveGameCard({ pick, tracking, validation }: { pick: Pick; tracking: Li
              <div className="flex-1 min-h-[60px] flex items-center justify-center">
                 <p className="text-xs text-muted-foreground font-medium italic">Awaiting plays...</p>
              </div>
+         )}
+      </div>
+      <div className="p-4 bg-secondary/10 flex flex-col gap-2">
+         <div className="flex items-center gap-1.5 text-[10px] font-black text-muted-foreground uppercase tracking-widest">
+            <Activity className="w-3 h-3" /> System Logic
+         </div>
+         <p className="text-[11px] font-medium text-foreground/80 leading-relaxed italic">
+            "{pick.reasoning}"
+         </p>
+         {pick.fadeReasoning && (
+           <div className="mt-1 flex flex-col gap-1 border-t border-border/20 pt-2">
+              <div className="flex items-center gap-1.5 text-[10px] font-black text-red-400 uppercase tracking-widest">
+                <ShieldAlert className="w-3 h-3" /> Fading Opponent
+              </div>
+              <p className="text-[10px] font-medium text-muted-foreground leading-relaxed italic">
+                {pick.fadeReasoning}
+              </p>
+           </div>
          )}
       </div>
 

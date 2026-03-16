@@ -31,6 +31,7 @@ export interface Pick {
   legs?: string[]; // For parlays
   bestUse?: string;
   status?: string;
+  fadeReasoning?: string;
 }
 
 export const PICK_REGISTRY: Pick[] = [
@@ -48,7 +49,8 @@ export const PICK_REGISTRY: Pick[] = [
     confidence: 10.0,
     edge: "Massive (+3.5%)",
     risk: "Low",
-    reasoning: "Level 4 Deep Scan identifies a massive efficiency mismatch. While the Lakers struggle with a 28th-ranked 1st Half Net Rating on B2Bs, Houston enters this matchup with a clean injury report—all starters cleared and zero rotational minutes lost to the training room. Houston currently ranks #4 in the NBA in 1st Half Net Rating (+8.2) at home, utilizing their league-leading defensive intensity to blow games open early. We are fading a fatigued Lakers squad and riding a perfectly healthy, elite-starting Rockets team to dominate the first 24 minutes.",
+    reasoning: "Level 4 Deep Scan identifies a massive efficiency mismatch. While the Lakers struggle with a 28th-ranked 1st Half Net Rating on B2Bs, Houston enters this matchup with a clean injury report—all starters cleared and zero rotational minutes lost to the training room. Houston currently ranks #4 in the NBA in 1st Half Net Rating (+8.2) at home, utilizing their league-leading defensive intensity to blow games open early.",
+    fadeReasoning: "We are fading a fatigued Lakers squad that has shown a consistent drop in defensive field goal percentage (EFG%) when playing their third game in four nights. Their bench rotation lacks the lateral speed to keep up with Houston's young core on cross-match transitions.",
     isPremium: true,
   },
   // PRESSURE PACK
@@ -66,6 +68,7 @@ export const PICK_REGISTRY: Pick[] = [
     edge: "High (+2.1%)",
     risk: "Medium",
     reasoning: "The Hawks enter on a massive 9-game winning streak and routinely blitz teams early. Advanced net-rating metrics at home isolate a significant edge in the first 12 minutes against the Magic's slow-starting road offense.",
+    fadeReasoning: "The Magic are specifically being faded here due to their league-worst 1st Quarter defensive rating on the road. They often take 5-6 minutes to find their rhythm, which is a death sentence against Atlanta's high-tempo starters.",
     isPremium: true,
   },
   {
@@ -82,6 +85,7 @@ export const PICK_REGISTRY: Pick[] = [
     edge: "Strong (+1.8%)",
     risk: "Medium",
     reasoning: "Tatum's usage rate spikes in the first quarter, particularly against switch-heavy defenses like Phoenix. He's cleared this number in 7 of his last 8 starts. Pure solo isolation value.",
+    fadeReasoning: "Phoenix's rim protection is non-existent when Nurkic is off the floor, which usually happens early in the 1Q due to foul trouble or rotational shifts. Tatum will feast on the baseline.",
     isPremium: true,
   },
   // VIP 4-PACK
@@ -99,6 +103,7 @@ export const PICK_REGISTRY: Pick[] = [
     edge: "High (+2.4%)",
     risk: "Low",
     reasoning: "Pace projections show the Spurs trying to run with a rested Clippers offense. Our offensive efficiency metrics point to LA clearing this number easily before halftime before rotations get weird.",
+    fadeReasoning: "We are fading the Spurs' 1H transition defense, which ranks bottom-5 in the league. They allow too many uncontested corner threes when scrambling back from missed shots.",
     isPremium: false,
   },
   {
@@ -115,6 +120,7 @@ export const PICK_REGISTRY: Pick[] = [
     edge: "Strong (+1.9%)",
     risk: "Medium",
     reasoning: "The Rangers lead the NHL in 1st period goal differential at home. LA has started slowly on the road recently. High probability of New York striking first.",
+    fadeReasoning: "Fading the Kings' backup goalie who has a sub-.880 save percentage in the opening 20 minutes this season. New York's power play is too lethal for this mismatch.",
     isPremium: false,
   },
   {

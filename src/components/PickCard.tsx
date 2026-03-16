@@ -23,6 +23,7 @@ export interface PickProps {
   isSelected?: boolean;
   onToggleSelect?: () => void;
   liveStatus?: "WINNING" | "LOSING" | "PENDING" | "WON" | "LOST";
+  fadeReasoning?: string;
 }
 
 export function PickCard({
@@ -45,6 +46,7 @@ export function PickCard({
   isSelected = false,
   onToggleSelect,
   liveStatus,
+  fadeReasoning,
 }: PickProps) {
   const [countdown, setCountdown] = useState<string | null>(null);
 
@@ -221,6 +223,17 @@ export function PickCard({
             {reasoning}
           </p>
         </div>
+
+        {fadeReasoning && (
+           <div className="mt-2 pt-2 border-t border-border/30">
+             <div className="flex items-center gap-1.5 text-xs font-bold text-red-400 mb-1">
+               <ShieldAlert className="w-3.5 h-3.5" /> Fading Opponent
+             </div>
+             <p className="text-xs text-muted-foreground leading-relaxed font-medium italic">
+               {fadeReasoning}
+             </p>
+           </div>
+        )}
         
         <div className="mt-2 pt-3 border-t border-border/50 space-y-4">
           <div className="flex justify-between items-center">
