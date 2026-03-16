@@ -20,6 +20,10 @@ export async function GET() {
           const home = comp?.competitors?.find((c: any) => c.homeAway === 'home');
           const away = comp?.competitors?.find((c: any) => c.homeAway === 'away');
           
+          const isLive = event.status?.type?.state === 'in';
+          const isFinal = event.status?.type?.state === 'post' || event.status?.type?.completed;
+          const isScheduled = !isLive && !isFinal;
+
           return {
             id: event.id,
             league: name,
@@ -29,8 +33,10 @@ export async function GET() {
             awayScore: parseInt(away?.score || '0'),
             status: event.status?.type?.detail || event.status?.type?.description || 'Scheduled',
             clock: event.status?.displayClock || '',
-            isLive: event.status?.type?.state === 'in',
-            isFinal: event.status?.type?.state === 'post' || event.status?.type?.completed
+            isLive,
+            isFinal,
+            isScheduled,
+            externalLink: `https://www.espn.com/${name.toLowerCase().includes('soccer') ? 'soccer' : name.toLowerCase().includes('nhl') ? 'nhl' : 'nba'}/game/_/gameId/${event.id}`
           };
         });
       } catch {

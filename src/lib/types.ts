@@ -119,4 +119,5 @@ export interface LiveGameTracking {
   player_stats: any;
   last_updated: string;
   feed_health: "ok" | "delayed" | "down";
+  external_link?: string;
 }

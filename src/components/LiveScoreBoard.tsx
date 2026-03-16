@@ -11,9 +11,12 @@ interface GameScore {
   awayTeam: string;
   homeScore: number;
   awayScore: number;
-  status: string;
   period: string;
   clock: string;
+  isLive: boolean;
+  isFinal: boolean;
+  isScheduled: boolean;
+  externalLink: string;
 }
 
 export function LiveScoreBoard() {
@@ -85,10 +88,12 @@ export function LiveScoreBoard() {
                    </span>
                 </div>
                 <div className={`flex items-center gap-3 px-5 py-2 rounded-full border text-[10px] font-black uppercase tracking-widest
-                  ${game.status === "live" ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-white/5 border-white/10 text-white/40'}
+                  ${game.isLive ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 
+                    game.isFinal ? 'bg-white/5 border-white/10 text-white/40' : 
+                    'bg-primary/10 border-primary/20 text-primary'}
                 `}>
-                  {game.status === "live" ? <CircleDot className="w-3 h-3 animate-pulse" /> : <Timer className="w-3 h-3 " />}
-                  {game.status === "live" ? "ACTIVE" : "FINAL"}
+                  {game.isLive ? <CircleDot className="w-3 h-3 animate-pulse" /> : <Timer className="w-3 h-3 " />}
+                  {game.isLive ? "ACTIVE" : game.isFinal ? "FINAL" : "SCHEDULED"}
                 </div>
               </div>
 
@@ -112,13 +117,18 @@ export function LiveScoreBoard() {
                        {game.period} {game.clock !== "0:00" && `• ${game.clock}`}
                     </div>
                  </div>
-                 <div className="flex items-center gap-3">
-                    <div className="w-16 h-1 bg-white/5 rounded-full overflow-hidden">
-                       <div className="w-2/3 h-full bg-primary shadow-[0_0_10px_rgba(212,168,67,0.5)]" />
-                    </div>
+                  <div className="flex items-center gap-3">
+                    <a 
+                      href={game.externalLink} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-[9px] font-black uppercase tracking-widest text-white/60 hover:text-primary transition-all flex items-center gap-2"
+                    >
+                      <Globe className="w-3 h-3" /> Watch
+                    </a>
                     <Activity className="w-4 h-4 text-primary opacity-40" />
-                 </div>
-              </div>
+                  </div>
+                </div>
             </div>
           ))
         )}

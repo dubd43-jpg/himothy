@@ -439,11 +439,21 @@ function LiveGameCard({ pick, tracking, validation }: { pick: Pick; tracking: Li
 
       {/* 4. Live Footer */}
       <div className="p-10 border-t border-white/5 bg-black/60 flex justify-between items-center">
-         <div className="flex flex-col gap-1">
-            <span className="text-[10px] font-black text-white/20 uppercase tracking-[0.2em]">Node Heartbeat</span>
-            <span className="text-xs font-bold text-white/40 uppercase tracking-widest">
-               Last Sync: {new Date(validation.sources_checked[0]?.last_updated || Date.now()).toLocaleTimeString()}
-            </span>
+         <div className="flex items-center gap-4">
+            <a 
+              href={tracking.external_link || `https://www.espn.com/${pick.sport.toLowerCase().includes('soccer') ? 'soccer' : 'nba'}/game/_/gameId/${tracking.game_id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-6 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-[10px] font-black uppercase tracking-widest text-primary flex items-center gap-2 transition-all"
+            >
+               <Globe className="w-4 h-4" /> Watch Live
+            </a>
+            <div className="flex flex-col gap-1">
+               <span className="text-[10px] font-black text-white/20 uppercase tracking-[0.2em]">Node Heartbeat</span>
+               <span className="text-xs font-bold text-white/40 uppercase tracking-widest">
+                  Last Sync: {new Date(validation.sources_checked[0]?.last_updated || Date.now()).toLocaleTimeString()}
+               </span>
+            </div>
          </div>
          {isLive && (
            <div className="flex items-center gap-3 bg-emerald-500/10 border border-emerald-500/20 px-6 py-3 rounded-full">

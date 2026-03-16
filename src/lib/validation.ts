@@ -303,7 +303,8 @@ export async function validateAndTrackGame(pick: Pick) {
         period: matchedEvent.status?.period ? String(matchedEvent.status.period) : "",
         clock: matchedEvent.status?.displayClock || "0:00",
         last_updated: new Date().toISOString(),
-        season_context: preValidation.season_context as any
+        season_context: preValidation.season_context as any,
+        external_link: `https://www.espn.com/${pick.sport.toLowerCase().includes('soccer') ? 'soccer' : pick.sport.toLowerCase().includes('nhl') ? 'nhl' : 'nba'}/game/_/gameId/${matchedEvent.id}`
       } as any;
     }
   }
