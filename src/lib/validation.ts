@@ -285,7 +285,7 @@ export async function validateAndTrackGame(pick: Pick) {
       home_team: homeTeamNode?.team?.displayName || "Home",
       away_team: awayTeamNode?.team?.displayName || "Away",
       event_date_utc: eventTime.toISOString(),
-      display_time_local: eventTime.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+      display_time_local: eventTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }) + " ET",
       status: mappedStatus as any,
       season_context: seasonContext as any,
       safe_to_publish: ["scheduled", "live", "final"].includes(mappedStatus) && seasonContext.calendar_fit,

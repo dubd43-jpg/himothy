@@ -53,20 +53,23 @@ export function PickCard({
 
     const updateCountdown = () => {
       try {
-        // Construct a parseable date string
+        // Construct a parseable date string assuming ET
         let datePart = gameDate || "Today";
+        const now = new Date();
+        const nowInET = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: 'numeric', day: 'numeric' }).format(now);
+        
         if (datePart === "Today") {
-          const now = new Date();
-          datePart = `${now.getMonth() + 1}/${now.getDate()}/${now.getFullYear()}`;
+          datePart = nowInET;
         } else if (datePart === "Tomorrow") {
-          const tomorrow = new Date();
+          const tomorrow = new Date(now);
           tomorrow.setDate(tomorrow.getDate() + 1);
-          datePart = `${tomorrow.getMonth() + 1}/${tomorrow.getDate()}/${tomorrow.getFullYear()}`;
+          datePart = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: 'numeric', day: 'numeric' }).format(tomorrow);
         }
 
-        const startTime = new Date(`${datePart} ${gameTime}`).getTime();
-        const now = Date.now();
-        const diff = startTime - now;
+        // Parse with ET context
+        const dateStr = `${datePart} ${gameTime}`;
+        const startTime = new Date(dateStr + " GMT-0400").getTime(); // Force ET offset (Approx)
+        const diff = startTime - now.getTime();
 
         if (isNaN(startTime) || diff <= 0) {
           setCountdown(null);
@@ -162,7 +165,7 @@ export function PickCard({
                     {countdown ? (
                       <span className="text-primary font-black tabular-nums">{countdown}</span>
                     ) : (
-                      <>{gameDate ? `${gameDate} • ` : ""}{gameTime} ET</>
+                      <>{gameDate ? `${gameDate} • ` : ""}{gameTime}</>
                     )}
                   </span>
                 )}
