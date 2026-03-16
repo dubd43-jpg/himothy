@@ -1,51 +1,77 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
+ 
 @layer base {
   :root {
-    /* Deep Navy — matches HIMOTHY logo background */
-    --background: 213 40% 7%;
-    --foreground: 45 20% 95%;
-
-    /* Slightly lighter navy for cards */
-    --card: 214 38% 10%;
-    --card-foreground: 45 20% 95%;
-
-    --popover: 214 38% 10%;
-    --popover-foreground: 45 20% 95%;
-
-    /* GOLD — your crown & ring color */
-    --primary: 43 65% 55%;
-    --primary-foreground: 213 40% 7%;
-
-    /* Steel blue for secondary surfaces */
-    --secondary: 214 30% 18%;
-    --secondary-foreground: 45 20% 90%;
-
-    --muted: 214 28% 13%;
-    --muted-foreground: 214 15% 55%;
-
-    --accent: 43 65% 55%;
-    --accent-foreground: 213 40% 7%;
-
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 45 20% 95%;
-
-    /* Steel-blue borders */
-    --border: 214 28% 18%;
-    --input: 214 28% 18%;
-    --ring: 43 65% 55%;
-
-    --radius: 0.5rem;
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 240 10% 4.5%;
+    --card-foreground: 0 0% 98%;
+    --popover: 240 10% 3.9%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 45 61% 55%;
+    --primary-foreground: 240 5.9% 10%;
+    --secondary: 240 3.7% 15.9%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 240 3.7% 15.9%;
+    --muted-foreground: 240 5% 64.9%;
+    --accent: 240 3.7% 15.9%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 3.7% 12%;
+    --input: 240 3.7% 15.9%;
+    --ring: 45 61% 55%;
+    --radius: 0.75rem;
   }
 }
-
+ 
 @layer base {
   * {
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground selection:bg-primary/30;
+    font-feature-settings: "rlig" 1, "calt" 1;
   }
+}
+
+.glass-morphism {
+  @apply bg-card/60 backdrop-blur-xl border border-white/5;
+}
+
+.premium-gradient {
+  background: radial-gradient(at top left, hsla(45, 61%, 55%, 0.15) 0%, transparent 50%),
+              radial-gradient(at bottom right, hsla(240, 10%, 15%, 0.1) 0%, transparent 50%);
+}
+
+.himo-glow {
+  box-shadow: 0 0 30px -10px hsla(45, 61%, 55%, 0.3);
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+@keyframes float {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+  100% { transform: translateY(0px); }
+}
+
+.scanline {
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(to right, transparent, hsla(45, 61%, 55%, 0.5), transparent);
+  position: absolute;
+  top: 0;
+  left: 0;
+  animation: scan 3s linear infinite;
+  z-index: 20;
+}
+
+@keyframes scan {
+  from { top: -100px; }
+  to { top: 1000px; }
 }
