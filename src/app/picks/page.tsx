@@ -133,7 +133,6 @@ export default function PicksHubPage() {
 
   return (
     <div className="min-h-screen bg-[#050505] text-white pb-24 premium-gradient selection:bg-primary/30">
-      <div className="scanline opacity-10" />
       
       {/* 1. Tactical Header */}
       <header className="px-6 lg:px-12 py-8 border-b border-white/5 bg-black/40 backdrop-blur-2xl sticky top-0 z-50">

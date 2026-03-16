@@ -60,18 +60,4 @@
   100% { transform: translateY(0px); }
 }
 
-.scanline {
-  width: 100%;
-  height: 2px;
-  background: linear-gradient(to right, transparent, hsla(45, 61%, 55%, 0.5), transparent);
-  position: absolute;
-  top: 0;
-  left: 0;
-  animation: scan 3s linear infinite;
-  z-index: 20;
-}
-
-@keyframes scan {
-  from { top: -100px; }
-  to { top: 1000px; }
-}
+ 

@@ -126,7 +126,6 @@ function PreGameCard({ pick, validation, isSelected, onToggleSelect }: { pick: P
       {/* 2. Strategy Hero */}
       <div className="p-12 md:p-16 bg-black/40 flex flex-col items-center text-center border-b border-white/5 relative overflow-hidden group/bet min-h-[350px] justify-center">
         <div className="absolute inset-0 bg-primary/[0.03] opacity-0 group-hover/bet:opacity-100 transition-opacity duration-1000" />
-        <div className="scanline opacity-10" />
         
         <span className="text-xs font-black text-white/20 uppercase tracking-[0.5em] mb-8">Node Strategy: {pick.market}</span>
         <div className="text-5xl md:text-7xl font-black text-white mb-12 tracking-tighter filter drop-shadow-[0_0_30px_rgba(255,255,255,0.1)] transition-transform group-hover/bet:scale-[1.03] duration-700">
@@ -325,7 +324,6 @@ function LiveGameCard({ pick, tracking, validation }: { pick: Pick; tracking: Li
 
       {/* 2. Tactical Scoreboard - MASSIVE */}
       <div className="p-12 md:p-16 bg-black/60 flex flex-col gap-12 border-b border-white/5 relative overflow-hidden">
-         <div className="scanline opacity-10" />
          
          <div className="flex items-center justify-between text-[11px] font-black text-white/20 tracking-[0.5em] uppercase px-4">
             <span>VISITOR NODE</span>

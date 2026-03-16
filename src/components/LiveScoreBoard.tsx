@@ -43,7 +43,6 @@ export function LiveScoreBoard() {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-40 border border-white/5 bg-black/40 rounded-[3rem] relative overflow-hidden">
-        <div className="scanline opacity-10" />
         <Cpu className="w-16 h-16 text-primary animate-spin mb-8 opacity-40" />
         <div className="flex flex-col items-center gap-2">
            <p className="text-[12px] font-black uppercase tracking-[0.5em] text-primary">Synchronizing Global Feed</p>
@@ -76,7 +75,6 @@ export function LiveScoreBoard() {
         ) : (
           games.map((game) => (
             <div key={game.id} className="relative group bg-white/[0.03] border border-white/10 rounded-[2.5rem] p-10 hover:border-primary/40 transition-all duration-700 overflow-hidden shadow-2xl">
-              <div className="scanline opacity-10" />
               
               {/* Header */}
               <div className="flex justify-between items-center mb-10">

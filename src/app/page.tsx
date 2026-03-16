@@ -11,7 +11,7 @@ export default function Home() {
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#050505] text-white selection:bg-primary/30 premium-gradient">
+    <div className="min-h-screen bg-[#050505] text-white pb-24 premium-gradient selection:bg-primary/30">
       {/* 1. Command Header */}
       <header className="px-6 lg:px-12 py-5 border-b border-white/5 bg-black/40 backdrop-blur-2xl sticky top-0 z-50 flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -57,7 +57,6 @@ export default function Home() {
       <main className="flex-1">
         {/* 2. Hero Command Center */}
         <section className="relative px-6 lg:px-12 pt-12 pb-24 overflow-hidden">
-          <div className="scanline" />
           <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-primary/10 blur-[150px] -z-10 rounded-full" />
           
           <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">

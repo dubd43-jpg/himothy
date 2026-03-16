@@ -177,7 +177,6 @@ export function PickCard({
         onClick={onToggleSelect}
       >
         <div className="absolute inset-0 bg-primary/[0.03] opacity-0 group-hover/bet:opacity-100 transition-opacity duration-1000" />
-        <div className="scanline opacity-10" />
         
         <span className="text-xs font-black text-white/20 uppercase tracking-[0.5em] mb-8">Node Strategy: {market}</span>
         <div className="text-5xl md:text-7xl font-black text-white mb-12 tracking-tighter filter drop-shadow-[0_0_30px_rgba(255,255,255,0.1)] transition-transform group-hover/bet:scale-[1.03] duration-700">

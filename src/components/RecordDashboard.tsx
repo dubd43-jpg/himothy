@@ -84,7 +84,6 @@ export function RecordDashboard() {
 
       {/* Accuracy Node */}
       <div className="p-10 rounded-[2.5rem] bg-gradient-to-b from-white/[0.04] to-transparent border border-white/10 space-y-8 relative overflow-hidden">
-         <div className="scanline opacity-5" />
          
          <div className="flex items-center justify-between">
             <div className="flex flex-col gap-2">
