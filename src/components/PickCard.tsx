@@ -160,14 +160,17 @@ export function PickCard({
                   </span>
                 )}
                 {gameTime && (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-muted-foreground bg-secondary/50 border border-border px-2 py-0.5 rounded-full whitespace-nowrap min-w-[80px] justify-center">
-                    <Clock className="w-3 h-3" />
-                    {countdown ? (
+                  <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground bg-secondary/50 border border-border px-2.5 py-1 rounded-full whitespace-nowrap min-w-[110px] justify-center shadow-sm">
+                  <Clock className="w-3 h-3 text-primary/70" />
+                  {countdown ? (
+                    <span className="flex items-center gap-1.5">
+                      <span className="uppercase text-[9px] opacity-70 tracking-tighter">Starts In</span>
                       <span className="text-primary font-black tabular-nums">{countdown}</span>
-                    ) : (
-                      <>{gameDate ? `${gameDate} • ` : ""}{gameTime}</>
-                    )}
-                  </span>
+                    </span>
+                  ) : (
+                    <>{gameDate ? `${gameDate} • ` : ""}{gameTime}</>
+                  )}
+                </span>
                 )}
               </div>
             </div>

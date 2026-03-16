@@ -132,10 +132,13 @@ function PreGameCard({ pick, validation, isSelected, onToggleSelect }: { pick: P
                 {pick.isPremium && (
                   <span className="text-[9px] font-bold bg-primary text-primary-foreground px-2 py-0.5 rounded uppercase">PREMIUM</span>
                 )}
-                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-muted-foreground bg-secondary/50 border border-border px-2 py-0.5 rounded-full whitespace-nowrap min-w-[70px] justify-center">
-                  <Clock className="w-3 h-3" />
+                <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground bg-secondary/50 border border-border px-2.5 py-1 rounded-full whitespace-nowrap min-w-[110px] justify-center shadow-sm">
+                  <Clock className="w-3 h-3 text-primary/70" />
                   {countdown ? (
-                    <span className="text-primary font-black tabular-nums">{countdown}</span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="uppercase text-[9px] opacity-70 tracking-tighter">Starts In</span>
+                      <span className="text-primary font-black tabular-nums">{countdown}</span>
+                    </span>
                   ) : (
                     validation.display_time_local
                   )}
