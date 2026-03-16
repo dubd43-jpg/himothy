@@ -74,11 +74,6 @@ export function PickCard({
           : "border-border shadow-lg hover:border-primary/50"
       }
     `}>
-      {isPremium && (
-        <div className="absolute top-0 right-0 bg-primary text-primary-foreground text-[10px] font-bold px-3 py-1 rounded-bl-lg z-10">
-          PREMIUM
-        </div>
-      )}
       
       {/* Header */}
       <div 
@@ -101,6 +96,9 @@ export function PickCard({
             <div className="flex items-center justify-between gap-2">
               <span className="text-xs font-bold text-primary tracking-wider uppercase">{sport}</span>
               <div className="flex items-center gap-2">
+                {isPremium && (
+                  <span className="text-[9px] font-bold bg-primary text-primary-foreground px-2 py-0.5 rounded uppercase">PREMIUM</span>
+                )}
                 {liveStatus && (
                   <span className={`inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full border uppercase tracking-wider
                     ${

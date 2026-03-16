@@ -91,11 +91,6 @@ function PreGameCard({ pick, validation, isSelected, onToggleSelect }: { pick: P
         </div>
       </div>
 
-      {pick.isPremium && (
-        <div className="absolute top-8 right-0 bg-primary text-primary-foreground text-[10px] font-bold px-3 py-1 rounded-bl-lg z-10">
-          PREMIUM
-        </div>
-      )}
 
       {/* Header */}
       <div className={`p-4 border-b border-border bg-background/30 flex gap-3 ${onToggleSelect ? 'cursor-pointer' : ''}`} onClick={onToggleSelect}>
@@ -105,11 +100,16 @@ function PreGameCard({ pick, validation, isSelected, onToggleSelect }: { pick: P
           </div>
         )}
         <div className="flex-1">
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center justify-between gap-4">
               <span className="text-[10px] font-black text-primary tracking-widest uppercase truncate">{getSeasonLabel(validation)}</span>
-              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-muted-foreground bg-secondary/50 border border-border px-2 py-0.5 rounded-full whitespace-nowrap">
-                <Clock className="w-3 h-3" />{validation.display_time_local}
-              </span>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {pick.isPremium && (
+                  <span className="text-[9px] font-bold bg-primary text-primary-foreground px-2 py-0.5 rounded uppercase">PREMIUM</span>
+                )}
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-muted-foreground bg-secondary/50 border border-border px-2 py-0.5 rounded-full whitespace-nowrap">
+                  <Clock className="w-3 h-3" />{validation.display_time_local}
+                </span>
+              </div>
             </div>
             <h3 className="font-bold text-lg mt-0.5 text-foreground leading-tight">
               {validation.away_team} @ {validation.home_team}
