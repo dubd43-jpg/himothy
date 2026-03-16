@@ -188,7 +188,7 @@ export function PickCard({
               </div>
               
               <a 
-                href={`https://www.google.com/search?q=${encodeURIComponent(game + ' ' + market + ' ' + selection + ' bet')}`}
+                href="https://hardrock.bet"
                 target="_blank" 
                 rel="noopener noreferrer"
                 onClick={handleOutboundClick}

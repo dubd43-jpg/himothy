@@ -189,7 +189,7 @@ function PreGameCard({ pick, validation, isSelected, onToggleSelect }: { pick: P
         )}
 
         {/* Model Stats Row */}
-        <div className="grid grid-cols-3 gap-2 bg-secondary/30 rounded-lg p-3 border border-border">
+        <div className="grid grid-cols-3 gap-1 sm:gap-2 bg-secondary/30 rounded-lg p-3 border border-border">
           <div className="text-center">
             <div className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Confidence</div>
             <div className={`font-black ${isHighConfidence ? 'text-emerald-400' : 'text-primary'}`}>
@@ -198,13 +198,13 @@ function PreGameCard({ pick, validation, isSelected, onToggleSelect }: { pick: P
           </div>
           <div className="text-center border-x border-border px-2">
             <div className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Consensus</div>
-            <div className="font-bold text-xs text-foreground flex items-center justify-center gap-1">
+            <div className="font-bold text-[10px] sm:text-xs text-foreground flex items-center justify-center gap-1">
                <ListChecks className="w-3 h-3 text-primary" /> 4/5 Models
             </div>
           </div>
           <div className="text-center pl-2">
             <div className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Edge</div>
-            <div className="font-bold text-sm text-foreground">{pick.edge}</div>
+            <div className="font-bold text-xs sm:text-sm text-foreground truncate">{pick.edge}</div>
           </div>
         </div>
 
@@ -272,7 +272,7 @@ function PreGameCard({ pick, validation, isSelected, onToggleSelect }: { pick: P
             </div>
             {validation.lifecycle_state !== "removed" ? (
               <a 
-                href={`https://www.google.com/search?q=${encodeURIComponent(pick.game + ' bet')}`}
+                href="https://hardrock.bet"
                 target="_blank" 
                 rel="noopener noreferrer"
                 onClick={handleOutboundClick}
