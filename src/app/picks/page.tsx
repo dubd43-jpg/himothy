@@ -3,7 +3,11 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowLeft, Trophy, Zap, Target, BarChart3, TrendingUp, Crown, Bomb, ArrowRight, Clock, Globe, ShieldCheck, ShieldAlert, Activity, ChevronRight } from "lucide-react";
+import { 
+  ArrowLeft, Trophy, Zap, Target, BarChart3, TrendingUp, 
+  Crown, Bomb, ArrowRight, Clock, Globe, ShieldCheck, 
+  ShieldAlert, Activity, ChevronRight, Cpu, Timer, LineChart 
+} from "lucide-react";
 import { LiveScoreBoard } from "@/components/LiveScoreBoard";
 import { RecordDashboard } from "@/components/RecordDashboard";
 
@@ -42,265 +46,278 @@ export default function PicksHubPage() {
       href: "/grand-slam",
       icon: Trophy,
       label: "HIMOTHY Grand Slam",
-      badge: "Level 4 Edge",
-      badgeColor: "bg-primary/20 text-primary border-primary/30",
-      description: "Our highest confidence play. Filtered through 12 unique variables for the maximum measurable edge.",
-      accentColor: "border-primary/40 hover:border-primary shadow-[0_0_20px_rgba(212,168,67,0.08)]",
+      badge: "LVL 4 EDGE",
+      badgeColor: "bg-primary text-black",
+      description: "Our absolute highest confidence play. Filtered through 12 neural variables for maximum measurable edge.",
+      accentColor: "border-primary/20 hover:border-primary shadow-[0_0_30px_rgba(212,168,67,0.1)]",
+      performance: "ELITE"
     },
     {
       id: "PRESSURE_PACK" as CategoryKey,
       href: "/pressure-pack",
       icon: Zap,
       label: "Pressure Pack",
-      badge: "Edge Confirmed",
-      badgeColor: "bg-orange-500/20 text-orange-400 border-orange-500/30",
-      description: "Forceful plays identifying market inefficiency. We only move when the probability exceeds 75%.",
+      badge: "HIGH PRESSURE",
+      badgeColor: "bg-orange-500 text-black",
+      description: "Forceful plays identifying market inefficiency. We only move when probability exceeds 75%.",
       accentColor: "border-orange-500/20 hover:border-orange-500/50",
+      performance: "STRONG"
     },
     {
       id: "VIP_4_PACK" as CategoryKey,
       href: "/vip-picks",
       icon: Target,
       label: "VIP 4-Pack",
-      badge: "Stable Board",
-      badgeColor: "bg-blue-500/20 text-blue-400 border-blue-500/30",
-      description: "Structured daily foundation. Picks cross-checked against live roster and injury feeds every 5 minutes.",
+      badge: "STABLE BOARD",
+      badgeColor: "bg-blue-500 text-white",
+      description: "Structured daily foundation. Picks cross-checked against live feeds every 5 minutes.",
       accentColor: "border-blue-500/20 hover:border-blue-500/50",
+      performance: "STABLE"
     },
     {
       id: "PARLAY_PLAN" as CategoryKey,
       href: "/parlay-plan",
       icon: BarChart3,
       label: "$10 Parlay Plan",
-      badge: "EV+ Chaser",
-      badgeColor: "bg-green-500/20 text-green-400 border-green-500/30",
+      badge: "FLIP CHASER",
+      badgeColor: "bg-emerald-500 text-black",
       description: "Turning small stakes into a move. Multi-leg tickets built on cumulative edge advantage.",
-      accentColor: "border-green-500/20 hover:border-green-500/50",
+      accentColor: "border-emerald-500/20 hover:border-emerald-500/50",
+      performance: "EV+"
     },
     {
       id: "OVERNIGHT" as CategoryKey,
       href: "/overnight",
       icon: TrendingUp,
       label: "Overnight & Global",
-      badge: "Global Monitor",
-      badgeColor: "bg-purple-500/20 text-purple-400 border-purple-500/30",
-      description: "Soccer and Tennis markets monitored 24/7. Continuous scanning for timezone-based inefficiency.",
+      badge: "24/7 MONITOR",
+      badgeColor: "bg-purple-500 text-white",
+      description: "Soccer and Tennis markets monitored around the clock for timezone-based inefficiency.",
       accentColor: "border-purple-500/20 hover:border-purple-500/50",
+      performance: "MODERATE"
     },
     {
       id: "PERSONAL_PLAY" as CategoryKey,
       href: "/himothy-picks",
       icon: Crown,
       label: "My HIMOTHY Pick",
-      badge: "Verified Edge",
-      badgeColor: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
-      description: "My own read, superseding the algorithm. Only posted when 'Roster Verified' signals are green.",
+      badge: "ROSTER VERIFIED",
+      badgeColor: "bg-yellow-500 text-black",
+      description: "Human-led analysis superseding the algorithm. Only posted when 'Verified' signals are green.",
       accentColor: "border-yellow-500/20 hover:border-yellow-500/50",
+      performance: "DIRECT"
     },
     {
       id: "HAILMARY" as CategoryKey,
       href: "/hailmary",
       icon: Bomb,
       label: "The Hailmarys",
-      badge: "Lotto / Variance",
-      badgeColor: "bg-red-500/20 text-red-400 border-red-500/30",
-      description: "Calculated lottery tickets. Maximum variance, maximum transparency. Shown only if value exists.",
+      badge: "LOTTO / MAX VAR",
+      badgeColor: "bg-red-500 text-white",
+      description: "Calculated lottery tickets. Maximum variance, maximum transparency. Math-forced plays only.",
       accentColor: "border-red-500/20 hover:border-red-500/50",
+      performance: "HIGH VAR"
     },
     {
       id: "OVERSEAS" as CategoryKey,
       href: "/overseas",
       icon: Globe,
-      label: "Overseas & International",
-      badge: "Global Edge",
-      badgeColor: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
-      description: "International leagues (Serie A, Superliga) audited locally. We follow the depth of the board.",
+      label: "Overseas & Int'l",
+      badge: "GLOBAL EDGE",
+      badgeColor: "bg-yellow-500 text-black",
+      description: "International leagues (Serie A, Superliga) audited locally. Deep board scanning enabled.",
       accentColor: "border-yellow-500/20 hover:border-yellow-500/50",
+      performance: "VERIFIED"
     },
   ];
 
   return (
-    <div className="min-h-screen bg-background text-foreground pb-24">
-      <div className="px-6 lg:px-10 py-10 max-w-7xl mx-auto flex flex-col gap-10">
-
-        {/* Header Section */}
-        <div className="flex flex-col gap-6">
-          <Link href="/" className="inline-flex items-center gap-2 text-sm font-bold text-muted-foreground hover:text-foreground transition-colors w-max">
-            <ArrowLeft className="w-4 h-4" /> Back to Home
-          </Link>
-
-          <div className="flex flex-col md:flex-row items-center gap-10 border-b border-border pb-10">
-            <Image
-              src="/logo.jpg"
-              alt="HIMOTHY Plays and Parlays"
-              width={100}
-              height={100}
-              className="rounded-full border-4 border-primary/40 shadow-[0_0_30px_rgba(212,168,67,0.2)] flex-shrink-0"
-            />
-            <div className="flex-1">
-              <div className="flex items-center justify-between mb-2">
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-[10px] font-black border border-primary/20 uppercase tracking-[0.2em]">
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                  Continuous Decision Engine
-                </div>
-                <div className="flex items-center gap-2 text-[10px] font-black text-muted-foreground uppercase tracking-widest">
-                  <span className="text-foreground">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</span>
-                </div>
-              </div>
-              <h1 className="text-4xl md:text-5xl font-black uppercase tracking-tight text-foreground mb-4">
-                TODAY&apos;S <span className="text-primary tracking-normal font-light italic">EDGE BOARD</span>
+    <div className="min-h-screen bg-[#050505] text-white pb-24 premium-gradient selection:bg-primary/30">
+      <div className="scanline opacity-10" />
+      
+      {/* 1. Tactical Header */}
+      <header className="px-6 lg:px-12 py-8 border-b border-white/5 bg-black/40 backdrop-blur-2xl sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-6">
+            <Link href="/" className="p-3 bg-white/5 rounded-2xl hover:bg-white/10 transition-all border border-white/10 group">
+              <ArrowLeft className="w-5 h-5 text-white/50 group-hover:text-primary transition-colors" />
+            </Link>
+            <div className="flex flex-col">
+              <h1 className="text-xl font-black tracking-tight uppercase">
+                HIMOTHY <span className="text-primary italic">CORE</span>
               </h1>
-              <div className="flex flex-wrap items-center gap-6">
-                 <div className="flex items-center gap-2 text-[10px] font-black text-emerald-500 uppercase tracking-widest bg-emerald-500/10 px-3 py-1.5 rounded-full border border-emerald-500/20">
-                    <Activity className="w-3.5 h-3.5 animate-pulse" /> Live Monitoring Active
-                 </div>
-                 <div className="flex items-center gap-2 text-[10px] font-black text-muted-foreground uppercase tracking-widest">
-                    <ShieldCheck className="w-3.5 h-3.5 text-primary" /> Roster Verified 
-                 </div>
-                 <div className="flex items-center gap-2 text-[10px] font-black text-muted-foreground uppercase tracking-widest">
-                    <Target className="w-3.5 h-3.5 text-primary" /> EV+ Optimized
-                 </div>
-              </div>
+              <span className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Deployment Slate Hub</span>
             </div>
-            <div className="w-full md:w-auto">
-               <div className="bg-secondary/20 p-4 rounded-2xl border border-border/50 flex flex-col gap-2">
-                  <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Board Status</span>
-                  <div className="flex items-center gap-4">
-                     <div className="flex flex-col">
-                        <span className="text-xs font-black text-foreground">32 ACTIVE</span>
-                        <span className="text-[9px] font-bold text-muted-foreground">MARKETS</span>
-                     </div>
-                     <div className="h-8 w-[1px] bg-border" />
-                     <div className="flex flex-col">
-                        <span className="text-xs font-black text-primary italic">SHARP ACTION</span>
-                        <span className="text-[9px] font-bold text-muted-foreground uppercase">DETECTION</span>
-                     </div>
-                  </div>
+          </div>
+
+          <div className="hidden md:flex items-center gap-8">
+            <div className="flex flex-col items-end">
+               <span className="text-[10px] font-black text-primary uppercase tracking-widest leading-none mb-1">Neural Health</span>
+               <span className="text-[11px] font-bold text-emerald-400 flex items-center gap-1.5">
+                 <Cpu className="w-3 h-3" /> Heartbeat: 144ms
+               </span>
+            </div>
+            <div className="h-8 w-[1px] bg-white/10" />
+            <div className="flex items-center gap-3">
+               <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+               <span className="text-[11px] font-black uppercase tracking-widest text-white/60">{new Date().toLocaleDateString('en-US', { weekday: 'long' })}</span>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div className="px-6 lg:px-12 py-20 max-w-7xl mx-auto space-y-32">
+        {/* 2. Hero Identity */}
+        <section className="flex flex-col gap-8">
+          <div className="inline-flex items-center gap-3 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 w-fit">
+            <ShieldCheck className="w-4 h-4 text-primary" />
+            <span className="text-[10px] font-black uppercase tracking-[0.3em] text-primary">Continuous Decision Engine Activated</span>
+          </div>
+          
+          <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-12">
+            <div className="space-y-6 max-w-3xl">
+              <h2 className="text-6xl md:text-8xl font-black uppercase tracking-tighter leading-[0.85]">
+                Today&apos;s <br />
+                <span className="text-primary italic">Edge Board.</span>
+              </h2>
+              <p className="text-xl text-white/50 font-medium leading-relaxed">
+                Aggregating live signals from 32 global markets. Every node below is audited for roster integrity and market efficiency 
+                <span className="text-white"> before becoming safe for deployment.</span>
+              </p>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4 w-full lg:w-auto">
+               <div className="p-6 rounded-[2rem] bg-white/[0.02] border border-white/5 flex flex-col gap-1">
+                  <span className="text-[10px] font-black text-white/30 uppercase tracking-widest">Active Markets</span>
+                  <span className="text-3xl font-black text-white">32</span>
+               </div>
+               <div className="p-6 rounded-[2rem] bg-white/[0.02] border border-white/5 flex flex-col gap-1">
+                  <span className="text-[10px] font-black text-white/30 uppercase tracking-widest">Neural Load</span>
+                  <span className="text-3xl font-black text-emerald-400">9.8/10</span>
                </div>
             </div>
           </div>
-        </div>
+        </section>
 
-        {/* MAIN ATTRACTION: Picks Section */}
-        <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-black uppercase tracking-[0.3em] text-muted-foreground flex items-center gap-2">
-               <Trophy className="w-4 h-4 text-primary" /> Main Picks & Tickets
-            </h2>
-          </div>
-          
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-            {packages.map((pkg) => {
-              const Icon = pkg.icon;
-              const availableCount = counts ? counts[pkg.id] : 0;
-              const isAvailable = availableCount > 0;
-              
-              return (
-                <div
-                  key={pkg.id}
-                  className={`group bg-card border-2 rounded-2xl p-6 flex flex-col gap-4 transition-all duration-200 ${isAvailable ? pkg.accentColor : 'opacity-70 border-dashed grayscale-[0.5]'}`}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className={`w-12 h-12 rounded-xl bg-secondary flex items-center justify-center ${isAvailable ? 'group-hover:bg-primary/10' : ''} transition-colors`}>
-                      <Icon className={`w-6 h-6 ${isAvailable ? 'text-primary' : 'text-muted-foreground'}`} />
-                    </div>
-                    <span className={`text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full border ${pkg.badgeColor}`}>
-                      {pkg.badge}
-                    </span>
+        {/* 3. The Grid Matrix */}
+        <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+          {packages.map((pkg) => {
+            const Icon = pkg.icon;
+            const availableCount = counts ? counts[pkg.id] : 0;
+            const isAvailable = availableCount > 0;
+            const stats = catStats?.[pkg.id];
+            
+            return (
+              <Link
+                key={pkg.id}
+                href={pkg.href}
+                className={`group glass-morphism rounded-[2.5rem] p-10 flex flex-col gap-8 transition-all duration-500 border-white/5 relative overflow-hidden h-full 
+                  ${isAvailable ? pkg.accentColor : 'opacity-40 grayscale pointer-events-none'}`}
+              >
+                {/* Visual Flair */}
+                <div className="absolute top-0 right-0 w-24 h-24 bg-white/[0.03] -mr-8 -mt-8 rounded-full blur-2xl group-hover:bg-primary/10 transition-colors" />
+                
+                <div className="flex items-start justify-between relative">
+                  <div className="p-4 bg-white/5 rounded-2xl group-hover:bg-primary/20 transition-all border border-white/10 group-hover:border-primary/20">
+                    <Icon className={`w-8 h-8 ${isAvailable ? 'text-primary' : 'text-white/20'}`} />
                   </div>
+                  <span className={`text-[9px] font-black uppercase tracking-[0.2em] px-4 py-1.5 rounded-full border border-white/10 ${pkg.badgeColor}`}>
+                    {pkg.badge}
+                  </span>
+                </div>
 
-                  <div className="flex-1">
-                    <h2 className={`font-black text-lg ${isAvailable ? 'text-foreground' : 'text-muted-foreground'} uppercase leading-tight mb-2`}>
-                      {pkg.label}
-                    </h2>
-                    <p className="text-sm text-muted-foreground leading-relaxed">
-                      {pkg.description}
-                    </p>
-                  </div>
+                <div className="space-y-4 flex-1">
+                  <h3 className="text-2xl font-black uppercase tracking-tight group-hover:text-primary transition-colors leading-none">
+                    {pkg.label}
+                  </h3>
+                  <p className="text-sm text-white/40 leading-relaxed font-medium">
+                    {pkg.description}
+                  </p>
+                </div>
 
-                  <div className="flex flex-col gap-3 mt-2 pt-4 border-t border-border">
-                    <div className="flex items-center justify-between mb-1">
-                       <span className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Lifetime Record</span>
-                       {loading ? (
-                         <div className="h-3 w-12 bg-secondary animate-pulse rounded" />
-                       ) : (
-                         <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-black text-foreground">
-                               {catStats?.[pkg.id]?.wins}-{catStats?.[pkg.id]?.losses}
-                            </span>
-                            <span className={`text-[10px] font-black ${catStats?.[pkg.id]?.units >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                               {catStats?.[pkg.id]?.units >= 0 ? '+' : ''}{catStats?.[pkg.id]?.units}U
-                            </span>
-                         </div>
-                       )}
-                    </div>
-                    
+                <div className="pt-8 border-t border-white/5 space-y-6">
                     <div className="flex items-center justify-between">
                       <div className="flex flex-col">
-                        <span className={`text-[10px] font-black uppercase tracking-widest ${isAvailable ? 'text-primary' : 'text-muted-foreground'}`}>Available Today</span>
-                        <span className={`text-xl font-black ${isAvailable ? 'text-foreground' : 'text-muted-foreground'}`}>
-                          {loading ? "..." : availableCount}
-                        </span>
+                         <span className="text-[9px] font-black text-white/20 uppercase tracking-[0.2em] mb-1">Lifetime Record</span>
+                         <span className="text-xl font-black text-white flex items-center gap-2 font-mono">
+                            {catStats?.[pkg.id]?.wins ?? 0}-{catStats?.[pkg.id]?.losses ?? 0}
+                            <span className={`text-[11px] ${ (catStats?.[pkg.id]?.units ?? 0) >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                               {(catStats?.[pkg.id]?.units ?? 0) >= 0 ? '+' : ''}{catStats?.[pkg.id]?.units ?? 0}U
+                            </span>
+                         </span>
                       </div>
-                      {isAvailable ? (
-                        <Link
-                          href={pkg.href}
-                          className="inline-flex items-center gap-1 text-xs font-black text-primary group-hover:gap-2 transition-all uppercase tracking-tight"
-                        >
-                          View Picks <ArrowRight className="w-4 h-4" />
-                        </Link>
-                      ) : (
-                        <div className="flex items-center gap-1.5 text-[9px] font-bold text-amber-500 bg-amber-500/10 px-2 py-1 rounded border border-amber-500/20 uppercase">
-                          <ShieldAlert className="w-3 h-3" /> Integrity Lock
-                        </div>
-                      )}
+                      <div className="flex flex-col items-end">
+                         <span className="text-[9px] font-black text-white/20 uppercase tracking-[0.2em] mb-1">Node Status</span>
+                         <span className="text-xs font-black text-white uppercase italic">{pkg.performance}</span>
+                      </div>
+                    </div>
+
+                  <div className="flex items-center justify-between">
+                    <div className="flex flex-col">
+                       <span className="text-[9px] font-black text-primary uppercase tracking-[0.2em] mb-1">Deployment Access</span>
+                       <span className="text-3xl font-black text-white font-mono">{availableCount} <span className="text-xs text-white/20 ml-1">NODES</span></span>
+                    </div>
+                    <div className="w-12 h-12 rounded-full border border-white/20 flex items-center justify-center group-hover:border-primary group-hover:bg-primary group-hover:text-black transition-all">
+                       <ArrowRight className="w-6 h-6" />
                     </div>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* RESULTS SUMMARY: Record Section (Lower on Page) */}
-        <div className="mt-12 pt-12 border-t border-border flex flex-col gap-8">
-           <div className="flex items-center justify-between">
-              <h2 className="text-sm font-black uppercase tracking-[0.3em] text-muted-foreground flex items-center gap-2">
-                 Official Performance Summary
-              </h2>
-              <Link href="/results" className="text-[10px] font-black text-primary uppercase flex items-center gap-1 hover:gap-2 transition-all">
-                Full Results History <ArrowRight className="w-3 h-3" />
               </Link>
-           </div>
-           <RecordDashboard />
-        </div>
+            );
+          })}
+        </section>
 
-        {/* LIVE GAME BOARDS (Bottom section) */}
-        <div className="mt-12 pt-12 border-t border-border flex flex-col gap-8">
-           <div className="flex items-center justify-between">
-              <h2 className="text-sm font-black uppercase tracking-[0.3em] text-muted-foreground flex items-center gap-2">
-                 <Activity className="w-4 h-4 text-red-500 animate-pulse" /> Live Aggregator: Scanning Feeds
-              </h2>
-           </div>
-           <LiveScoreBoard />
-        </div>
-
-        {/* Bottom Disclaimers & Engine Links */}
-        <div className="mt-12 p-6 bg-card border border-border rounded-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-          <div className="flex-1">
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              ⚠️ HIMOTHY is a live decision engine. All lines and odds shown are for informational purposes. 
-              We re-evaluate facts every 5 minutes. If information changes, the pick changes or is removed.
-            </p>
+        {/* 4. Live Environment Monitoring */}
+        <section className="space-y-16">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 border-b border-white/5 pb-8">
+            <div className="flex flex-col gap-4">
+               <div className="flex items-center gap-3 text-red-500">
+                  <Activity className="w-6 h-6 animate-pulse" />
+                  <span className="text-[10px] font-black uppercase tracking-[0.4em]">Live Aggregator State</span>
+               </div>
+               <h2 className="text-4xl font-black uppercase tracking-tight">System Performance Hub</h2>
+            </div>
+            <Link href="/results" className="group flex items-center gap-4 text-xs font-black uppercase tracking-widest text-white/50 hover:text-white transition-all">
+               View Full Neural Audit History <ArrowRight className="w-4 h-4 group-hover:translate-x-1" />
+            </Link>
           </div>
-          <div className="flex flex-wrap gap-3">
-             <Link href="/monitoring" className="px-3 py-1.5 bg-secondary text-muted-foreground text-[10px] font-black rounded uppercase hover:text-primary border border-border transition-colors">Monitoring</Link>
-             <Link href="/audit" className="px-3 py-1.5 bg-secondary text-muted-foreground text-[10px] font-black rounded uppercase hover:text-primary border border-border transition-colors">Audit</Link>
-             <Link href="/system-health" className="px-3 py-1.5 bg-secondary text-muted-foreground text-[10px] font-black rounded uppercase hover:text-primary border border-border transition-colors">Health</Link>
-          </div>
-        </div>
 
+          <div className="grid grid-cols-1 xl:grid-cols-12 gap-12">
+             <div className="xl:col-span-8">
+                <LiveScoreBoard />
+             </div>
+             <div className="xl:col-span-4 glass-morphism rounded-[3rem] p-12 h-fit border-white/5">
+                <div className="flex flex-col gap-8">
+                   <div className="pb-8 border-b border-white/5">
+                      <h3 className="text-lg font-black uppercase tracking-widest text-primary mb-2">Master Accuracy Index</h3>
+                      <p className="text-xs text-white/40 font-medium leading-relaxed">System-wide performance across all verified nodes since deployment.</p>
+                   </div>
+                   <RecordDashboard />
+                </div>
+             </div>
+          </div>
+        </section>
       </div>
+
+      {/* 5. Terminal Warning Area */}
+      <footer className="px-6 lg:px-12 py-20 bg-black/80 border-t border-white/5 mt-32">
+        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+           <div className="flex flex-col gap-6">
+              <div className="flex items-center gap-4 text-primary">
+                 <ShieldAlert className="w-8 h-8" />
+                 <span className="text-[10px] font-black uppercase tracking-[0.5em]">Neural Protocol Advisory 44.1</span>
+              </div>
+              <p className="text-xs text-white/30 leading-relaxed font-bold uppercase tracking-wider">
+                 HIMOTHY IS A LIVE DECISION ENGINE. ALL LINES SHOWN ARE FOR AUDIT PURPOSES. WE RE-EVALUATE EVERY FACT EVERY 5 MINUTES. IF INFORMATION CHANGES, THE NODE IS REMOVED. WAGER AT YOUR OWN RISK. 21+.
+              </p>
+           </div>
+           <div className="flex flex-wrap gap-4 justify-start lg:justify-end">
+              <Link href="/monitoring" className="px-6 py-3 bg-white/5 text-white/40 text-[10px] font-black rounded-xl uppercase hover:text-primary border border-white/10 transition-colors tracking-widest">Sys Monitor</Link>
+              <Link href="/audit" className="px-6 py-3 bg-white/5 text-white/40 text-[10px] font-black rounded-xl uppercase hover:text-primary border border-white/10 transition-colors tracking-widest">Final Audit</Link>
+              <Link href="/system-health" className="px-6 py-3 bg-white/5 text-white/40 text-[10px] font-black rounded-xl uppercase hover:text-primary border border-white/10 transition-colors tracking-widest">Health</Link>
+           </div>
+        </div>
+      </footer>
     </div>
   );
 }

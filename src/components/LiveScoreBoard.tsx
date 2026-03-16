@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Activity, CircleDot, Timer, Trophy, ShieldAlert, Cpu } from "lucide-react";
+import { Activity, CircleDot, Timer, Trophy, ShieldAlert, Cpu, RefreshCw, Globe } from "lucide-react";
 
 interface GameScore {
   id: string;
@@ -19,12 +19,14 @@ interface GameScore {
 export function LiveScoreBoard() {
   const [games, setGames] = useState<GameScore[]>([]);
   const [loading, setLoading] = useState(true);
+  const [lastSync, setLastSync] = useState<string | null>(null);
 
   const fetchScores = async () => {
     try {
       const res = await fetch('/api/scores/live');
       const data = await res.json();
       setGames(data.games || []);
+      setLastSync(new Date().toLocaleTimeString());
       setLoading(false);
     } catch (err) {
       console.error("Failed to fetch scores", err);
@@ -40,62 +42,89 @@ export function LiveScoreBoard() {
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 bg-black/40 border border-white/5 rounded-3xl">
-        <Cpu className="w-10 h-10 text-primary animate-spin mb-4" />
-        <p className="text-[10px] font-black uppercase tracking-[0.3em] text-primary/50">Synchronizing Live Feed...</p>
+      <div className="flex flex-col items-center justify-center py-40 border border-white/5 bg-black/40 rounded-[3rem] relative overflow-hidden">
+        <div className="scanline opacity-10" />
+        <Cpu className="w-16 h-16 text-primary animate-spin mb-8 opacity-40" />
+        <div className="flex flex-col items-center gap-2">
+           <p className="text-[12px] font-black uppercase tracking-[0.5em] text-primary">Synchronizing Global Feed</p>
+           <p className="text-[9px] font-bold text-white/20 uppercase tracking-[0.2em]">Authenticating Node Connections...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-      {games.length === 0 ? (
-        <div className="col-span-full py-12 text-center bg-black/40 border border-white/5 rounded-3xl">
-          <ShieldAlert className="w-10 h-10 text-white/20 mx-auto mb-4" />
-          <p className="text-xs font-black uppercase tracking-widest text-white/40">No Live Events in Target Window</p>
-        </div>
-      ) : (
-        games.map((game) => (
-          <div key={game.id} className="glass-morphism rounded-2xl p-5 hover:border-primary/40 transition-all group overflow-hidden relative">
-            <div className="scanline opacity-20" />
-            
-            {/* Header: Sport & Status */}
-            <div className="flex justify-between items-center mb-6">
-              <div className="flex items-center gap-2">
-                 <div className="w-1.5 h-1.5 bg-primary rounded-full animate-pulse" />
-                 <span className="text-[9px] font-black uppercase tracking-widest text-white/50">{game.sport} • {game.league}</span>
-              </div>
-              <div className="flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded text-[8px] font-black text-emerald-400 uppercase tracking-tighter">
-                <Timer className="w-2.5 h-2.5" />
-                {game.status === "live" ? "ACTIVE" : "FINAL"}
-              </div>
-            </div>
+    <div className="space-y-12">
+      {/* Feed Status Bar */}
+      <div className="flex items-center justify-between px-10 py-6 bg-white/[0.02] border border-white/5 rounded-3xl">
+         <div className="flex items-center gap-4">
+            <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_15px_rgba(16,185,129,0.8)]" />
+            <span className="text-[11px] font-black uppercase tracking-[0.4em] text-white/60">System Feed Live</span>
+         </div>
+         <div className="flex items-center gap-4 text-[11px] font-black text-white/20 uppercase tracking-[0.2em]">
+            <RefreshCw className="w-4 h-4 animate-spin-slow" />
+            Last Sync: {lastSync}
+         </div>
+      </div>
 
-            {/* Content: Scores */}
-            <div className="flex flex-col gap-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-white/70 group-hover:text-white transition-colors uppercase tracking-tight">{game.awayTeam}</span>
-                <span className="text-xl font-black font-mono text-white tabular-nums">{game.awayScore}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-white/70 group-hover:text-white transition-colors uppercase tracking-tight">{game.homeTeam}</span>
-                <span className="text-xl font-black font-mono text-white tabular-nums">{game.homeScore}</span>
-              </div>
-            </div>
-
-            {/* Footer: Clock & Progress */}
-            <div className="mt-6 pt-4 border-t border-white/5 flex justify-between items-center">
-               <div className="flex items-center gap-2 text-[10px] font-bold text-white/40 italic">
-                  <span>{game.period}</span>
-                  {game.clock !== "0:00" && <span>• {game.clock}</span>}
-               </div>
-               <div className="w-12 h-1 bg-white/5 rounded-full overflow-hidden">
-                  <div className="w-2/3 h-full bg-primary/40" />
-               </div>
-            </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        {games.length === 0 ? (
+          <div className="col-span-full py-32 text-center bg-black/40 border-2 border-dashed border-white/5 rounded-[3rem]">
+            <ShieldAlert className="w-20 h-20 text-white/10 mx-auto mb-8" />
+            <p className="text-sm font-black uppercase tracking-[0.5em] text-white/20">No Active Data In Target Windows</p>
           </div>
-        ))
-      )}
+        ) : (
+          games.map((game) => (
+            <div key={game.id} className="relative group bg-white/[0.03] border border-white/10 rounded-[2.5rem] p-10 hover:border-primary/40 transition-all duration-700 overflow-hidden shadow-2xl">
+              <div className="scanline opacity-10" />
+              
+              {/* Header */}
+              <div className="flex justify-between items-center mb-10">
+                <div className="flex flex-col gap-1">
+                   <span className="text-[10px] font-black uppercase tracking-[0.3em] text-primary/60">{game.league}</span>
+                   <span className="text-[11px] font-black uppercase tracking-[0.2em] text-white/40 flex items-center gap-1.5 inline-flex">
+                      <Globe className="w-3.5 h-3.5" /> {game.sport}
+                   </span>
+                </div>
+                <div className={`flex items-center gap-3 px-5 py-2 rounded-full border text-[10px] font-black uppercase tracking-widest
+                  ${game.status === "live" ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-white/5 border-white/10 text-white/40'}
+                `}>
+                  {game.status === "live" ? <CircleDot className="w-3 h-3 animate-pulse" /> : <Timer className="w-3 h-3 " />}
+                  {game.status === "live" ? "ACTIVE" : "FINAL"}
+                </div>
+              </div>
+
+              {/* Scoreboard */}
+              <div className="flex flex-col gap-8">
+                <div className="flex items-center justify-between group/team">
+                  <span className="text-xl font-black text-white group-hover/team:text-primary transition-colors uppercase tracking-tighter">{game.awayTeam}</span>
+                  <span className="text-4xl font-black font-mono text-white tracking-tighter tabular-nums">{game.awayScore}</span>
+                </div>
+                <div className="flex items-center justify-between group/team">
+                  <span className="text-xl font-black text-white group-hover/team:text-primary transition-colors uppercase tracking-tighter">{game.homeTeam}</span>
+                  <span className="text-4xl font-black font-mono text-white tracking-tighter tabular-nums">{game.homeScore}</span>
+                </div>
+              </div>
+
+              {/* Progress */}
+              <div className="mt-12 pt-8 border-t border-white/5 flex justify-between items-center">
+                 <div className="flex flex-col gap-1">
+                    <span className="text-[10px] font-black text-white/20 uppercase tracking-widest">Temporal Status</span>
+                    <div className="text-xs font-bold text-primary italic">
+                       {game.period} {game.clock !== "0:00" && `• ${game.clock}`}
+                    </div>
+                 </div>
+                 <div className="flex items-center gap-3">
+                    <div className="w-16 h-1 bg-white/5 rounded-full overflow-hidden">
+                       <div className="w-2/3 h-full bg-primary shadow-[0_0_10px_rgba(212,168,67,0.5)]" />
+                    </div>
+                    <Activity className="w-4 h-4 text-primary opacity-40" />
+                 </div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
     </div>
   );
 }

@@ -44,7 +44,7 @@ async function fetchESPNScoreboard(sport: string, dateStr?: string) {
   }
   const url = `${base}/scoreboard${dateStr ? `?dates=${dateStr}` : ''}`;
   try {
-    const res = await fetch(url, { cache: "no-store", next: { revalidate: 0 } });
+    const res = await fetch(url, { cache: "no-store" });
     if (!res.ok) return { events: [] };
     return res.json();
   } catch {
@@ -56,7 +56,7 @@ async function fetchESPNSummary(sport: string, eventId: string) {
   const base = LEAGUE_URLS[sport] || LEAGUE_URLS["NBA"];
   const url = `${base}/summary?event=${eventId}`;
   try {
-    const res = await fetch(url, { cache: "no-store", next: { revalidate: 0 } });
+    const res = await fetch(url, { cache: "no-store" });
     if (!res.ok) return null;
     return res.json();
   } catch {
