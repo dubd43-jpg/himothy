@@ -2,6 +2,7 @@
   "name": "himothy-plays-and-parlays",
   "version": "0.1.0",
   "private": true,
+  "buildTrigger": "2026-03-16T17:25",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
