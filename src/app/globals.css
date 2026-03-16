@@ -1,0 +1,51 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Deep Navy — matches HIMOTHY logo background */
+    --background: 213 40% 7%;
+    --foreground: 45 20% 95%;
+
+    /* Slightly lighter navy for cards */
+    --card: 214 38% 10%;
+    --card-foreground: 45 20% 95%;
+
+    --popover: 214 38% 10%;
+    --popover-foreground: 45 20% 95%;
+
+    /* GOLD — your crown & ring color */
+    --primary: 43 65% 55%;
+    --primary-foreground: 213 40% 7%;
+
+    /* Steel blue for secondary surfaces */
+    --secondary: 214 30% 18%;
+    --secondary-foreground: 45 20% 90%;
+
+    --muted: 214 28% 13%;
+    --muted-foreground: 214 15% 55%;
+
+    --accent: 43 65% 55%;
+    --accent-foreground: 213 40% 7%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 45 20% 95%;
+
+    /* Steel-blue borders */
+    --border: 214 28% 18%;
+    --input: 214 28% 18%;
+    --ring: 43 65% 55%;
+
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
