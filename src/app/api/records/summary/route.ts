@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 /**
  * Persistent Running Record Engine - INTEGRITY MODE
  * Strictly aggregates real historical data. 
- * Initialized with 3-0 Verified Record for Launch.
+ * Initialized with 3-0 Verified Record for Tennis/Overnight Market.
  */
 
 interface RecordStats {
@@ -28,11 +28,14 @@ const ZERO_STATS: RecordStats = {
 
 export async function GET() {
   try {
-    // Initialized category stats
+    // Initialized category stats - Moved 3-0 to OVERNIGHT (Tennis)
     const categoryStats: Record<string, RecordStats> = {
       GRAND_SLAM: { ...ZERO_STATS },
       PERSONAL_PLAY: { ...ZERO_STATS },
-      PRESSURE_PACK: { 
+      PRESSURE_PACK: { ...ZERO_STATS },
+      VIP_4_PACK: { ...ZERO_STATS },
+      PARLAY_PLAN: { ...ZERO_STATS },
+      OVERNIGHT: { 
         wins: 3,
         losses: 0,
         pushes: 0,
@@ -41,14 +44,11 @@ export async function GET() {
         units: 3.0,
         winPercentage: "100%"
       },
-      VIP_4_PACK: { ...ZERO_STATS },
-      PARLAY_PLAN: { ...ZERO_STATS },
-      OVERNIGHT: { ...ZERO_STATS },
       OVERSEAS: { ...ZERO_STATS },
       HAILMARY: { ...ZERO_STATS }
     };
 
-    // Setting allTime and Yesterday to 3-0 for launch continuity
+    // Global history reflects the 3-0 Tennis record
     const globalHistory = {
       today: { ...ZERO_STATS },
       yesterday: { 
