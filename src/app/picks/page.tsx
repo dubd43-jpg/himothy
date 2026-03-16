@@ -142,6 +142,16 @@ export default function PicksHubPage() {
             <Link href="/" className="p-3 bg-white/5 rounded-2xl hover:bg-white/10 transition-all border border-white/10 group">
               <ArrowLeft className="w-5 h-5 text-white/50 group-hover:text-primary transition-colors" />
             </Link>
+            <div className="relative group">
+              <Image 
+                src="/logo.jpg" 
+                alt="HIMOTHY" 
+                width={48} 
+                height={48} 
+                className="rounded-xl border border-primary/40 himo-glow transition-all group-hover:border-primary" 
+              />
+              <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full border-2 border-black animate-pulse" />
+            </div>
             <div className="flex flex-col">
               <h1 className="text-xl font-black tracking-tight uppercase">
                 HIMOTHY <span className="text-primary italic">CORE</span>
