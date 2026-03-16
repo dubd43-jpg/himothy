@@ -134,7 +134,7 @@ export function PicksPageTemplate({
         <div className="border-b border-border pb-8 relative">
           <div className="absolute top-0 right-0 flex items-center gap-4">
             {/* Category Performance Badge */}
-            {catStats && (
+            {catStats && category !== "PRESSURE_PACK" && (
               <div className="hidden lg:flex flex-col items-end px-6 py-2 bg-primary/5 border border-primary/20 rounded-2xl">
                  <span className="text-[10px] font-black text-primary uppercase tracking-widest">Lifetime Record</span>
                  {catStats.wins + catStats.losses === 0 ? (
@@ -175,7 +175,7 @@ export function PicksPageTemplate({
           <p className="text-muted-foreground text-lg max-w-2xl leading-relaxed mb-6">{subtitle}</p>
 
           <div className="flex lg:hidden mb-6">
-             {catStats && (
+             {catStats && category !== "PRESSURE_PACK" && (
                <div className="flex items-center gap-6 px-4 py-3 bg-primary/5 border border-primary/20 rounded-xl w-full">
                   {catStats.wins + catStats.losses === 0 ? (
                     <div className="flex flex-col">

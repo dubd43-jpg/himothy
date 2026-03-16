@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 /**
  * Persistent Running Record Engine - INTEGRITY MODE
  * Strictly aggregates real historical data. 
- * Initialized with 3-0 Verified Record for Tennis/Overnight Market.
+ * Updated for Launch Day (March 16, 2026) results.
  */
 
 interface RecordStats {
@@ -28,64 +28,69 @@ const ZERO_STATS: RecordStats = {
 
 export async function GET() {
   try {
-    // Initialized category stats - Moved 3-0 to OVERNIGHT (Tennis)
+    // Category-Level Stats for Launch Day (March 16, 2026)
+    // Overseas results: 
+    // 1. Fiorentina ML: WON
+    // 2. Fiorentina/Cremonese Under 2.5: LOST
+    // 3. Vejle +0.25: WON
+    // 4. Pogon/Korona BTTS: WON
     const categoryStats: Record<string, RecordStats> = {
-      GRAND_SLAM: { ...ZERO_STATS },
-      PERSONAL_PLAY: { ...ZERO_STATS },
-      PRESSURE_PACK: { ...ZERO_STATS },
-      VIP_4_PACK: { ...ZERO_STATS },
-      PARLAY_PLAN: { ...ZERO_STATS },
-      OVERNIGHT: { 
+      GRAND_SLAM: { ...ZERO_STATS, pending: 1 },
+      PERSONAL_PLAY: { ...ZERO_STATS, pending: 1 },
+      PRESSURE_PACK: { ...ZERO_STATS, pending: 2 },
+      VIP_4_PACK: { ...ZERO_STATS, pending: 3 },
+      PARLAY_PLAN: { ...ZERO_STATS, pending: 1 },
+      OVERNIGHT: { ...ZERO_STATS },
+      OVERSEAS: { 
         wins: 3,
-        losses: 0,
+        losses: 1,
         pushes: 0,
         voids: 0,
-        pending: 0,
-        units: 3.0,
-        winPercentage: "100%"
+        pending: 1, // CFR Cluj still live/pending
+        units: 1.8,
+        winPercentage: "75.0%"
       },
-      OVERSEAS: { ...ZERO_STATS },
-      HAILMARY: { ...ZERO_STATS }
+      HAILMARY: { ...ZERO_STATS, pending: 3 }
     };
 
-    // Global history reflects the 3-0 Tennis record
+    // Global history reflects today's launch results
     const globalHistory = {
-      today: { ...ZERO_STATS },
-      yesterday: { 
+      today: { 
         wins: 3,
-        losses: 0,
+        losses: 1,
         pushes: 0,
         voids: 0,
-        pending: 0,
-        units: 3.0,
-        winPercentage: "100%"
+        pending: 12,
+        units: 1.8,
+        winPercentage: "75.0%"
       },
+      yesterday: { ...ZERO_STATS },
       last7Days: { 
         wins: 3,
-        losses: 0,
+        losses: 1,
         pushes: 0,
         voids: 0,
-        pending: 0,
-        units: 3.0,
-        winPercentage: "100%"
+        pending: 12,
+        units: 1.8,
+        winPercentage: "75.0%"
       },
       thisMonth: { 
         wins: 3,
-        losses: 0,
+        losses: 1,
         pushes: 0,
         voids: 0,
-        pending: 0,
-        units: 3.0,
-        winPercentage: "100%"
+        pending: 12,
+        units: 1.8,
+        winPercentage: "75.0%"
       },
       allTime: { 
         wins: 3,
-        losses: 0,
+        losses: 1,
         pushes: 0,
         voids: 0,
-        pending: 0,
-        units: 3.0,
-        winPercentage: "100%"
+        pending: 12,
+        units: 1.8,
+        winPercentage: "75.0%"
       }
     };
 
