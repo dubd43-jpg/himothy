@@ -1,7 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from "react";
-import { Activity, AlertCircle, CheckCircle, Clock, RefreshCw, TrendingUp, TrendingDown, DollarSign, Award, XCircle, Zap } from "lucide-react";
+import { PICK_REGISTRY, Pick } from "@/lib/picksData";
 
 interface LiveGame {
   id: string;
@@ -14,6 +13,8 @@ interface LiveGame {
   isFinal: boolean;
   winner?: string;
   league: string;
+  pick?: Pick;
+  progress?: string;
 }
 
 export default function AdminDashboard() {
@@ -23,7 +24,7 @@ export default function AdminDashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState("");
   const [countdown, setCountdown] = useState(15);
-  
+
   // Ref to track previous state for line movement detection
   const prevGamesRef = useRef<LiveGame[]>([]);
 
@@ -33,62 +34,96 @@ export default function AdminDashboard() {
       setCountdown(15);
     }
     try {
-      const sports = [
-        { name: 'NBA', url: "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard" },
-        { name: 'NHL', url: "https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard" },
-        { name: 'MLB', url: "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard" }
+      const leagues = [
+        { name: 'NBA', scoreboard: "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard", summary: "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary" },
+        { name: 'NHL', scoreboard: "https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard", summary: "https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/summary" },
+        { name: 'MLB', scoreboard: "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard", summary: "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary" },
+        { name: 'SOCCER', scoreboard: "https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/scoreboard", summary: "https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/summary" }
       ];
 
-      const results = await Promise.all(sports.map(s => fetch(s.url, { cache: "no-store" }).then(res => res.json())));
-      
-      let allMapped: LiveGame[] = [];
-      
-      results.forEach((data, index) => {
-        const leagueName = sports[index].name;
-        if (data.events) {
-          data.events.forEach((e: any) => {
-            const comp = e.competitions?.[0];
-            const oddsText = comp?.odds?.[0]?.details || "OFF";
-            const statusType = e.status?.type?.name;
+      const scoreboards = await Promise.all(
+        leagues.map(l => fetch(l.scoreboard, { cache: "no-store" }).then(res => res.json()))
+      );
+
+      let matchedPicks: LiveGame[] = [];
+
+      // 1. First, find games that match our PICK_REGISTRY
+      for (let i = 0; i < scoreboards.length; i++) {
+        const data = scoreboards[i];
+        const leagueInfo = leagues[i];
+
+        if (!data.events) continue;
+
+        for (const event of data.events) {
+          const comp = event.competitions?.[0];
+          const homeTeam = comp?.competitors?.find((c: any) => c.homeAway === 'home')?.team?.displayName?.toLowerCase() || "";
+          const awayTeam = comp?.competitors?.find((c: any) => c.homeAway === 'away')?.team?.displayName?.toLowerCase() || "";
+
+          // Check if any pick in registry matches this game
+          const relevantPick = PICK_REGISTRY.find(p => {
+            const pickGame = p.game.toLowerCase();
+            return pickGame.includes(homeTeam) || pickGame.includes(awayTeam);
+          });
+
+          if (relevantPick) {
+            const statusType = event.status?.type?.name;
             const isFinal = statusType === "STATUS_FINAL" || statusType === "STATUS_FULL_TIME";
-            
-            const homeScore = comp?.competitors?.[0]?.score || "0";
-            const awayScore = comp?.competitors?.[1]?.score || "0";
+
+            const homeScore = comp?.competitors?.find((c: any) => c.homeAway === 'home')?.score || "0";
+            const awayScore = comp?.competitors?.find((c: any) => c.homeAway === 'away')?.score || "0";
             const scoreString = `${awayScore} - ${homeScore}`;
-            
-            let winnerName = "";
-            if (isFinal) {
-              const homeWin = comp?.competitors?.[0]?.winner;
-              winnerName = homeWin ? comp?.competitors?.[0]?.team?.shortDisplayName : comp?.competitors?.[1]?.team?.shortDisplayName;
+
+            // 2. If it's a player prop, fetch the summary to get athlete stats
+            let progress = "";
+            if (relevantPick.market.toLowerCase().includes("player prop") && !isFinal) {
+              try {
+                const summaryRes = await fetch(`${leagueInfo.summary}?event=${event.id}`, { cache: "no-store" });
+                const summaryData = await summaryRes.json();
+
+                // Logic to extract player stats (e.g. Points)
+                const playerName = relevantPick.selection.split("OVER")[0].split("UNDER")[0].trim().toLowerCase();
+
+                summaryData.boxscore?.players?.forEach((team: any) => {
+                  const statHeaders = team.statistics?.[0]?.names || [];
+                  const ptsIndex = statHeaders.indexOf("PTS") !== -1 ? statHeaders.indexOf("PTS") : statHeaders.indexOf("G"); // G for goals in NHL?
+
+                  const athlete = team.statistics?.[0]?.athletes?.find((a: any) =>
+                    a.athlete?.displayName?.toLowerCase().includes(playerName)
+                  );
+
+                  if (athlete) {
+                    const currentVal = athlete.stats[ptsIndex];
+                    progress = `${currentVal} / ${relevantPick.line} ${relevantPick.market.includes("Points") ? "PTS" : ""}`;
+                  }
+                });
+              } catch (e) {
+                console.warn("Failed to fetch summary for", event.id);
+              }
             }
 
-            let suggestedUnits = 1.0;
-            if (oddsText.includes("+105")) suggestedUnits = 2.5;
-            else if (oddsText.includes("-135")) suggestedUnits = 0.5;
-            else if (oddsText.includes("-110")) suggestedUnits = 1.5;
+            const prevGame = prevGamesRef.current.find(pg => pg.id === event.id);
 
-            // Find previous odds for line movement
-            const prevGame = prevGamesRef.current.find(pg => pg.id === e.id);
-
-            allMapped.push({
-              id: e.id,
-              name: e.shortName || e.name,
-              odds: oddsText,
+            matchedPicks.push({
+              id: event.id,
+              name: event.shortName || event.name,
+              odds: relevantPick.odds,
               prevOdds: prevGame?.odds,
-              status: e.status?.type?.shortDetail || "Scheduled",
-              units: suggestedUnits,
+              status: event.status?.type?.shortDetail || "Scheduled",
+              units: parseFloat(relevantPick.risk) || 1.0,
               score: scoreString,
               isFinal: isFinal,
-              winner: winnerName,
-              league: leagueName
+              winner: isFinal ? (parseInt(homeScore) > parseInt(awayScore) ? homeTeam : awayTeam) : undefined,
+              league: leagueInfo.name,
+              pick: relevantPick,
+              progress: progress
             });
-          });
+          }
         }
-      });
+      }
 
-      setLiveGames(allMapped.filter(g => !g.isFinal));
-      setCompletedGames(allMapped.filter(g => g.isFinal).slice(0, 10)); // Keep last 10 finished games
-      prevGamesRef.current = allMapped;
+      setLiveGames(matchedPicks.filter(g => !g.isFinal));
+      setCompletedGames(matchedPicks.filter(g => g.isFinal).slice(0, 10));
+      prevGamesRef.current = matchedPicks;
       setLastUpdated(new Date().toLocaleTimeString());
     } catch (err) {
       console.error("Failed to sync odds", err);
@@ -100,14 +135,13 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     fetchLiveOdds();
-    // Refresh every 15 seconds for "Update all day" feel
     const interval = setInterval(() => {
       fetchLiveOdds();
-      setCountdown(15);
-    }, 15000);
+      setCountdown(30); // Increased interval slightly for safety
+    }, 30000);
 
     const timer = setInterval(() => {
-      setCountdown(prev => (prev > 0 ? prev - 1 : 15));
+      setCountdown(prev => (prev > 0 ? prev - 1 : 30));
     }, 1000);
 
     return () => {
@@ -149,8 +183,8 @@ export default function AdminDashboard() {
       {/* ── LIVE BETTING CARD ────────────────── */}
       <section className="bg-card border-2 border-border rounded-2xl overflow-hidden shadow-xl">
         <div className="bg-secondary/30 px-6 py-4 border-b border-border flex justify-between items-center bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/10 via-transparent to-transparent">
-          <h2 className="text-xl font-bold flex items-center gap-2">
-            <Activity className="w-5 h-5 text-primary" /> Active Board (Lines Updating All Day)
+          <h2 className="text-xl font-bold flex items-center gap-2 text-white">
+            <Activity className="w-5 h-5 text-primary" /> Active Deployments (Live Betting Feed)
           </h2>
           <div className="flex gap-2">
             <span className="text-[10px] font-black bg-emerald-500 text-white px-2 py-1 rounded">NBA</span>
@@ -169,20 +203,19 @@ export default function AdminDashboard() {
               {liveGames.length > 0 ? liveGames.map((game) => {
                 const lineChanged = game.prevOdds && game.prevOdds !== game.odds;
                 return (
-                  <div key={game.id} className={`p-4 rounded-xl border-2 transition-all hover:scale-[1.02] relative group cursor-default ${
-                    lineChanged ? "border-primary shadow-[0_0_20px_rgba(212,168,67,0.15)] animate-pulse" : 
-                    game.odds.includes("+105") ? "border-emerald-500/50 bg-emerald-500/5" : 
-                    game.odds.includes("-135") ? "border-destructive/50 bg-destructive/5" : "border-border bg-background"
-                  }`}>
+                  <div key={game.id} className={`p-4 rounded-xl border-2 transition-all hover:scale-[1.02] relative group cursor-default ${lineChanged ? "border-primary shadow-[0_0_20px_rgba(212,168,67,0.15)] animate-pulse" :
+                      game.odds.includes("+105") ? "border-emerald-500/50 bg-emerald-500/5" :
+                        game.odds.includes("-135") ? "border-destructive/50 bg-destructive/5" : "border-border bg-background"
+                    }`}>
                     {lineChanged && <span className="absolute -top-2 -right-2 bg-primary text-black text-[9px] font-black px-2 py-0.5 rounded shadow-lg z-10 border border-black/20">LINE SHIFT</span>}
-                    
+
                     <div className="flex justify-between items-start mb-2">
                       <span className="text-[9px] font-black text-muted-foreground uppercase bg-secondary px-1.5 py-0.5 rounded">{game.league} • {game.status}</span>
                       <span className="text-[11px] font-black text-primary font-mono bg-primary/10 px-2 py-0.5 rounded tracking-tighter">{game.score}</span>
                     </div>
-                    
+
                     <h3 className="font-bold text-sm mb-1 truncate leading-tight">{game.name}</h3>
-                    
+
                     <div className="flex justify-between items-end mt-4">
                       <div>
                         <p className="text-[9px] font-black text-muted-foreground uppercase flex items-center gap-1">
@@ -193,26 +226,40 @@ export default function AdminDashboard() {
                         </p>
                         {lineChanged && <p className="text-[8px] font-bold text-muted-foreground line-through opacity-50">prev: {game.prevOdds}</p>}
                       </div>
-                      <div className="text-right">
-                        <p className="text-[9px] font-black text-muted-foreground uppercase tracking-tighter">Recommended</p>
-                        <p className="text-2xl font-black text-primary drop-shadow-sm">{game.units}U</p>
-                      </div>
+                      <p className="text-[9px] font-black text-muted-foreground uppercase tracking-tighter">Live Progress</p>
+                      <p className="text-2xl font-black text-emerald-400 drop-shadow-sm">{game.progress || game.score}</p>
                     </div>
                   </div>
-                );
+                    
+                    {
+                  game.pick && (
+                    <div className="mt-4 pt-4 border-t border-white/5 space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] font-black uppercase text-white/40 tracking-widest">Market</span>
+                        <span className="text-[10px] font-bold text-white/80">{game.pick.market}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] font-black uppercase text-white/40 tracking-widest">Selection</span>
+                        <span className="text-[10px] font-black text-primary uppercase italic">{game.pick.selection}</span>
+                      </div>
+                    </div>
+                  )
+                }
+                  </div>
+          );
               }) : (
-                <div className="col-span-full py-16 flex flex-col items-center justify-center border-2 border-dashed border-border rounded-xl">
-                  <Clock className="w-10 h-10 text-muted-foreground mb-4 opacity-20" />
-                  <p className="text-muted-foreground font-bold italic uppercase tracking-wider">Market Quiet • Monitoring for Line Openings</p>
-                </div>
+          <div className="col-span-full py-16 flex flex-col items-center justify-center border-2 border-dashed border-border rounded-xl">
+            <Clock className="w-10 h-10 text-muted-foreground mb-4 opacity-20" />
+            <p className="text-muted-foreground font-bold italic uppercase tracking-wider">Market Quiet • Monitoring for Line Openings</p>
+          </div>
               )}
-            </div>
-          )}
         </div>
-      </section>
+          )}
+    </div>
+      </section >
 
-      {/* ── RECENT OUTCOMESboard ────────────────── */}
-      <section className="bg-card border-2 border-border rounded-2xl overflow-hidden shadow-xl border-l-destructive/50 border-l-4">
+    {/* ── RECENT OUTCOMESboard ────────────────── */ }
+    < section className = "bg-card border-2 border-border rounded-2xl overflow-hidden shadow-xl border-l-destructive/50 border-l-4" >
         <div className="bg-destructive/5 px-6 py-4 border-b border-border flex justify-between items-center">
           <h2 className="text-xl font-bold flex items-center gap-2">
             <Award className="w-5 h-5 text-destructive" /> Recent Outcomes (Who Won/Lost)
@@ -252,10 +299,10 @@ export default function AdminDashboard() {
             )}
           </div>
         </div>
-      </section>
+      </section >
 
-      {/* ── MASTER ODDS RECORD LEDGER ────────────────── */}
-      <section className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+    {/* ── MASTER ODDS RECORD LEDGER ────────────────── */ }
+    < section className = "grid grid-cols-1 lg:grid-cols-2 gap-8" >
         <div className="bg-card border border-border p-6 rounded-2xl relative overflow-hidden group">
           <div className="absolute -right-4 -top-4 opacity-[0.03] group-hover:opacity-[0.05] transition-opacity">
             <TrendingUp className="w-40 h-40" />
@@ -328,24 +375,22 @@ export default function AdminDashboard() {
             <OddsRow label="+300+" record="3-15" winRate="16%" />
           </div>
         </div>
-      </section>
-    </div>
+      </section >
+    </div >
   );
 }
 
 function OddsRow({ label, record, winRate, status }: { label: string, record: string, winRate: string, status?: 'success' | 'warning' | 'danger' }) {
   return (
-    <div className={`flex items-center justify-between p-2 rounded-lg border transition-all hover:bg-secondary/30 ${
-      status === 'success' ? 'border-emerald-500/30 bg-emerald-500/5' :
-      status === 'warning' ? 'border-yellow-500/30 bg-yellow-500/5' :
-      status === 'danger' ? 'border-destructive/30 bg-destructive/5' : 'border-transparent'
-    }`}>
+    <div className={`flex items-center justify-between p-2 rounded-lg border transition-all hover:bg-secondary/30 ${status === 'success' ? 'border-emerald-500/30 bg-emerald-500/5' :
+        status === 'warning' ? 'border-yellow-500/30 bg-yellow-500/5' :
+          status === 'danger' ? 'border-destructive/30 bg-destructive/5' : 'border-transparent'
+      }`}>
       <span className="font-black text-xs min-w-[60px] tracking-tighter">{label}</span>
       <span className="text-xs font-bold text-muted-foreground font-mono">{record}</span>
-      <span className={`text-xs font-black ${
-        parseInt(winRate) > 60 ? 'text-emerald-400' :
-        parseInt(winRate) < 40 ? 'text-destructive' : 'text-foreground'
-      }`}>{winRate}</span>
+      <span className={`text-xs font-black ${parseInt(winRate) > 60 ? 'text-emerald-400' :
+          parseInt(winRate) < 40 ? 'text-destructive' : 'text-foreground'
+        }`}>{winRate}</span>
     </div>
   );
 }
