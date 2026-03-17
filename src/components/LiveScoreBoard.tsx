@@ -45,7 +45,7 @@ export function LiveScoreBoard() {
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center py-40 border border-white/5 bg-black/40 rounded-[3rem] relative overflow-hidden">
+      <div className="flex flex-col items-center justify-center py-20 border border-white/5 bg-black/40 rounded-[2.5rem] relative overflow-hidden">
         <Cpu className="w-16 h-16 text-primary animate-spin mb-8 opacity-40" />
         <div className="flex flex-col items-center gap-2">
            <p className="text-[12px] font-black uppercase tracking-[0.5em] text-primary">Synchronizing Global Feed</p>
@@ -77,10 +77,10 @@ export function LiveScoreBoard() {
           </div>
         ) : (
           games.map((game) => (
-            <div key={game.id} className="relative group bg-white/[0.03] border border-white/10 rounded-[2.5rem] p-10 hover:border-primary/40 transition-all duration-700 overflow-hidden shadow-2xl">
+            <div key={game.id} className="relative group bg-white/[0.03] border border-white/10 rounded-[2rem] p-6 md:p-8 hover:border-primary/40 transition-all duration-700 overflow-hidden shadow-2xl">
               
               {/* Header */}
-              <div className="flex justify-between items-center mb-10">
+              <div className="flex justify-between items-center mb-6">
                 <div className="flex flex-col gap-1">
                    <span className="text-[10px] font-black uppercase tracking-[0.3em] text-primary/60">{game.league}</span>
                    <span className="text-[11px] font-black uppercase tracking-[0.2em] text-white/40 flex items-center gap-1.5 inline-flex">
@@ -98,19 +98,19 @@ export function LiveScoreBoard() {
               </div>
 
               {/* Scoreboard */}
-              <div className="flex flex-col gap-8">
+              <div className="flex flex-col gap-6">
                 <div className="flex items-center justify-between group/team">
-                  <span className="text-xl font-black text-white group-hover/team:text-primary transition-colors uppercase tracking-tighter">{game.awayTeam}</span>
-                  <span className="text-4xl font-black font-mono text-white tracking-tighter tabular-nums">{game.awayScore}</span>
+                  <span className="text-xl md:text-2xl font-black text-white/90 group-hover/team:text-primary transition-colors uppercase tracking-tighter">{game.awayTeam}</span>
+                  <span className="text-5xl md:text-6xl font-black font-mono text-primary tracking-tighter tabular-nums">{game.awayScore}</span>
                 </div>
                 <div className="flex items-center justify-between group/team">
-                  <span className="text-xl font-black text-white group-hover/team:text-primary transition-colors uppercase tracking-tighter">{game.homeTeam}</span>
-                  <span className="text-4xl font-black font-mono text-white tracking-tighter tabular-nums">{game.homeScore}</span>
+                  <span className="text-xl md:text-2xl font-black text-white/90 group-hover/team:text-primary transition-colors uppercase tracking-tighter">{game.homeTeam}</span>
+                  <span className="text-5xl md:text-6xl font-black font-mono text-primary tracking-tighter tabular-nums">{game.homeScore}</span>
                 </div>
               </div>
 
               {/* Progress */}
-              <div className="mt-12 pt-8 border-t border-white/5 flex justify-between items-center">
+              <div className="mt-8 pt-6 border-t border-white/5 flex justify-between items-center">
                  <div className="flex flex-col gap-1">
                     <span className="text-[10px] font-black text-white/20 uppercase tracking-widest">Temporal Status</span>
                     <div className="text-xs font-bold text-primary italic">

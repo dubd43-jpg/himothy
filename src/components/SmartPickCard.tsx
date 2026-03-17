@@ -86,22 +86,22 @@ function PreGameCard({ pick, validation, isSelected, onToggleSelect }: { pick: P
   const isHighConfidence = pick.confidence >= 9.0;
 
   return (
-    <div className={`bg-card border border-white/10 rounded-[2.5rem] overflow-hidden shadow-[0_30px_60px_-15px_rgba(0,0,0,0.5)] h-full flex flex-col relative group transition-all duration-500 hover:border-primary/40 ${
+    <div className={`bg-card border border-white/10 rounded-[1.5rem] md:rounded-[2rem] overflow-hidden shadow-[0_20px_40px_-10px_rgba(0,0,0,0.5)] h-full flex flex-col relative group transition-all duration-500 hover:border-primary/40 ${
       validation.lifecycle_state === "removed" ? "opacity-60 grayscale border-red-500/30" : ""
     }`}>
       {/* 1. Tactical Header */}
-      <div className="p-10 border-b border-white/5 bg-background/40 flex flex-col gap-8">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-            <div className="flex flex-col gap-3">
-              <span className="text-[11px] font-black text-primary tracking-[0.4em] uppercase opacity-60 flex items-center gap-2">
+      <div className="p-6 md:p-8 border-b border-white/5 bg-background/40 flex flex-col gap-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex flex-col gap-2">
+              <span className="text-[10px] font-black text-primary tracking-[0.3em] uppercase opacity-60 flex items-center gap-2">
                 <Globe className="w-3 h-3" /> {getSeasonLabel(validation)}
               </span>
-              <h3 className="text-4xl font-black text-white leading-tight tracking-tighter">
-                {validation.away_team} <span className="text-white/10 mx-2 font-light italic">VS</span> {validation.home_team}
+              <h3 className="text-2xl md:text-3xl font-black text-white leading-tight tracking-tighter">
+                {validation.away_team} <span className="text-white/10 mx-1 font-light italic">VS</span> {validation.home_team}
               </h3>
             </div>
             
-            <div className="flex flex-col items-start md:items-end gap-4">
+            <div className="flex flex-col items-start md:items-end gap-3">
               {pick.isPremium && (
                 <div className="flex items-center gap-2.5 bg-primary text-black px-5 py-2 rounded-full shadow-[0_0_40px_rgba(212,168,67,0.3)] animate-float">
                    <Trophy className="w-4 h-4" />
@@ -123,116 +123,111 @@ function PreGameCard({ pick, validation, isSelected, onToggleSelect }: { pick: P
         </div>
       </div>
 
-      {/* 2. Strategy Hero */}
-      <div className="p-12 md:p-16 bg-black/40 flex flex-col items-center text-center border-b border-white/5 relative overflow-hidden group/bet min-h-[350px] justify-center">
+      {/* 2. Strategy Hero - COMPACT */}
+      <div className="p-6 md:p-8 bg-black/40 flex flex-col items-center text-center border-b border-white/5 relative overflow-hidden group/bet">
         <div className="absolute inset-0 bg-primary/[0.03] opacity-0 group-hover/bet:opacity-100 transition-opacity duration-1000" />
         
-        <span className="text-xs font-black text-white/20 uppercase tracking-[0.5em] mb-8">Node Strategy: {pick.market}</span>
-        <div className="text-5xl md:text-7xl font-black text-white mb-12 tracking-tighter filter drop-shadow-[0_0_30px_rgba(255,255,255,0.1)] transition-transform group-hover/bet:scale-[1.03] duration-700">
+        <span className="text-[9px] font-black text-white/20 uppercase tracking-[0.4em] mb-4">Node Strategy: {pick.market}</span>
+        <div className="text-3xl md:text-5xl font-black text-white mb-6 tracking-tighter filter drop-shadow-[0_0_20px_rgba(255,255,255,0.1)]">
            {pick.selection}
         </div>
         
-        <div className="flex items-center gap-20">
-          <div className="flex flex-col items-center gap-2">
-            <span className="text-[11px] font-black text-white/20 uppercase tracking-[0.3em]">Line Agent</span>
-            <span className="text-4xl font-black text-primary tracking-tighter">{pick.line}</span>
+        <div className="flex items-center gap-8 md:gap-12">
+          <div className="flex flex-col items-center">
+            <span className="text-[9px] font-black text-white/20 uppercase tracking-[0.2em]">Line</span>
+            <span className="text-2xl md:text-3xl font-black text-primary tracking-tighter">{pick.line}</span>
           </div>
-          <div className="w-px h-20 bg-white/10" />
-          <div className="flex flex-col items-center gap-2">
-            <span className="text-[11px] font-black text-white/20 uppercase tracking-[0.3em]">Market Rate</span>
-            <span className="text-4xl font-black text-white tracking-tighter">{pick.odds}</span>
+          <div className="w-px h-10 bg-white/10" />
+          <div className="flex flex-col items-center">
+            <span className="text-[9px] font-black text-white/20 uppercase tracking-[0.2em]">Odds</span>
+            <span className="text-2xl md:text-3xl font-black text-white tracking-tighter">{pick.odds}</span>
           </div>
         </div>
       </div>
 
-      {/* 3. Logical Analysis - SPACIOUS & TYPOGRAPHIC */}
-      <div className="p-12 md:p-16 space-y-16 flex-1">
-        <div className="space-y-8">
-          <div className="flex items-center gap-4 text-[13px] font-black text-primary/40 uppercase tracking-[0.5em]">
-            <Cpu className="w-7 h-7" /> Neural Audit Report
-          </div>
-          <p className="text-2xl md:text-3xl font-medium text-white/90 leading-relaxed font-serif italic border-l-[6px] border-primary/20 pl-12 py-6">
-            "{pick.reasoning}"
+      {/* 3. Audit & Analysis Toggles */}
+      <div className="p-6 md:p-8 space-y-4 flex-1">
+        {!showAudit && (
+          <p className="text-sm md:text-base font-medium text-white/50 leading-relaxed italic line-clamp-2 mb-4">
+            {pick.reasoning}
           </p>
-        </div>
-
-        {pick.fadeReasoning && (
-           <div className="bg-red-500/[0.04] border border-red-500/10 rounded-[3rem] p-12 space-y-8 shadow-2xl relative overflow-hidden group/fade transition-all hover:bg-red-500/[0.06]">
-             <div className="absolute top-0 right-0 w-64 h-64 bg-red-500/10 blur-[100px] -z-10 rounded-full" />
-             <div className="flex items-center gap-4 text-[13px] font-black text-red-400 uppercase tracking-[0.5em]">
-               <ShieldAlert className="w-7 h-7" /> Strategic Fade Node
-             </div>
-             <p className="text-xl font-medium text-white/50 leading-relaxed italic">
-               {pick.fadeReasoning}
-             </p>
-           </div>
         )}
 
         {/* Technical Registry Toggle */}
         <div className="pt-12">
            <button 
              onClick={() => setShowAudit(!showAudit)}
-             className="w-full py-7 px-10 rounded-[2rem] border border-white/5 bg-white/[0.02] text-xs font-black text-white/30 uppercase tracking-[0.5em] hover:bg-white/5 transition-all flex items-center justify-center gap-5 group shadow-xl"
+             className="w-full py-3 px-6 rounded-xl border border-white/5 bg-white/[0.02] text-[9px] font-black text-white/40 uppercase tracking-[0.3em] hover:bg-white/5 transition-all flex items-center justify-center gap-3 group"
            >
-              {showAudit ? "Minimize System Registry" : "Decrypt Full Decision Audit"}
+              {showAudit ? "Minimize Audit" : "Full Decision Data"}
               <div className={`transition-transform duration-700 ${showAudit ? 'rotate-180' : ''}`}>
-                 <Activity className="w-5 h-5" />
+                 <Activity className="w-3 h-3" />
               </div>
            </button>
-           
-           {showAudit && (
-             <div className="mt-12 space-y-12 animate-in fade-in slide-in-from-bottom-8 duration-700">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-12 border-b border-white/5 pb-12">
-                  <div className="flex flex-col gap-4 p-8 rounded-3xl bg-white/[0.02] border border-white/5">
-                    <span className="text-[12px] font-black text-white/30 uppercase tracking-widest">Confidence Index</span>
-                    <span className="text-4xl font-black text-primary">{(pick.confidence * 10).toFixed(0)}%</span>
+                      {showAudit && (
+             <div className="mt-8 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="space-y-6">
+                  <div className="flex items-center gap-3 text-[11px] font-black text-primary/40 uppercase tracking-[0.4em]">
+                    <Cpu className="w-4 h-4" /> Logic Audit
                   </div>
-                  <div className="flex flex-col gap-4 p-8 rounded-3xl bg-white/[0.02] border border-white/5">
-                    <span className="text-[12px] font-black text-white/30 uppercase tracking-widest">Model Consensus</span>
-                    <span className="text-4xl font-black text-emerald-400">4/5 NODES</span>
+                  <p className="text-sm md:text-base font-medium text-white/90 leading-relaxed italic border-l-2 border-primary/20 pl-6 py-2">
+                    "{pick.reasoning}"
+                  </p>
+                </div>
+
+                {pick.fadeReasoning && (
+                  <div className="space-y-4 p-6 rounded-2xl bg-red-500/5 border border-red-500/10">
+                    <div className="flex items-center gap-3 text-[10px] font-black text-red-400 uppercase tracking-[0.3em]">
+                      <ShieldAlert className="w-4 h-4" /> Strategic Fade
+                    </div>
+                    <p className="text-xs font-medium text-white/50 leading-relaxed">
+                      {pick.fadeReasoning}
+                    </p>
                   </div>
-                  <div className="flex flex-col gap-4 p-8 rounded-3xl bg-white/[0.02] border border-white/5">
-                    <span className="text-[12px] font-black text-white/30 uppercase tracking-widest">Measured Edge</span>
-                    <span className="text-4xl font-black text-white truncate">{pick.edge}</span>
+                )}
+
+                <div className="grid grid-cols-3 gap-4 border-b border-white/5 pb-8">
+                  <div className="flex flex-col gap-2 p-4 rounded-xl bg-white/[0.02] border border-white/5">
+                    <span className="text-[10px] font-black text-white/30 uppercase">Edge</span>
+                    <span className="text-xl font-black text-primary">{(pick.confidence * 10).toFixed(0)}%</span>
+                  </div>
+                  <div className="flex flex-col gap-2 p-4 rounded-xl bg-white/[0.02] border border-white/5">
+                    <span className="text-[10px] font-black text-white/30 uppercase">Consensus</span>
+                    <span className="text-xl font-black text-emerald-400">4/5</span>
+                  </div>
+                  <div className="flex flex-col gap-2 p-4 rounded-xl bg-white/[0.02] border border-white/5">
+                    <span className="text-[10px] font-black text-white/30 uppercase">Market</span>
+                    <span className="text-xl font-black text-white truncate">{pick.edge}</span>
                   </div>
                 </div>
 
-                <div className="space-y-10">
-                   <div className="flex items-center justify-between">
-                     <span className="text-[11px] font-black text-white/40 uppercase tracking-[0.4em]">Sub-Node Registry Event Log</span>
-                     <div className="flex items-center gap-3 bg-emerald-500/10 px-4 py-1.5 rounded-full border border-emerald-500/20">
-                        <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                        <span className="text-[11px] font-black text-emerald-500 uppercase tracking-widest">Live Sync Alpha</span>
-                     </div>
-                   </div>
-                   <div className="space-y-6">
-                    {validation.verification_log.slice(-3).reverse().map((log, i) => (
-                      <div key={i} className="flex gap-10 text-sm p-8 bg-white/[0.01] border border-white/[0.05] rounded-[2rem] hover:bg-white/[0.02] transition-colors">
-                        <span className="text-white/20 font-mono whitespace-nowrap pt-1 text-xs">{new Date(log.timestamp_utc).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' })}</span>
-                        <div className="flex flex-col gap-3">
-                           <span className="text-white/80 font-black text-lg tracking-tight">{log.note}</span>
-                           <span className="text-[11px] text-white/20 uppercase tracking-[0.3em] font-black">Cryptographic Node: {log.source.toUpperCase()}</span>
-                        </div>
+                <div className="space-y-6">
+                  <span className="text-[10px] font-black text-white/40 uppercase tracking-[0.3em]">Node Event Log</span>
+                  <div className="space-y-3">
+                    {validation.verification_log.slice(-2).reverse().map((log, i) => (
+                      <div key={i} className="flex gap-4 text-xs p-4 bg-white/[0.01] border border-white/[0.05] rounded-xl">
+                        <span className="text-white/20 font-mono whitespace-nowrap">{new Date(log.timestamp_utc).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
+                        <span className="text-white/70 font-bold">{log.note}</span>
                       </div>
                     ))}
-                   </div>
+                  </div>
                 </div>
              </div>
-           )}
+            )}
         </div>
       </div>
 
-      {/* 4. Deployment Action Area - MASSIVE */}
-      <div className="p-12 md:p-16 border-t border-white/5 bg-black/60 space-y-12">
+      {/* 4. Deployment Action Area */}
+      <div className="p-5 md:p-6 border-t border-white/5 bg-black/60 space-y-6">
         {pick.legs && pick.legs.length > 0 && (
-          <div className="bg-primary/[0.03] border border-primary/20 rounded-[3rem] p-12">
-             <div className="flex items-center gap-4 text-[13px] font-black text-primary uppercase tracking-[0.5em] mb-10">
-                <ListChecks className="w-6 h-6" /> Strategy Matrix
+          <div className="bg-primary/[0.03] border border-primary/20 rounded-xl p-4 md:p-6">
+             <div className="flex items-center gap-2.5 text-[10px] font-black text-primary uppercase tracking-[0.3em] mb-4">
+                <ListChecks className="w-4 h-4" /> Strategy Matrix
              </div>
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+             <div className="grid grid-cols-1 gap-3">
                 {pick.legs.map((leg, idx) => (
-                   <div key={idx} className="flex items-center gap-5 text-lg font-black text-white/70 bg-white/[0.02] p-6 rounded-[2rem] border border-white/5 transition-all hover:bg-white/5 group/leg">
-                      <div className="w-2.5 h-2.5 rounded-full bg-primary group-hover/leg:scale-125 transition-transform" />
+                   <div key={idx} className="flex items-center gap-3 text-sm font-bold text-white/70 bg-white/[0.02] p-3 rounded-lg border border-white/5">
+                      <div className="w-1.5 h-1.5 rounded-full bg-primary" />
                       <span>{leg}</span>
                    </div>
                   ))}
@@ -255,9 +250,9 @@ function PreGameCard({ pick, validation, isSelected, onToggleSelect }: { pick: P
                target="_blank" 
                rel="noopener noreferrer"
                onClick={handleOutboundClick}
-               className="w-full lg:w-auto px-16 py-8 bg-primary hover:bg-white text-black text-lg font-black rounded-[2rem] transition-all flex items-center justify-center gap-5 shadow-[0_30px_70px_-10px_rgba(212,168,67,0.4)] hover:shadow-[0_30px_80px_-10px_rgba(255,255,255,0.3)] transform hover:-translate-y-3 active:scale-95"
+               className="w-full lg:w-auto px-8 py-4 bg-primary hover:bg-white text-black text-sm font-black rounded-xl transition-all flex items-center justify-center gap-3 shadow-lg transform hover:-translate-y-1 active:scale-95"
              >
-               EXECUTE STRATEGY <ExternalLink className="w-6 h-6" />
+               EXECUTE STRATEGY <ExternalLink className="w-4 h-4" />
              </a>
            ) : (
                <div className="w-full lg:w-auto px-16 py-8 border border-white/10 text-white/20 text-sm font-black rounded-[2rem] uppercase tracking-[0.6em] text-center">
@@ -309,7 +304,7 @@ function LiveGameCard({ pick, tracking, validation }: { pick: Pick; tracking: Li
       isFinal ? "opacity-80 grayscale-[0.5]" : "border-primary/40 shadow-primary/5"
     }`}>
       {/* 1. Live Header */}
-      <div className={`p-8 border-b border-white/5 flex justify-between items-center ${isLive ? 'bg-primary/[0.03]' : 'bg-background/40'}`}>
+      <div className={`p-5 md:p-6 border-b border-white/5 flex justify-between items-center ${isLive ? 'bg-primary/[0.03]' : 'bg-background/40'}`}>
          <div className="flex items-center gap-4">
             {isLive && <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_15px_rgba(16,185,129,0.8)]" />}
             <span className={`text-xs font-black uppercase tracking-[0.4em] ${isLive ? 'text-emerald-400' : 'text-white/40'}`}>
@@ -322,48 +317,34 @@ function LiveGameCard({ pick, tracking, validation }: { pick: Pick; tracking: Li
          </div>
       </div>
 
-      {/* 2. Tactical Scoreboard - MASSIVE */}
-      <div className="p-12 md:p-16 bg-black/60 flex flex-col gap-12 border-b border-white/5 relative overflow-hidden">
+      {/* 2. Tactical Scoreboard */}
+      <div className="p-6 md:p-8 bg-black/60 flex flex-col gap-6 border-b border-white/5 relative overflow-hidden">
          
-         <div className="flex items-center justify-between text-[11px] font-black text-white/20 tracking-[0.5em] uppercase px-4">
-            <span>VISITOR NODE</span>
+         <div className="flex items-center justify-between text-[9px] font-black text-white/20 tracking-[0.3em] uppercase px-2">
+            <span>VISITOR</span>
             <span>HOME HUB</span>
          </div>
 
-         <div className="flex items-center justify-between gap-8">
+         <div className="flex items-center justify-between gap-4">
             {/* Away Team */}
             <div className={`flex flex-col flex-1 items-start transition-all duration-500 ${awayLeader ? 'opacity-100' : 'opacity-40'}`}>
-                <div className="flex flex-col gap-2">
-                   <h4 className={`text-3xl md:text-4xl font-black tracking-tighter ${awayLeader ? 'text-primary' : 'text-white'}`}>{tracking.away_team.name}</h4>
-                   {tracking.away_team.has_possession && isLive && (
-                     <span className="flex items-center gap-2 text-primary font-black text-[10px] uppercase tracking-widest animate-pulse">
-                        <CircleDot className="w-3.5 h-3.5" /> Possession
-                     </span>
-                   )}
-                </div>
+                <h4 className={`text-xl md:text-3xl font-black tracking-tighter ${awayLeader ? 'text-primary' : 'text-white'}`}>{tracking.away_team.name}</h4>
             </div>
 
             {/* Score Center */}
-            <div className="flex items-center gap-8 md:gap-12 px-10">
-                <span className={`text-6xl md:text-8xl font-black font-mono transition-all duration-500 tabular-nums ${awayFlash ? 'text-primary scale-110' : 'text-white'}`}>
+            <div className="flex items-center gap-4 md:gap-8 px-4 md:px-8">
+                <span className={`text-4xl md:text-6xl font-black font-mono transition-all duration-500 tabular-nums ${awayFlash ? 'text-primary scale-110' : 'text-white'}`}>
                   {tracking.away_team.score}
                 </span>
-                <span className="text-white/10 text-4xl font-light">-</span>
-                <span className={`text-6xl md:text-8xl font-black font-mono transition-all duration-500 tabular-nums ${homeFlash ? 'text-primary scale-110' : 'text-white'}`}>
+                <span className="text-white/10 text-2xl font-light">-</span>
+                <span className={`text-4xl md:text-6xl font-black font-mono transition-all duration-500 tabular-nums ${homeFlash ? 'text-primary scale-110' : 'text-white'}`}>
                   {tracking.home_team.score}
                 </span>
             </div>
 
             {/* Home Team */}
             <div className={`flex flex-col flex-1 items-end transition-all duration-500 ${homeLeader ? 'opacity-100' : 'opacity-40'}`}>
-                <div className="flex flex-col items-end gap-2">
-                   <h4 className={`text-3xl md:text-4xl font-black tracking-tighter text-right ${homeLeader ? 'text-primary' : 'text-white'}`}>{tracking.home_team.name}</h4>
-                   {tracking.home_team.has_possession && isLive && (
-                     <span className="flex items-center gap-2 text-primary font-black text-[10px] uppercase tracking-widest animate-pulse">
-                        Possession <CircleDot className="w-3.5 h-3.5" />
-                     </span>
-                   )}
-                </div>
+                <h4 className={`text-xl md:text-3xl font-black tracking-tighter text-right ${homeLeader ? 'text-primary' : 'text-white'}`}>{tracking.home_team.name}</h4>
             </div>
          </div>
       </div>
@@ -438,33 +419,27 @@ function LiveGameCard({ pick, tracking, validation }: { pick: Pick; tracking: Li
       </div>
 
       {/* 4. Live Footer */}
-      <div className="p-10 border-t border-white/5 bg-black/60 flex justify-between items-center">
-         <div className="flex items-center gap-4">
+      <div className="p-5 md:p-6 border-t border-white/5 bg-black/60 flex flex-col md:flex-row justify-between items-center gap-4">
+         <div className="flex items-center gap-4 w-full md:w-auto">
             <a 
               href={tracking.external_link || `https://www.espn.com/${pick.sport.toLowerCase().includes('soccer') ? 'soccer' : 'nba'}/game/_/gameId/${tracking.game_id}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="px-6 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-[10px] font-black uppercase tracking-widest text-primary flex items-center gap-2 transition-all"
+              className="flex-1 md:flex-none px-5 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-[9px] font-black uppercase tracking-widest text-primary flex items-center justify-center gap-2 transition-all"
             >
-               <Globe className="w-4 h-4" /> Watch Live
+               <Globe className="w-4 h-4" /> Watch
             </a>
-            <div className="flex flex-col gap-1">
-               <span className="text-[10px] font-black text-white/20 uppercase tracking-[0.2em]">Node Heartbeat</span>
-               <span className="text-xs font-bold text-white/40 uppercase tracking-widest">
-                  Last Sync: {new Date(validation.sources_checked[0]?.last_updated || Date.now()).toLocaleTimeString()}
+            <div className="flex flex-col gap-0.5">
+               <span className="text-[9px] font-black text-white/20 uppercase tracking-[0.2em]">Node Heartbeat</span>
+               <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest">
+                  {new Date(validation.sources_checked[0]?.last_updated || Date.now()).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
                </span>
             </div>
          </div>
          {isLive && (
-           <div className="flex items-center gap-3 bg-emerald-500/10 border border-emerald-500/20 px-6 py-3 rounded-full">
-              <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-              <span className="text-[11px] font-black text-emerald-400 uppercase tracking-[0.3em]">Live Feed SYNCED</span>
-           </div>
-         )}
-         {isFinal && (
-           <div className="flex items-center gap-3 bg-white/5 border border-white/10 px-8 py-3 rounded-full">
-              <Trophy className="w-4 h-4 text-primary" />
-              <span className="text-[11px] font-black text-white/40 uppercase tracking-[0.3em]">Event Finalized</span>
+           <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 px-4 py-2 rounded-full">
+              <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+              <span className="text-[9px] font-black text-emerald-400 uppercase tracking-[0.2em]">LIVE SYNC</span>
            </div>
          )}
       </div>

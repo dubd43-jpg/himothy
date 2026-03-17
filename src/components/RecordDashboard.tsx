@@ -64,14 +64,14 @@ export function RecordDashboard() {
   ];
 
   return (
-    <div className="space-y-12">
+    <div className="space-y-8">
       {/* Tactical Stats Matrix */}
-      <div className="grid grid-cols-2 gap-6 md:gap-8">
+      <div className="grid grid-cols-2 gap-4 md:gap-6">
         {stats.map((s, i) => (
-          <div key={i} className="flex flex-col gap-4 p-8 rounded-[2rem] border border-white/5 bg-white/[0.02] group hover:bg-white/[0.04] hover:border-white/10 transition-all duration-500 relative overflow-hidden">
+          <div key={i} className="flex flex-col gap-3 p-6 rounded-[1.5rem] border border-white/5 bg-white/[0.02] group hover:bg-white/[0.04] hover:border-white/10 transition-all duration-500 relative overflow-hidden">
             <div className={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-white/10 to-transparent opacity-0 group-hover:opacity-20 transition-opacity`} />
             <span className="text-[11px] font-black uppercase tracking-[0.4em] text-white/20">{s.label}</span>
-            <span className={`text-4xl font-black font-mono tracking-tighter ${s.color}`}>{s.val}</span>
+            <span className={`text-4xl md:text-5xl font-black font-mono tracking-tighter ${s.color}`}>{s.val}</span>
             <div className="flex items-center gap-3">
                <div className="h-1 flex-1 bg-white/5 rounded-full overflow-hidden">
                   <div className={`h-full bg-current opacity-30`} style={{ width: '100%' }} />
@@ -83,7 +83,7 @@ export function RecordDashboard() {
       </div>
 
       {/* Accuracy Node */}
-      <div className="p-10 rounded-[2.5rem] bg-gradient-to-b from-white/[0.04] to-transparent border border-white/10 space-y-8 relative overflow-hidden">
+      <div className="p-8 md:p-10 rounded-[2rem] bg-gradient-to-b from-white/[0.04] to-transparent border border-white/10 space-y-6 md:space-y-8 relative overflow-hidden">
          
          <div className="flex items-center justify-between">
             <div className="flex flex-col gap-2">

@@ -135,93 +135,93 @@ export default function PicksHubPage() {
     <div className="min-h-screen bg-[#050505] text-white pb-24 premium-gradient selection:bg-primary/30">
       
       {/* 1. Tactical Header */}
-      <header className="px-6 lg:px-12 py-8 border-b border-white/5 bg-black/40 backdrop-blur-2xl sticky top-0 z-50">
+      <header className="px-5 md:px-12 py-6 border-b border-white/5 bg-black/60 backdrop-blur-xl sticky top-0 z-50">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-6">
-            <Link href="/" className="p-3 bg-white/5 rounded-2xl hover:bg-white/10 transition-all border border-white/10 group">
+          <div className="flex items-center gap-3 md:gap-6">
+            <Link href="/" className="p-2 md:p-3 bg-white/5 rounded-xl hover:bg-white/10 transition-all border border-white/10 group shrink-0">
               <ArrowLeft className="w-5 h-5 text-white/50 group-hover:text-primary transition-colors" />
             </Link>
-            <div className="relative group">
-              <Image 
-                src="/logo.jpg" 
-                alt="HIMOTHY" 
-                width={48} 
-                height={48} 
-                className="rounded-xl border border-primary/40 himo-glow transition-all group-hover:border-primary" 
-              />
-              <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full border-2 border-black animate-pulse" />
-            </div>
-            <div className="flex flex-col">
-              <h1 className="text-xl font-black tracking-tight uppercase">
-                HIMOTHY <span className="text-primary italic">CORE</span>
-              </h1>
-              <span className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Deployment Slate Hub</span>
+            <div className="flex items-center gap-3 overflow-hidden">
+              <div className="relative group shrink-0">
+                <Image 
+                  src="/logo.jpg" 
+                  alt="HIMOTHY" 
+                  width={36} 
+                  height={36} 
+                  className="rounded-lg border border-primary/40 himo-glow transition-all group-hover:border-primary md:w-10 md:h-10" 
+                />
+                <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-black animate-pulse" />
+              </div>
+              <div className="flex flex-col justify-center min-w-0">
+                <h1 className="text-base md:text-xl font-black tracking-tight uppercase leading-none truncate">
+                  HIMOTHY <span className="text-primary italic">CORE</span>
+                </h1>
+                <span className="text-[8px] md:text-[10px] font-bold text-white/40 uppercase tracking-[0.2em] mt-1 truncate">Deployment Slate Hub</span>
+              </div>
             </div>
           </div>
 
-          <div className="hidden md:flex items-center gap-8">
-            <div className="flex flex-col items-end">
-               <span className="text-[10px] font-black text-primary uppercase tracking-widest leading-none mb-1">Neural Health</span>
-               <span className="text-[11px] font-bold text-emerald-400 flex items-center gap-1.5">
-                 <Cpu className="w-3 h-3" /> Heartbeat: 144ms
+          <div className="flex items-center gap-4 md:gap-8 shrink-0">
+            <div className="hidden sm:flex flex-col items-end">
+               <span className="text-[9px] font-black text-primary uppercase tracking-widest leading-none mb-1">Neural Health</span>
+               <span className="text-[10px] font-bold text-emerald-400 flex items-center gap-1.5">
+                 <Cpu className="w-3 h-3" /> 144ms
                </span>
             </div>
-            <div className="h-8 w-[1px] bg-white/10" />
+            <div className="hidden sm:block h-6 w-[1px] bg-white/10" />
             <div className="flex items-center gap-3">
                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-               <span className="text-[11px] font-black uppercase tracking-widest text-white/60">{new Date().toLocaleDateString('en-US', { weekday: 'long' })}</span>
+               <span className="text-[10px] font-black uppercase tracking-widest text-white/60">{new Date().toLocaleDateString('en-US', { weekday: 'short' })}</span>
             </div>
           </div>
         </div>
       </header>
 
-      <div className="px-6 lg:px-12 py-20 max-w-7xl mx-auto space-y-32">
+      <div className="px-5 md:px-12 py-8 md:py-16 max-w-7xl mx-auto space-y-12 md:space-y-24">
         {/* 2. Hero Identity */}
-        <section className="flex flex-col gap-8">
-          <div className="inline-flex items-center gap-3 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 w-fit">
-            <ShieldCheck className="w-4 h-4 text-primary" />
-            <span className="text-[10px] font-black uppercase tracking-[0.3em] text-primary">Continuous Decision Engine Activated</span>
+        <section className="flex flex-col gap-6 md:gap-10">
+          <div className="inline-flex items-center gap-3 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20 w-fit">
+            <ShieldCheck className="w-3.5 h-3.5 text-primary" />
+            <span className="text-[9px] font-black uppercase tracking-[0.2em] text-primary">Continuous Decision Engine Activated</span>
           </div>
           
-          <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-12">
-            <div className="space-y-6 max-w-3xl">
-              <h2 className="text-6xl md:text-8xl font-black uppercase tracking-tighter leading-[0.85]">
-                Today&apos;s <br />
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-10">
+            <div className="space-y-4 max-w-2xl">
+              <h2 className="text-5xl md:text-7xl lg:text-8xl font-black uppercase tracking-tighter leading-[0.95] md:leading-[0.85]">
+                Today&apos;s <br className="hidden md:block" />
                 <span className="text-primary italic">Edge Board.</span>
               </h2>
-              <p className="text-xl text-white/50 font-medium leading-relaxed">
-                Aggregating live signals from 32 global markets. Every node below is audited for roster integrity and market efficiency 
-                <span className="text-white"> before becoming safe for deployment.</span>
+              <p className="text-base md:text-xl text-white/50 font-medium leading-relaxed max-w-xl">
+                Aggregating live signals from 32 global markets. Every node below is audited for roster integrity and market efficiency.
               </p>
             </div>
             
-            <div className="grid grid-cols-2 gap-4 w-full lg:w-auto">
-               <div className="p-6 rounded-[2rem] bg-white/[0.02] border border-white/5 flex flex-col gap-1">
-                  <span className="text-[10px] font-black text-white/30 uppercase tracking-widest">Active Markets</span>
-                  <span className="text-3xl font-black text-white">32</span>
+            <div className="flex gap-4 md:gap-6 w-full lg:w-auto">
+               <div className="flex-1 lg:flex-none px-6 md:px-10 py-6 rounded-3xl bg-white/[0.03] border border-white/10 flex flex-col gap-1 items-center md:items-start text-center md:text-left transition-all hover:bg-white/[0.05]">
+                  <span className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em] mb-1">Active Markets</span>
+                  <span className="text-3xl md:text-4xl font-black text-white">32</span>
                </div>
-               <div className="p-6 rounded-[2rem] bg-white/[0.02] border border-white/5 flex flex-col gap-1">
-                  <span className="text-[10px] font-black text-white/30 uppercase tracking-widest">Neural Load</span>
-                  <span className="text-3xl font-black text-emerald-400">9.8/10</span>
+               <div className="flex-1 lg:flex-none px-6 md:px-10 py-6 rounded-3xl bg-white/[0.03] border border-white/10 flex flex-col gap-1 items-center md:items-start text-center md:text-left transition-all hover:bg-white/[0.05]">
+                  <span className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em] mb-1">Neural Load</span>
+                  <span className="text-3xl md:text-4xl font-black text-emerald-400">9.8/10</span>
                </div>
             </div>
           </div>
         </section>
 
         {/* 3. The Grid Matrix */}
-        <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+        <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8">
           {packages.map((pkg) => {
             const Icon = pkg.icon;
             const availableCount = counts ? counts[pkg.id] : 0;
             const isAvailable = availableCount > 0;
-            const stats = catStats?.[pkg.id];
             
             return (
               <Link
                 key={pkg.id}
                 href={pkg.href}
-                className={`group glass-morphism rounded-[2.5rem] p-10 flex flex-col gap-8 transition-all duration-500 border-white/5 relative overflow-hidden h-full 
-                  ${isAvailable ? pkg.accentColor : 'opacity-40 grayscale pointer-events-none'}`}
+                className={`group glass-morphism rounded-[1.5rem] md:rounded-[2rem] p-6 md:p-8 flex flex-col gap-6 transition-all duration-500 border-white/5 relative overflow-hidden h-full 
+                  ${isAvailable ? pkg.accentColor : 'opacity-30 grayscale pointer-events-none'}`}
               >
                 {/* Visual Flair */}
                 <div className="absolute top-0 right-0 w-24 h-24 bg-white/[0.03] -mr-8 -mt-8 rounded-full blur-2xl group-hover:bg-primary/10 transition-colors" />
@@ -239,35 +239,37 @@ export default function PicksHubPage() {
                   <h3 className="text-2xl font-black uppercase tracking-tight group-hover:text-primary transition-colors leading-none">
                     {pkg.label}
                   </h3>
-                  <p className="text-sm text-white/40 leading-relaxed font-medium">
+                  <p className="text-sm text-white/50 leading-relaxed font-medium">
                     {pkg.description}
                   </p>
                 </div>
 
-                <div className="pt-8 border-t border-white/5 space-y-6">
+                <div className="pt-6 border-t border-white/5 space-y-5">
                     <div className="flex items-center justify-between">
                       <div className="flex flex-col">
-                         <span className="text-[9px] font-black text-white/20 uppercase tracking-[0.2em] mb-1">Lifetime Record</span>
-                         <span className="text-xl font-black text-white flex items-center gap-2 font-mono">
-                            {catStats?.[pkg.id]?.wins ?? 0}-{catStats?.[pkg.id]?.losses ?? 0}
-                            <span className={`text-[11px] ${ (catStats?.[pkg.id]?.units ?? 0) >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                               {(catStats?.[pkg.id]?.units ?? 0) >= 0 ? '+' : ''}{catStats?.[pkg.id]?.units ?? 0}U
-                            </span>
-                         </span>
+                          <span className="text-[9px] font-black text-white/40 uppercase tracking-[0.2em] mb-1">Lifetime Record</span>
+                          <span className="text-xl font-black text-white flex items-center gap-2 font-mono">
+                             {catStats?.[pkg.id]?.wins ?? 0}-{catStats?.[pkg.id]?.losses ?? 0}
+                             <span className={`text-[11px] font-bold ${ (catStats?.[pkg.id]?.units ?? 0) >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                                {(catStats?.[pkg.id]?.units ?? 0) >= 0 ? '+' : ''}{catStats?.[pkg.id]?.units ?? 0}U
+                             </span>
+                          </span>
                       </div>
                       <div className="flex flex-col items-end">
-                         <span className="text-[9px] font-black text-white/20 uppercase tracking-[0.2em] mb-1">Node Status</span>
-                         <span className="text-xs font-black text-white uppercase italic">{pkg.performance}</span>
+                         <span className="text-[9px] font-black text-white/40 uppercase tracking-[0.2em] mb-1">Node Status</span>
+                       <span className="text-xs font-black text-white uppercase italic">{pkg.performance}</span>
                       </div>
                     </div>
 
                   <div className="flex items-center justify-between">
                     <div className="flex flex-col">
                        <span className="text-[9px] font-black text-primary uppercase tracking-[0.2em] mb-1">Deployment Access</span>
-                       <span className="text-3xl font-black text-white font-mono">{availableCount} <span className="text-xs text-white/20 ml-1">NODES</span></span>
+                       <span className="text-2xl md:text-3xl font-black text-white font-mono flex items-baseline gap-1">
+                         {availableCount} <span className="text-[10px] text-white/40 ml-1">NODES</span>
+                       </span>
                     </div>
                     <div className="w-12 h-12 rounded-full border border-white/20 flex items-center justify-center group-hover:border-primary group-hover:bg-primary group-hover:text-black transition-all">
-                       <ArrowRight className="w-6 h-6" />
+                       <ArrowRight className="w-5 h-5 md:w-6 md:h-6" />
                     </div>
                   </div>
                 </div>
@@ -277,25 +279,25 @@ export default function PicksHubPage() {
         </section>
 
         {/* 4. Live Environment Monitoring */}
-        <section className="space-y-16">
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 border-b border-white/5 pb-8">
+        <section className="space-y-12 md:space-y-16">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 border-b border-white/5 pb-8">
             <div className="flex flex-col gap-4">
                <div className="flex items-center gap-3 text-red-500">
-                  <Activity className="w-6 h-6 animate-pulse" />
-                  <span className="text-[10px] font-black uppercase tracking-[0.4em]">Live Aggregator State</span>
+                  <Activity className="w-5 h-5 md:w-6 md:h-6 animate-pulse" />
+                  <span className="text-[9px] md:text-[10px] font-black uppercase tracking-[0.4em]">Live Aggregator State</span>
                </div>
-               <h2 className="text-4xl font-black uppercase tracking-tight">System Performance Hub</h2>
+               <h2 className="text-3xl md:text-4xl font-black uppercase tracking-tight">System Performance Hub</h2>
             </div>
-            <Link href="/results" className="group flex items-center gap-4 text-xs font-black uppercase tracking-widest text-white/50 hover:text-white transition-all">
-               View Full Neural Audit History <ArrowRight className="w-4 h-4 group-hover:translate-x-1" />
+            <Link href="/results" className="group flex items-center gap-4 text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-white transition-all">
+               View Full Neural Audit History <ArrowRight className="w-3.5 h-3.5 md:w-4 md:h-4 group-hover:translate-x-1" />
             </Link>
           </div>
 
-          <div className="grid grid-cols-1 xl:grid-cols-12 gap-12">
-             <div className="xl:col-span-8">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
+             <div className="lg:col-span-8">
                 <LiveScoreBoard />
              </div>
-             <div className="xl:col-span-4 glass-morphism rounded-[3rem] p-12 h-fit border-white/5">
+             <div className="lg:col-span-4 glass-morphism rounded-[3rem] p-8 md:p-12 h-fit border-white/5">
                 <div className="flex flex-col gap-8">
                    <div className="pb-8 border-b border-white/5">
                       <h3 className="text-lg font-black uppercase tracking-widest text-primary mb-2">Master Accuracy Index</h3>
@@ -309,21 +311,21 @@ export default function PicksHubPage() {
       </div>
 
       {/* 5. Terminal Warning Area */}
-      <footer className="px-6 lg:px-12 py-20 bg-black/80 border-t border-white/5 mt-32">
-        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-           <div className="flex flex-col gap-6">
-              <div className="flex items-center gap-4 text-primary">
-                 <ShieldAlert className="w-8 h-8" />
-                 <span className="text-[10px] font-black uppercase tracking-[0.5em]">Neural Protocol Advisory 44.1</span>
+      <footer className="px-6 lg:px-12 py-12 md:py-16 bg-black border-t border-white/5 mt-16 md:mt-24">
+        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
+           <div className="flex flex-col gap-4 md:gap-6 text-center lg:text-left">
+              <div className="flex items-center justify-center lg:justify-start gap-4 text-primary">
+                 <ShieldAlert className="w-6 h-6 md:w-8 md:h-8" />
+                 <span className="text-[9px] md:text-[10px] font-black uppercase tracking-[0.3em] md:tracking-[0.5em]">Neural Protocol Advisory 44.1</span>
               </div>
-              <p className="text-xs text-white/30 leading-relaxed font-bold uppercase tracking-wider">
+              <p className="text-[10px] text-white/20 leading-relaxed font-bold uppercase tracking-wider max-w-xl mx-auto lg:mx-0">
                  HIMOTHY IS A LIVE DECISION ENGINE. ALL LINES SHOWN ARE FOR AUDIT PURPOSES. WE RE-EVALUATE EVERY FACT EVERY 5 MINUTES. IF INFORMATION CHANGES, THE NODE IS REMOVED. WAGER AT YOUR OWN RISK. 21+.
               </p>
            </div>
-           <div className="flex flex-wrap gap-4 justify-start lg:justify-end">
-              <Link href="/monitoring" className="px-6 py-3 bg-white/5 text-white/40 text-[10px] font-black rounded-xl uppercase hover:text-primary border border-white/10 transition-colors tracking-widest">Sys Monitor</Link>
-              <Link href="/audit" className="px-6 py-3 bg-white/5 text-white/40 text-[10px] font-black rounded-xl uppercase hover:text-primary border border-white/10 transition-colors tracking-widest">Final Audit</Link>
-              <Link href="/system-health" className="px-6 py-3 bg-white/5 text-white/40 text-[10px] font-black rounded-xl uppercase hover:text-primary border border-white/10 transition-colors tracking-widest">Health</Link>
+           <div className="flex flex-wrap gap-3 justify-center lg:justify-end">
+              <Link href="/monitoring" className="px-4 md:px-6 py-2.5 md:py-3 bg-white/5 text-white/40 text-[9px] md:text-[10px] font-black rounded-xl uppercase hover:text-primary border border-white/10 transition-colors tracking-widest">Sys Monitor</Link>
+              <Link href="/audit" className="px-4 md:px-6 py-2.5 md:py-3 bg-white/5 text-white/40 text-[9px] md:text-[10px] font-black rounded-xl uppercase hover:text-primary border border-white/10 transition-colors tracking-widest">Final Audit</Link>
+              <Link href="/system-health" className="px-4 md:px-6 py-2.5 md:py-3 bg-white/5 text-white/40 text-[9px] md:text-[10px] font-black rounded-xl uppercase hover:text-primary border border-white/10 transition-colors tracking-widest">Health</Link>
            </div>
         </div>
       </footer>
