@@ -173,6 +173,12 @@ export default function PicksHubPage() {
                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                <span className="text-[10px] font-black uppercase tracking-widest text-white/60">{new Date().toLocaleDateString('en-US', { weekday: 'short' })}</span>
             </div>
+            <Link 
+              href="/results"
+              className="px-4 py-2 bg-primary/10 hover:bg-primary/20 border border-primary/20 rounded-lg text-[10px] font-black text-primary uppercase tracking-widest transition-all flex items-center gap-2"
+            >
+               <LineChart className="w-3.5 h-3.5" /> LEDGER
+            </Link>
           </div>
         </div>
       </header>

@@ -7,8 +7,8 @@ interface GradedPick {
   finalScore?: string;
 }
 
-export async function getLiveGradedStats() {
-  const now = new Date();
+export async function getLiveGradedStats(targetDate?: Date) {
+  const now = targetDate || new Date();
   const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
   
   const scoreCache: Record<string, any> = {};
@@ -57,6 +57,23 @@ export async function getLiveGradedStats() {
         const btts = homeScore > 0 && awayScore > 0;
         if (selection.includes('yes')) return btts ? 'WIN' : 'LOSS';
         return !btts ? 'WIN' : 'LOSS';
+    }
+
+    if (market.includes('over') || market.includes('under') || market.includes('total')) {
+        const total = homeScore + awayScore;
+        const isOver = selection.includes('over');
+        if (isOver) return total > line ? 'WIN' : total < line ? 'LOSS' : 'PUSH';
+        return total < line ? 'WIN' : total > line ? 'LOSS' : 'PUSH';
+    }
+
+    if (market.includes('spread') || market.includes('handicap') || line !== 0) {
+        const isHome = selection.toLowerCase().includes(home.team.displayName.toLowerCase());
+        const spreadTeamScore = isHome ? homeScore : awayScore;
+        const otherTeamScore = isHome ? awayScore : homeScore;
+        
+        if (spreadTeamScore + line > otherTeamScore) return 'WIN';
+        if (spreadTeamScore + line < otherTeamScore) return 'LOSS';
+        return 'PUSH';
     }
 
     // Default for others since we want "True Launch" data
@@ -140,6 +157,7 @@ export async function getLiveGradedStats() {
       allTime: allTime
     },
     category_stats: categoryStats,
+    gradedPicks: allGraded,
     hasHistory: true,
     timestamp: new Date().toISOString()
   };
