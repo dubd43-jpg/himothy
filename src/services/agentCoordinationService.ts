@@ -202,6 +202,8 @@ export async function runCoordinatedBoardAction<T>(
 
     const result = await executor({ boardDate, before });
     const after = await getBoardStateSummary(boardDate);
+    const beforeStatePayload = before as unknown as Record<string, unknown>;
+    const afterStatePayload = after as unknown as Record<string, unknown>;
 
     await writeChangeLog({
       action: options.action,
@@ -210,8 +212,8 @@ export async function runCoordinatedBoardAction<T>(
       entityId: boardDate,
       agent: options.agent,
       reason: options.reason,
-      beforeState: before,
-      afterState: after,
+      beforeState: beforeStatePayload,
+      afterState: afterStatePayload,
     });
 
     return { result, boardDate, before, after };
