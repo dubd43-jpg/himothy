@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getBoardMainPick, publishRegistryPick } from '@/services/pickRegistryService';
 import { getMarketSnapshotForPick, validateAndTrackGame } from '@/lib/validation';
 import { evaluateEdgeCandidate } from '@/services/edgeDetectionEngine';
+import type { EdgeSignals } from '@/services/edgeDetectionEngine';
 import { getActiveAdaptivePolicy } from '@/services/adaptiveIntelligenceService';
 import { runCoordinatedBoardAction } from '@/services/agentCoordinationService';
 import { assertMarketPublishable } from '@/services/marketRegistryService';
@@ -27,7 +28,7 @@ function categoryFromEdgeScore(score: number) {
   return null;
 }
 
-function countConfirmingSignals(signals: Record<string, number>) {
+function countConfirmingSignals(signals: EdgeSignals) {
   const checks = [
     signals.lineValue >= 8,
     signals.lineMovement >= 5,
