@@ -12,6 +12,18 @@ interface SmartPickCardProps {
   onToggleSelect?: () => void;
 }
 
+function parseSelectionDisplay(selection: string, fallbackGame?: string) {
+  const parts = selection.split('•').map((p) => p.trim()).filter(Boolean);
+  if (parts.length >= 2) {
+    return { context: parts[0], primary: parts.slice(1).join(' • ') };
+  }
+
+  return {
+    context: fallbackGame || null,
+    primary: selection,
+  };
+}
+
 export function SmartPickCard({ pick, validation, tracking, isSelected, onToggleSelect }: SmartPickCardProps) {
   // If no validation passed or game represents an invalid mapping, DO NOT SHOW
   if (!validation || !validation.safe_to_publish) {
@@ -47,6 +59,7 @@ const getSeasonLabel = (validation: PreGameValidation) => {
 function PreGameCard({ pick, validation, isSelected, onToggleSelect }: { pick: Pick; validation: PreGameValidation; isSelected?: boolean; onToggleSelect?: () => void }) {
   const [showAudit, setShowAudit] = useState(false);
   const [countdown, setCountdown] = useState<string | null>(null);
+  const selectionDisplay = parseSelectionDisplay(pick.selection, pick.game);
 
   useEffect(() => {
     const updateCountdown = () => {
@@ -132,8 +145,13 @@ function PreGameCard({ pick, validation, isSelected, onToggleSelect }: { pick: P
         <div className="absolute inset-0 bg-primary/[0.03] opacity-0 group-hover/bet:opacity-100 transition-opacity duration-1000" />
         
         <span className="text-[9px] font-black text-white/20 uppercase tracking-[0.4em] mb-4">Node Strategy: {pick.market}</span>
+        {selectionDisplay.context && (
+          <div className="mb-2 text-[11px] font-black uppercase tracking-[0.16em] text-primary/70">
+            {selectionDisplay.context}
+          </div>
+        )}
         <div className="text-3xl md:text-5xl font-black text-white mb-6 tracking-tighter filter drop-shadow-[0_0_20px_rgba(255,255,255,0.1)]">
-           {pick.selection}
+           {selectionDisplay.primary}
         </div>
         
         <div className="flex items-center gap-8 md:gap-12">

@@ -1,347 +1,363 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
-import { 
-  ArrowLeft, Trophy, Zap, Target, BarChart3, TrendingUp, 
-  Crown, Bomb, ArrowRight, Clock, Globe, ShieldCheck, 
-  ShieldAlert, Activity, ChevronRight, Cpu, Timer, LineChart 
+import {
+  ArrowLeft,
+  Crown,
+  Layers,
+  ListChecks,
+  ShieldCheck,
+  Timer,
+  TrendingUp,
+  History,
+  Activity,
 } from "lucide-react";
 import { LiveScoreBoard } from "@/components/LiveScoreBoard";
-import { RecordDashboard } from "@/components/RecordDashboard";
 
-type CategoryKey = "GRAND_SLAM" | "PRESSURE_PACK" | "VIP_4_PACK" | "PARLAY_PLAN" | "OVERNIGHT" | "PERSONAL_PLAY" | "HAILMARY" | "OVERSEAS";
+interface BoardPick {
+  id: string;
+  eventName: string;
+  awayTeam: string;
+  homeTeam: string;
+  league: string;
+  sport: string;
+  startTime: string | null;
+  marketType: string;
+  selection: string;
+  line: string | null;
+  odds: string | null;
+  sportsbook: string | null;
+  reasoning: string | null;
+  status: string;
+  productType: string;
+  sectionType: string;
+  groupId: string | null;
+  parentProductId: string | null;
+  isMainPick: boolean;
+  isParlay: boolean;
+  displayPriority: number;
+}
+
+interface GroupedProduct {
+  productId: string;
+  productType: string;
+  productLabel: string;
+  status: string;
+  picks: BoardPick[];
+}
+
+interface ParlayProduct {
+  parlayId: string;
+  parlayName: string;
+  productLabel: string;
+  legs: BoardPick[];
+  totalOdds: string | null;
+  riskTier: string;
+  status: string;
+}
+
+interface StructuredBoardResponse {
+  success: boolean;
+  source: string;
+  boardDate: string;
+  sections: {
+    mainPick: BoardPick | null;
+    corePicks: BoardPick[];
+    groupedProducts: GroupedProduct[];
+    parlayProducts: ParlayProduct[];
+  };
+  counts: {
+    officialStraightPicks: number;
+    officialGroupedProducts: number;
+    parlays: number;
+    totalUniquePicks: number;
+  };
+}
+
+function formatStartTime(value: string | null) {
+  if (!value) return "TBD";
+  const ts = new Date(value).getTime();
+  if (!Number.isFinite(ts)) return "TBD";
+  return new Date(ts).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function statusLabel(value: string) {
+  const normalized = value.toLowerCase();
+  if (normalized === "published" || normalized === "locked") return "Pending";
+  if (normalized === "win") return "Win";
+  if (normalized === "loss") return "Loss";
+  if (normalized === "push") return "Push";
+  if (normalized === "live") return "Live";
+  return value;
+}
+
+function PickDecisionCard({ pick }: { pick: BoardPick }) {
+  return (
+    <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+        {pick.awayTeam} vs {pick.homeTeam}
+      </div>
+
+      <div className="mt-2 text-xl font-black text-slate-900">{pick.selection}</div>
+
+      <div className="mt-4 grid grid-cols-2 gap-2 text-xs text-slate-700 md:grid-cols-4">
+        <div>
+          <div className="text-[10px] uppercase text-slate-500">League</div>
+          <div className="font-semibold">{pick.league || pick.sport}</div>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase text-slate-500">Starts</div>
+          <div className="font-semibold">{formatStartTime(pick.startTime)}</div>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase text-slate-500">Market</div>
+          <div className="font-semibold">{pick.marketType}</div>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase text-slate-500">Status</div>
+          <div className="font-semibold">{statusLabel(pick.status)}</div>
+        </div>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+        <span className="rounded-full bg-slate-100 px-2 py-1 font-semibold text-slate-700">Line: {pick.line || "-"}</span>
+        <span className="rounded-full bg-slate-100 px-2 py-1 font-semibold text-slate-700">Odds: {pick.odds || "-"}</span>
+        <span className="rounded-full bg-slate-100 px-2 py-1 font-semibold text-slate-700">Book: {pick.sportsbook || "TBD"}</span>
+        <span className="rounded-full bg-amber-100 px-2 py-1 font-semibold text-amber-800">{pick.productType}</span>
+      </div>
+
+      {pick.reasoning && <p className="mt-3 text-sm text-slate-600">{pick.reasoning}</p>}
+    </article>
+  );
+}
 
 export default function PicksHubPage() {
-  const [counts, setCounts] = useState<Record<CategoryKey, number> | null>(null);
-  const [catStats, setCatStats] = useState<any>(null);
+  const [board, setBoard] = useState<StructuredBoardResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function fetchData() {
+    let mounted = true;
+
+    const fetchBoard = async () => {
       try {
-        const [statusRes, recordsRes] = await Promise.all([
-          fetch("/api/registry/status"),
-          fetch("/api/records/summary")
-        ]);
-        
-        const statusData = await statusRes.json();
-        const recordsData = await recordsRes.json();
-        
-        if (statusData.success) setCounts(statusData.counts);
-        if (recordsData.success) setCatStats(recordsData.category_stats);
-      } catch (err) {
-        console.error("Failed to fetch page data", err);
+        const res = await fetch("/api/board/structured", { cache: "no-store" });
+        const json = (await res.json()) as StructuredBoardResponse;
+        if (mounted && json.success) {
+          setBoard(json);
+        }
+      } catch (error) {
+        console.error("Structured board fetch failed", error);
       } finally {
-        setLoading(false);
+        if (mounted) setLoading(false);
       }
-    }
-    fetchData();
+    };
+
+    fetchBoard();
+    const interval = setInterval(fetchBoard, 30000);
+
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
   }, []);
 
-  const packages = [
-    {
-      id: "GRAND_SLAM" as CategoryKey,
-      href: "/grand-slam",
-      icon: Trophy,
-      label: "HIMOTHY Grand Slam",
-      badge: "LVL 4 EDGE",
-      badgeColor: "bg-primary text-black",
-      description: "Our absolute highest confidence play. Filtered through 12 neural variables for maximum measurable edge.",
-      accentColor: "border-primary/20 hover:border-primary shadow-[0_0_30px_rgba(212,168,67,0.1)]",
-      performance: "ELITE"
-    },
-    {
-      id: "PRESSURE_PACK" as CategoryKey,
-      href: "/pressure-pack",
-      icon: Zap,
-      label: "Pressure Pack",
-      badge: "HIGH PRESSURE",
-      badgeColor: "bg-orange-500 text-black",
-      description: "Forceful plays identifying market inefficiency. We only move when probability exceeds 75%.",
-      accentColor: "border-orange-500/20 hover:border-orange-500/50",
-      performance: "STRONG"
-    },
-    {
-      id: "VIP_4_PACK" as CategoryKey,
-      href: "/vip-picks",
-      icon: Target,
-      label: "VIP 4-Pack",
-      badge: "STABLE BOARD",
-      badgeColor: "bg-blue-500 text-white",
-      description: "Structured daily foundation. Picks cross-checked against live feeds every 5 minutes.",
-      accentColor: "border-blue-500/20 hover:border-blue-500/50",
-      performance: "STABLE"
-    },
-    {
-      id: "PARLAY_PLAN" as CategoryKey,
-      href: "/parlay-plan",
-      icon: BarChart3,
-      label: "$10 Parlay Plan",
-      badge: "FLIP CHASER",
-      badgeColor: "bg-emerald-500 text-black",
-      description: "Turning small stakes into a move. Multi-leg tickets built on cumulative edge advantage.",
-      accentColor: "border-emerald-500/20 hover:border-emerald-500/50",
-      performance: "EV+"
-    },
-    {
-      id: "OVERNIGHT" as CategoryKey,
-      href: "/overnight",
-      icon: TrendingUp,
-      label: "Overnight & Global",
-      badge: "24/7 MONITOR",
-      badgeColor: "bg-purple-500 text-white",
-      description: "Soccer and Tennis markets monitored around the clock for timezone-based inefficiency.",
-      accentColor: "border-purple-500/20 hover:border-purple-500/50",
-      performance: "MODERATE"
-    },
-    {
-      id: "PERSONAL_PLAY" as CategoryKey,
-      href: "/himothy-picks",
-      icon: Crown,
-      label: "My HIMOTHY Pick",
-      badge: "ROSTER VERIFIED",
-      badgeColor: "bg-yellow-500 text-black",
-      description: "Human-led analysis superseding the algorithm. Only posted when 'Verified' signals are green.",
-      accentColor: "border-yellow-500/20 hover:border-yellow-500/50",
-      performance: "DIRECT"
-    },
-    {
-      id: "HAILMARY" as CategoryKey,
-      href: "/hailmary",
-      icon: Bomb,
-      label: "The Hailmarys",
-      badge: "LOTTO / MAX VAR",
-      badgeColor: "bg-red-500 text-white",
-      description: "Calculated lottery tickets. Maximum variance, maximum transparency. Math-forced plays only.",
-      accentColor: "border-red-500/20 hover:border-red-500/50",
-      performance: "HIGH VAR"
-    },
-    {
-      id: "OVERSEAS" as CategoryKey,
-      href: "/overseas",
-      icon: Globe,
-      label: "Overseas & Int'l",
-      badge: "GLOBAL EDGE",
-      badgeColor: "bg-yellow-500 text-black",
-      description: "International leagues (Serie A, Superliga) audited locally. Deep board scanning enabled.",
-      accentColor: "border-yellow-500/20 hover:border-yellow-500/50",
-      performance: "VERIFIED"
-    },
-  ];
+  const counts = useMemo(
+    () =>
+      board?.counts || {
+        officialStraightPicks: 0,
+        officialGroupedProducts: 0,
+        parlays: 0,
+        totalUniquePicks: 0,
+      },
+    [board]
+  );
+
+  const mainPick = board?.sections.mainPick || null;
+  const corePicks = board?.sections.corePicks || [];
+  const groupedProducts = board?.sections.groupedProducts || [];
+  const parlayProducts = board?.sections.parlayProducts || [];
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white pb-24 premium-gradient selection:bg-primary/30">
-      
-      {/* 1. Tactical Header */}
-      <header className="px-5 md:px-12 py-6 border-b border-white/5 bg-black/60 backdrop-blur-xl sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3 md:gap-6">
-            <Link href="/" className="p-2 md:p-3 bg-white/5 rounded-xl hover:bg-white/10 transition-all border border-white/10 group shrink-0">
-              <ArrowLeft className="w-5 h-5 text-white/50 group-hover:text-primary transition-colors" />
-            </Link>
-            <div className="flex items-center gap-3 overflow-hidden">
-              <div className="relative group shrink-0">
-                <Image 
-                  src="/logo.jpg" 
-                  alt="HIMOTHY" 
-                  width={36} 
-                  height={36} 
-                  className="rounded-lg border border-primary/40 himo-glow transition-all group-hover:border-primary md:w-10 md:h-10" 
-                />
-                <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-black animate-pulse" />
-              </div>
-              <div className="flex flex-col justify-center min-w-0">
-                <h1 className="text-base md:text-xl font-black tracking-tight uppercase leading-none truncate">
-                  HIMOTHY <span className="text-primary italic">CORE</span>
-                </h1>
-                <span className="text-[8px] md:text-[10px] font-bold text-white/40 uppercase tracking-[0.2em] mt-1 truncate">Deployment Slate Hub</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-4 md:gap-8 shrink-0">
-            <div className="hidden sm:flex flex-col items-end">
-               <span className="text-[9px] font-black text-primary uppercase tracking-widest leading-none mb-1">Neural Health</span>
-               <span className="text-[10px] font-bold text-emerald-400 flex items-center gap-1.5">
-                 <Cpu className="w-3 h-3" /> 144ms
-               </span>
-            </div>
-            <div className="hidden sm:block h-6 w-[1px] bg-white/10" />
-            <div className="flex items-center gap-3">
-               <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-               <span className="text-[10px] font-black uppercase tracking-widest text-white/60">{new Date().toLocaleDateString('en-US', { weekday: 'short' })}</span>
-            </div>
-            <Link 
-              href="/results"
-              className="px-4 py-2 bg-primary/10 hover:bg-primary/20 border border-primary/20 rounded-lg text-[10px] font-black text-primary uppercase tracking-widest transition-all flex items-center gap-2"
-            >
-               <LineChart className="w-3.5 h-3.5" /> LEDGER
-            </Link>
-          </div>
+    <div className="min-h-screen bg-slate-50 pb-16 text-slate-900">
+      <div className="mx-auto max-w-7xl px-4 py-8 md:px-8">
+        <div className="mb-6 flex items-center justify-between">
+          <Link href="/" className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-slate-900">
+            <ArrowLeft className="h-4 w-4" /> Back Home
+          </Link>
+          <Link href="/results" className="text-sm font-semibold text-slate-600 hover:text-slate-900">
+            Full Registry
+          </Link>
         </div>
-      </header>
 
-      <div className="px-5 md:px-12 py-8 md:py-16 max-w-7xl mx-auto space-y-12 md:space-y-24">
-        {/* 2. Hero Identity */}
-        <section className="flex flex-col gap-6 md:gap-10">
-          <div className="inline-flex items-center gap-3 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20 w-fit">
-            <ShieldCheck className="w-3.5 h-3.5 text-primary" />
-            <span className="text-[9px] font-black uppercase tracking-[0.2em] text-primary">Continuous Decision Engine Activated</span>
-          </div>
-          
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-10">
-            <div className="space-y-4 max-w-2xl">
-              <h2 className="text-5xl md:text-7xl lg:text-8xl font-black uppercase tracking-tighter leading-[0.95] md:leading-[0.85]">
-                Today&apos;s <br className="hidden md:block" />
-                <span className="text-primary italic">Edge Board.</span>
-              </h2>
-              <p className="text-base md:text-xl text-white/50 font-medium leading-relaxed max-w-xl">
-                Aggregating live signals from 32 global markets. Every node below is audited for roster integrity and market efficiency.
+        <header className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">
+          <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+            <div>
+              <div className="text-xs font-bold uppercase tracking-widest text-slate-500">HIMOTHY BOARD</div>
+              <h1 className="mt-2 text-3xl font-black tracking-tight md:text-4xl">Structured Product Board</h1>
+              <p className="mt-2 max-w-3xl text-sm text-slate-600">
+                One game, one card, one official decision. Main Pick is isolated, grouped products stay grouped, and parlays stay in parlay sections.
               </p>
             </div>
-            
-            <div className="flex gap-4 md:gap-6 w-full lg:w-auto">
-               <div className="flex-1 lg:flex-none px-6 md:px-10 py-6 rounded-3xl bg-white/[0.03] border border-white/10 flex flex-col gap-1 items-center md:items-start text-center md:text-left transition-all hover:bg-white/[0.05]">
-                  <span className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em] mb-1">Active Markets</span>
-                  <span className="text-3xl md:text-4xl font-black text-white">32</span>
-               </div>
-               <div className="flex-1 lg:flex-none px-6 md:px-10 py-6 rounded-3xl bg-white/[0.03] border border-white/10 flex flex-col gap-1 items-center md:items-start text-center md:text-left transition-all hover:bg-white/[0.05]">
-                  <span className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em] mb-1">Neural Load</span>
-                  <span className="text-3xl md:text-4xl font-black text-emerald-400">9.8/10</span>
-               </div>
+            <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+              Board Date: {board?.boardDate || new Date().toISOString().slice(0, 10)}
             </div>
           </div>
-        </section>
 
-        {/* 3. The Grid Matrix */}
-        <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8">
-          {packages.map((pkg) => {
-            const Icon = pkg.icon;
-            const availableCount = counts ? counts[pkg.id] : 0;
-            const isAvailable = true;
-            const hasLiveCount = availableCount > 0;
-            
-            return (
-              <Link
-                key={pkg.id}
-                href={pkg.href}
-                className={`group glass-morphism rounded-[1.5rem] md:rounded-[2rem] p-6 md:p-8 flex flex-col gap-6 transition-all duration-500 border-white/5 relative overflow-hidden h-full 
-                  ${pkg.accentColor}`}
-              >
-                {/* Visual Flair */}
-                <div className="absolute top-0 right-0 w-24 h-24 bg-white/[0.03] -mr-8 -mt-8 rounded-full blur-2xl group-hover:bg-primary/10 transition-colors" />
-                
-                <div className="flex items-start justify-between relative">
-                  <div className="p-4 bg-white/5 rounded-2xl group-hover:bg-primary/20 transition-all border border-white/10 group-hover:border-primary/20">
-                    <Icon className={`w-8 h-8 ${isAvailable ? 'text-primary' : 'text-white/20'}`} />
-                  </div>
-                  <span className={`text-[9px] font-black uppercase tracking-[0.2em] px-4 py-1.5 rounded-full border border-white/10 ${pkg.badgeColor}`}>
-                    {pkg.badge}
-                  </span>
-                </div>
-
-                <div className="space-y-4 flex-1">
-                  <h3 className="text-2xl font-black uppercase tracking-tight group-hover:text-primary transition-colors leading-none">
-                    {pkg.label}
-                  </h3>
-                  <p className="text-sm text-white/50 leading-relaxed font-medium">
-                    {pkg.description}
-                  </p>
-                </div>
-
-                <div className="pt-6 border-t border-white/5 space-y-5">
-                    <div className="flex items-center justify-between">
-                      <div className="flex flex-col">
-                          <span className="text-[9px] font-black text-white/40 uppercase tracking-[0.2em] mb-1">Lifetime Record</span>
-                          <span className="text-xl font-black text-white flex items-center gap-2 font-mono">
-                             {catStats?.[pkg.id]?.wins ?? 0}-{catStats?.[pkg.id]?.losses ?? 0}
-                             <span className={`text-[11px] font-bold ${ (catStats?.[pkg.id]?.units ?? 0) >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                                {(catStats?.[pkg.id]?.units ?? 0) >= 0 ? '+' : ''}{catStats?.[pkg.id]?.units ?? 0}U
-                             </span>
-                          </span>
-                      </div>
-                      <div className="flex flex-col items-end">
-                         <span className="text-[9px] font-black text-white/40 uppercase tracking-[0.2em] mb-1">Node Status</span>
-                       <span className="text-xs font-black text-white uppercase italic">{pkg.performance}</span>
-                      </div>
-                    </div>
-
-                    {!hasLiveCount && (
-                      <div className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-400 bg-amber-400/10 border border-amber-400/20 px-3 py-1.5 rounded-lg inline-flex w-fit">
-                        Monitoring live board
-                      </div>
-                    )}
-
-                  <div className="flex items-center justify-between">
-                    <div className="flex flex-col">
-                       <span className="text-[9px] font-black text-primary uppercase tracking-[0.2em] mb-1">Deployment Access</span>
-                       <span className="text-2xl md:text-3xl font-black text-white font-mono flex items-baseline gap-1">
-                         {availableCount} <span className="text-[10px] text-white/40 ml-1">NODES</span>
-                       </span>
-                    </div>
-                    <div className="w-12 h-12 rounded-full border border-white/20 flex items-center justify-center group-hover:border-primary group-hover:bg-primary group-hover:text-black transition-all">
-                       <ArrowRight className="w-5 h-5 md:w-6 md:h-6" />
-                    </div>
-                  </div>
-                </div>
-              </Link>
-            );
-          })}
-        </section>
-
-        {/* 4. Live Environment Monitoring */}
-        <section className="space-y-12 md:space-y-16">
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 border-b border-white/5 pb-8">
-            <div className="flex flex-col gap-4">
-               <div className="flex items-center gap-3 text-red-500">
-                  <Activity className="w-5 h-5 md:w-6 md:h-6 animate-pulse" />
-                  <span className="text-[9px] md:text-[10px] font-black uppercase tracking-[0.4em]">Live Aggregator State</span>
-               </div>
-               <h2 className="text-3xl md:text-4xl font-black uppercase tracking-tight">System Performance Hub</h2>
+          <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
+            <div className="rounded-xl bg-slate-100 p-3">
+              <div className="text-[10px] uppercase text-slate-500">Official Straight Picks</div>
+              <div className="text-2xl font-black">{counts.officialStraightPicks}</div>
             </div>
-            <Link href="/results" className="group flex items-center gap-4 text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-white transition-all">
-               View Full Neural Audit History <ArrowRight className="w-3.5 h-3.5 md:w-4 md:h-4 group-hover:translate-x-1" />
-            </Link>
+            <div className="rounded-xl bg-slate-100 p-3">
+              <div className="text-[10px] uppercase text-slate-500">Grouped Products</div>
+              <div className="text-2xl font-black">{counts.officialGroupedProducts}</div>
+            </div>
+            <div className="rounded-xl bg-slate-100 p-3">
+              <div className="text-[10px] uppercase text-slate-500">Parlays</div>
+              <div className="text-2xl font-black">{counts.parlays}</div>
+            </div>
+            <div className="rounded-xl bg-slate-100 p-3">
+              <div className="text-[10px] uppercase text-slate-500">Total Unique Picks</div>
+              <div className="text-2xl font-black">{counts.totalUniquePicks}</div>
+            </div>
           </div>
+        </header>
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
-             <div className="lg:col-span-8">
-                <LiveScoreBoard />
-             </div>
-             <div className="lg:col-span-4 glass-morphism rounded-[3rem] p-8 md:p-12 h-fit border-white/5">
-                <div className="flex flex-col gap-8">
-                   <div className="pb-8 border-b border-white/5">
-                      <h3 className="text-lg font-black uppercase tracking-widest text-primary mb-2">Master Accuracy Index</h3>
-                      <p className="text-xs text-white/40 font-medium leading-relaxed">System-wide performance across all verified nodes since deployment.</p>
-                   </div>
-                   <RecordDashboard />
-                </div>
-             </div>
+        {loading && (
+          <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-600">Loading structured board...</div>
+        )}
+
+        <main className="mt-8 space-y-10">
+          <section className="rounded-3xl border border-amber-300 bg-amber-50 p-6 shadow-sm">
+            <div className="mb-4 flex items-center gap-2 text-amber-800">
+              <Crown className="h-5 w-5" />
+              <h2 className="text-xl font-black">1. HIMOTHY Main Pick</h2>
+            </div>
+            {mainPick ? (
+              <PickDecisionCard pick={mainPick} />
+            ) : (
+              <div className="rounded-xl border border-amber-200 bg-white p-4 text-sm text-slate-700">
+                No elite Main Pick published for this board.
+              </div>
+            )}
+          </section>
+
+          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="mb-4 flex items-center gap-2">
+              <ShieldCheck className="h-5 w-5 text-slate-700" />
+              <h2 className="text-xl font-black">2. HIMOTHY Core Picks</h2>
+            </div>
+            {corePicks.length === 0 ? (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">No core straight picks currently published.</div>
+            ) : (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {corePicks.map((pick) => (
+                  <PickDecisionCard key={pick.id} pick={pick} />
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="mb-4 flex items-center gap-2">
+              <Layers className="h-5 w-5 text-slate-700" />
+              <h2 className="text-xl font-black">3. VIP / Pressure Grouped Products</h2>
+            </div>
+            {groupedProducts.length === 0 ? (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">No grouped products currently published.</div>
+            ) : (
+              <div className="space-y-5">
+                {groupedProducts.map((product) => (
+                  <article key={product.productId} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="mb-3 flex items-center justify-between">
+                      <h3 className="text-lg font-black">{product.productLabel}</h3>
+                      <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-700">{product.picks.length} picks</span>
+                    </div>
+                    <div className="space-y-3">
+                      {product.picks.map((pick, index) => (
+                        <div key={pick.id} className="rounded-xl border border-slate-200 bg-white p-3">
+                          <div className="text-xs font-bold uppercase tracking-wider text-slate-500">Pick {index + 1}</div>
+                          <div className="mt-1 text-sm font-bold text-slate-900">{pick.awayTeam} vs {pick.homeTeam}</div>
+                          <div className="text-sm text-slate-700">{pick.selection}</div>
+                          <div className="mt-1 text-xs text-slate-600">{pick.marketType} | {pick.odds || "-"} | {pick.sportsbook || "TBD"} | {statusLabel(pick.status)}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="mb-4 flex items-center gap-2">
+              <ListChecks className="h-5 w-5 text-slate-700" />
+              <h2 className="text-xl font-black">4. Parlay Center</h2>
+            </div>
+            {parlayProducts.length === 0 ? (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">No parlay products currently published.</div>
+            ) : (
+              <div className="space-y-5">
+                {parlayProducts.map((parlay) => (
+                  <article key={parlay.parlayId} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="text-lg font-black">{parlay.parlayName}</h3>
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="rounded-full bg-white px-3 py-1 font-semibold text-slate-700">Risk: {parlay.riskTier}</span>
+                        <span className="rounded-full bg-white px-3 py-1 font-semibold text-slate-700">Status: {statusLabel(parlay.status)}</span>
+                        <span className="rounded-full bg-white px-3 py-1 font-semibold text-slate-700">Total Odds: {parlay.totalOdds || "TBD"}</span>
+                      </div>
+                    </div>
+                    <div className="space-y-3">
+                      {parlay.legs.map((leg, index) => (
+                        <div key={leg.id} className="rounded-xl border border-slate-200 bg-white p-3">
+                          <div className="text-xs font-bold uppercase tracking-wider text-slate-500">Leg {index + 1}</div>
+                          <div className="mt-1 text-sm font-bold text-slate-900">{leg.awayTeam} vs {leg.homeTeam}</div>
+                          <div className="text-sm text-slate-700">{leg.selection}</div>
+                          <div className="mt-1 text-xs text-slate-600">{leg.marketType} | {leg.odds || "-"} | {leg.sportsbook || "TBD"}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="mb-4 flex items-center gap-2">
+              <Activity className="h-5 w-5 text-slate-700" />
+              <h2 className="text-xl font-black">5. Live Sports Board</h2>
+            </div>
+            <LiveScoreBoard />
+          </section>
+
+          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="mb-4 flex items-center gap-2">
+              <History className="h-5 w-5 text-slate-700" />
+              <h2 className="text-xl font-black">6. Pick Registry / History</h2>
+            </div>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+              <Link href="/results" className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm font-semibold text-slate-700 hover:bg-slate-100">Results Ledger</Link>
+              <Link href="/results-history" className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm font-semibold text-slate-700 hover:bg-slate-100">Pick History</Link>
+              <Link href="/results-archive" className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm font-semibold text-slate-700 hover:bg-slate-100">Archive</Link>
+            </div>
+          </section>
+        </main>
+
+        <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-4 text-xs text-slate-600">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1"><Timer className="h-3 w-3" /> Source: {board?.source || "--"}</span>
+            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1"><TrendingUp className="h-3 w-3" /> Refreshes every 30s</span>
           </div>
-        </section>
+        </div>
       </div>
-
-      {/* 5. Terminal Warning Area */}
-      <footer className="px-6 lg:px-12 py-12 md:py-16 bg-black border-t border-white/5 mt-16 md:mt-24">
-        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
-           <div className="flex flex-col gap-4 md:gap-6 text-center lg:text-left">
-              <div className="flex items-center justify-center lg:justify-start gap-4 text-primary">
-                 <ShieldAlert className="w-6 h-6 md:w-8 md:h-8" />
-                 <span className="text-[9px] md:text-[10px] font-black uppercase tracking-[0.3em] md:tracking-[0.5em]">Neural Protocol Advisory 44.1</span>
-              </div>
-              <p className="text-[10px] text-white/20 leading-relaxed font-bold uppercase tracking-wider max-w-xl mx-auto lg:mx-0">
-                 HIMOTHY IS A LIVE DECISION ENGINE. ALL LINES SHOWN ARE FOR AUDIT PURPOSES. WE RE-EVALUATE EVERY FACT EVERY 5 MINUTES. IF INFORMATION CHANGES, THE NODE IS REMOVED. WAGER AT YOUR OWN RISK. 21+.
-              </p>
-           </div>
-           <div className="flex flex-wrap gap-3 justify-center lg:justify-end">
-              <Link href="/monitoring" className="px-4 md:px-6 py-2.5 md:py-3 bg-white/5 text-white/40 text-[9px] md:text-[10px] font-black rounded-xl uppercase hover:text-primary border border-white/10 transition-colors tracking-widest">Sys Monitor</Link>
-              <Link href="/audit" className="px-4 md:px-6 py-2.5 md:py-3 bg-white/5 text-white/40 text-[9px] md:text-[10px] font-black rounded-xl uppercase hover:text-primary border border-white/10 transition-colors tracking-widest">Final Audit</Link>
-              <Link href="/system-health" className="px-4 md:px-6 py-2.5 md:py-3 bg-white/5 text-white/40 text-[9px] md:text-[10px] font-black rounded-xl uppercase hover:text-primary border border-white/10 transition-colors tracking-widest">Health</Link>
-           </div>
-        </div>
-      </footer>
     </div>
   );
 }

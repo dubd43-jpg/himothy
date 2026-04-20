@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Bomb, BarChart3, Plus, X, Copy, ExternalLink, CheckSquare, Zap, TrendingUp } from "lucide-react";
+import { ArrowLeft, Bomb, BarChart3, Plus, X, Copy, ExternalLink, CheckSquare, Zap, TrendingUp, ShieldCheck } from "lucide-react";
 import { hailmaryParlays, tenDollarParlayPlan, overseasPicks, overnightBets } from "@/lib/picksData";
 import { PickCard } from "@/components/PickCard";
 
@@ -41,6 +41,12 @@ function calcParlayOdds(legs: ParlayLeg[]) {
     ? `+${Math.round((decimal - 1) * 100)}`
     : `-${Math.round(100 / (decimal - 1))}`;
   return { decimal: decimal.toFixed(2), american };
+}
+
+function parseAmericanOdds(value: string) {
+  const match = String(value || '').match(/[+-]?\d{2,4}/);
+  if (!match) return NaN;
+  return Number.parseInt(match[0], 10);
 }
 
 export default function ParlayCenter() {
@@ -98,6 +104,16 @@ export default function ParlayCenter() {
   const payout = parlayOdds
     ? ((parseFloat(stake) || 0) * parseFloat(parlayOdds.decimal)).toFixed(2)
     : "0.00";
+
+  const heavyFavoriteLegs = suggestedLegs
+    .filter((leg) => {
+      const american = parseAmericanOdds(leg.odds);
+      return Number.isFinite(american) && american <= -180;
+    })
+    .slice(0, 6);
+
+  const safeParlayLegs = heavyFavoriteLegs.slice(0, 3);
+  const safeParlayOdds = calcParlayOdds(safeParlayLegs);
 
   const copySlip = () => {
     const text = `HIMOTHY PARLAY SLIP\n--------------------\n` +
@@ -272,6 +288,44 @@ export default function ParlayCenter() {
               </>
             )}
           </div>
+        </section>
+
+        {/* ── HEAVY FAVORITE / SAFE PARLAY ─────────── */}
+        <section>
+          <h2 className="text-2xl font-black uppercase mb-1 flex items-center gap-2">
+            <ShieldCheck className="w-6 h-6 text-primary" /> Heavy Favorite / Safe Parlay
+          </h2>
+          <p className="text-sm text-muted-foreground mb-6">
+            Built from stronger favorite pricing and lower-volatility leg profiles. Not guaranteed outcomes.
+          </p>
+
+          {safeParlayLegs.length < 2 ? (
+            <div className="border border-border rounded-xl p-4 text-sm text-muted-foreground">
+              Not enough strong favorite legs right now. This product populates when the board has clean heavy-favorite options.
+            </div>
+          ) : (
+            <div className="bg-card border-2 border-border rounded-2xl p-6 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-lg font-black uppercase">Protected Parlay</h3>
+                <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider">
+                  <span className="px-2 py-1 rounded bg-secondary border border-border">Risk Tier: Low-Medium</span>
+                  <span className="px-2 py-1 rounded bg-secondary border border-border">Status: Pending</span>
+                  <span className="px-2 py-1 rounded bg-primary/10 border border-primary/20 text-primary">Total Odds: {safeParlayOdds?.american ?? 'N/A'}</span>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                {safeParlayLegs.map((leg, index) => (
+                  <div key={leg.id} className="rounded-lg border border-border bg-secondary/20 px-4 py-3">
+                    <div className="text-[10px] uppercase font-black text-muted-foreground tracking-wider">Leg {index + 1}</div>
+                    <div className="font-bold text-sm">{leg.game}</div>
+                    <div className="text-sm text-foreground">{leg.label}</div>
+                    <div className="text-xs text-muted-foreground mt-1">{leg.odds} | {leg.oddsSource || 'Odds feed'}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </section>
 
         {/* ── PRE-BUILT: $10 PARLAY PLAN ──────────────── */}
