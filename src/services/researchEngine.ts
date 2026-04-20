@@ -1,3 +1,5 @@
+import { LEAGUE_URLS } from '@/lib/validation';
+
 export interface GameContextData {
   teamForm: any;
   matchup: any;
@@ -37,59 +39,171 @@ export interface ResearchDossier {
   sharpEdgeDetected: boolean;
 }
 
+const EVENT_CACHE_TTL_MS = 90_000;
+const eventCache = new Map<string, { fetchedAt: number; event: any | null; league: string | null }>();
+
+function dateKey(date: Date) {
+  return `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function parseAmericanOdds(details?: string | null) {
+  if (!details) return NaN;
+  const match = String(details).match(/[+-]?\d{3,4}/);
+  if (!match) return NaN;
+  const val = Number.parseInt(match[0], 10);
+  return Number.isFinite(val) ? val : NaN;
+}
+
+function toProjectedClose(currentAmerican: number) {
+  if (!Number.isFinite(currentAmerican)) return NaN;
+  const towardEven = currentAmerican > 0 ? Math.max(100, currentAmerican - 10) : Math.min(-100, currentAmerican + 10);
+  return towardEven;
+}
+
+async function findEventById(gameId: string) {
+  const cached = eventCache.get(gameId);
+  const now = Date.now();
+  if (cached && now - cached.fetchedAt <= EVENT_CACHE_TTL_MS) {
+    return cached;
+  }
+
+  const leagues = [
+    'NBA',
+    'NFL',
+    'MLB',
+    'NHL',
+    'NCAA Basketball',
+    'Soccer - EPL',
+    'Soccer - La Liga',
+    'Soccer - Serie A',
+    'Soccer - Bundesliga',
+    'Soccer - Ligue 1',
+  ];
+
+  const windows = [-1, 0, 1].map((offset) => {
+    const d = new Date();
+    d.setDate(d.getDate() + offset);
+    return dateKey(d);
+  });
+
+  for (const league of leagues) {
+    const base = LEAGUE_URLS[league];
+    if (!base) continue;
+    for (const date of windows) {
+      try {
+        const res = await fetch(`${base}/scoreboard?dates=${date}`, { cache: 'no-store' });
+        if (!res.ok) continue;
+        const data = await res.json();
+        const events = data.events || [];
+        const event = events.find((e: any) => String(e.id) === String(gameId));
+        if (event) {
+          const value = { fetchedAt: now, event, league };
+          eventCache.set(gameId, value);
+          return value;
+        }
+      } catch {
+        continue;
+      }
+    }
+  }
+
+  const miss = { fetchedAt: now, event: null, league: null };
+  eventCache.set(gameId, miss);
+  return miss;
+}
+
 export async function buildResearchDossier(gameId: string): Promise<ResearchDossier> {
-  // Deep structural analysis engine
-  console.log(`[Research Engine] Processing Level 4 Deep Scan for game ${gameId}...`);
-  
+  const found = await findEventById(gameId);
+  const event = found.event;
+
+  const comp = event?.competitions?.[0];
+  const home = comp?.competitors?.find((c: any) => c.homeAway === 'home');
+  const away = comp?.competitors?.find((c: any) => c.homeAway === 'away');
+  const oddsNode = comp?.odds?.[0];
+  const oddsDetails = typeof oddsNode?.details === 'string' ? oddsNode.details : null;
+
+  const currentAmerican = parseAmericanOdds(oddsDetails);
+  const projectedCloseAmerican = toProjectedClose(currentAmerican);
+  const hasOdds = Number.isFinite(currentAmerican);
+  const eventState = event?.status?.type?.state || 'pre';
+  const statusDetail = event?.status?.type?.detail || event?.status?.type?.description || 'Scheduled';
+
   const ctx: GameContextData = {
-    teamForm: { homeTrend: "W3", awayTrend: "L2" },
+    teamForm: {
+      source: event ? 'live-scoreboard' : 'unknown',
+      homeTrend: 'live-context',
+      awayTrend: 'live-context',
+    },
     matchup: {
-      keyMatchup: "Home Interior Defense vs Away Paint Scoring"
+      keyMatchup: event ? `${away?.team?.displayName || 'Away'} vs ${home?.team?.displayName || 'Home'}` : 'event-not-found',
     },
     injuries: {
-      home: [{ player: "Star Point Guard", status: "QUESTIONABLE" }],
-      away: []
+      source: 'not-verified-in-feed',
+      home: [],
+      away: [],
     },
     marketMovement: {
-      open: -4.5,
-      current: -5.5,
-      steam: "HOME_SHARP",
-      publicMoneyPercentage: 32, // Public is on Away
-      sharpMoneyPercentage: 88,  // Sharps hammered Home
-      ticketCount: 14502
+      open: Number.isFinite(currentAmerican) ? currentAmerican : 0,
+      current: Number.isFinite(currentAmerican) ? currentAmerican : 0,
+      steam: hasOdds ? 'tracking-live' : 'odds-unavailable',
+      publicMoneyPercentage: hasOdds ? 50 : 0,
+      sharpMoneyPercentage: hasOdds ? 50 : 0,
+      ticketCount: 0,
     },
-    situational: { 
-      travelDistanceMiles: 1200, 
-      timeZoneCrosses: 2, 
-      restDays: 0, // Away team back-to-back crossing timezones 
-      refereeTendencies: { crewChief: "Scott Foster", homeWinPct: 41.2, biasPointValue: -1.5 },
+    situational: {
+      travelDistanceMiles: 0,
+      timeZoneCrosses: 0,
+      restDays: eventState === 'pre' ? 1 : 0,
+      refereeTendencies: undefined,
+      weather: undefined,
     },
-    environmental: { indoor: true },
+    environmental: {
+      statusDetail,
+      startTimeUtc: event?.date || null,
+    },
     advancedMetrics: {
-      homeOffensiveRating: 118.4,
-      homeDefensiveRating: 110.1,
-      awayOffensiveRating: 112.5,
-      awayDefensiveRating: 115.8,
-      paceEdge: 3.2
-    }
+      homeOffensiveRating: 0,
+      homeDefensiveRating: 0,
+      awayOffensiveRating: 0,
+      awayDefensiveRating: 0,
+      paceEdge: 0,
+    },
   };
+
+  const reasonsFor: string[] = [];
+  const reasonsAgainst: string[] = [];
+
+  if (event) {
+    reasonsFor.push('Event verified in trusted live scoreboard feed.');
+  } else {
+    reasonsAgainst.push('Event could not be verified during this research pass.');
+  }
+
+  if (hasOdds) {
+    reasonsFor.push(`Live market available (${oddsDetails}).`);
+    if (Number.isFinite(projectedCloseAmerican)) {
+      reasonsFor.push(`Model projects a mild close toward ${projectedCloseAmerican > 0 ? '+' : ''}${projectedCloseAmerican}.`);
+    }
+  } else {
+    reasonsAgainst.push('Live odds are unavailable; market-specific confidence reduced.');
+  }
+
+  if (eventState === 'pre') {
+    reasonsFor.push('Pregame status confirmed; research remains actionable before kickoff/tipoff.');
+  } else if (eventState === 'in') {
+    reasonsAgainst.push('Event is already live; pregame edge assumptions may be stale.');
+  }
 
   return {
     gameId,
-    sportId: "NBA",
+    sportId: found.league || 'UNKNOWN',
     context: ctx,
-    systemReasonsFor: [
-      "Significant sharp money differential (88% money / 32% tickets)",
-      "Away team operating on 0 rest days crossing 2 time zones (1200 miles)",
-      "Home interior defense ranks top 3, neutralizing away team's primary scoring avenue",
-      "Net rating differential of +11.6 in favor of Home team based on advanced metrics"
-    ],
-    systemReasonsAgainst: [
-      "Home star point guard is questionable, altering rotation if out",
-      "Referee crew chief trend slightly favors away team/underdogs"
-    ],
-    riskAnalysis: "Medium volatility due to the questionable status of the home PG. If ruled out, market will overcorrect toward the away team, but fundamental matchup edge remains.",
-    sharpEdgeDetected: true,
+    systemReasonsFor: reasonsFor,
+    systemReasonsAgainst: reasonsAgainst,
+    riskAnalysis: hasOdds
+      ? 'Research is based on verified event and current market snapshot. Recheck close-to-start line movement before publish.'
+      : 'Research confidence is capped until a verified odds source appears.',
+    sharpEdgeDetected: Boolean(event && hasOdds && eventState === 'pre'),
   };
 }
 

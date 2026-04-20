@@ -1,57 +1,51 @@
 import { NextResponse } from 'next/server';
-import { PICK_REGISTRY } from '@/lib/picksData';
-import { validateAndTrackGame } from '@/lib/validation';
+import { getRegistryBoardPicks } from '@/services/pickRegistryService';
+import {
+  getOfficialTrackingLabel,
+  OFFICIAL_TRACKING_START_DATE,
+  OFFICIAL_TRACKING_TIMEZONE,
+} from '@/lib/officialTracking';
+
+const DEFAULT_COUNTS: Record<string, number> = {
+  GRAND_SLAM: 0,
+  PRESSURE_PACK: 0,
+  VIP_4_PACK: 0,
+  PARLAY_PLAN: 0,
+  OVERNIGHT: 0,
+  PERSONAL_PLAY: 0,
+  HAILMARY: 0,
+  OVERSEAS: 0,
+};
 
 export async function GET() {
   try {
-    // Audit the entire registry for publication safety
-    const auditResults = await Promise.all(PICK_REGISTRY.map(async (p) => {
-      try {
-        const validation = await validateAndTrackGame(p);
-        return { 
-          id: p.id, 
-          category: p.category, 
-          safe: validation.preValidation.safe_to_publish,
-          audit: validation.preValidation.sanity_audit,
-          staleness: validation.preValidation.freshness_audit.data_status
-        };
-      } catch (err) {
-        return { id: p.id, category: p.category, safe: false, audit: null, staleness: "unknown" };
+    const board = await getRegistryBoardPicks({});
+    const counts = { ...DEFAULT_COUNTS };
+
+    for (const pick of board) {
+      if (typeof counts[pick.category] !== 'number') {
+        counts[pick.category] = 0;
       }
-    }));
+      counts[pick.category] += 1;
+    }
 
     const stats = {
-      total_checked: auditResults.length,
-      passed: auditResults.filter(r => r.safe).length,
-      suppressed: auditResults.filter(r => !r.safe).length,
-      roster_failures: auditResults.filter(r => r.audit && !r.audit.player_availability).length,
-      time_mismatches: auditResults.filter(r => r.audit && !r.audit.time_sanity).length,
-      stale_items: auditResults.filter(r => r.staleness === "stale").length,
-      last_audit: new Date().toISOString()
+      total_checked: board.length,
+      published: board.filter((p) => p.status === 'published').length,
+      locked: board.filter((p) => p.status === 'locked').length,
+      graded: board.filter((p) => p.status === 'graded').length,
+      archived: board.filter((p) => p.status === 'archived').length,
+      last_audit: new Date().toISOString(),
+      source: 'db-registry',
     };
-
-    // Group by category
-    const categories: Record<string, number> = {
-      GRAND_SLAM: 0,
-      PRESSURE_PACK: 0,
-      VIP_4_PACK: 0,
-      PARLAY_PLAN: 0,
-      OVERNIGHT: 0,
-      PERSONAL_PLAY: 0,
-      HAILMARY: 0,
-      OVERSEAS: 0
-    };
-
-    auditResults.forEach(r => {
-      if (r.safe) {
-        categories[r.category]++;
-      }
-    });
 
     return NextResponse.json({ 
       success: true, 
-      counts: categories,
+      counts,
       audit_stats: stats,
+      officialStartDate: OFFICIAL_TRACKING_START_DATE,
+      officialTrackingLabel: getOfficialTrackingLabel(),
+      timezone: OFFICIAL_TRACKING_TIMEZONE,
       timestamp: new Date().toISOString()
     });
   } catch (error) {

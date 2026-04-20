@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { SmartPickCard } from "@/components/SmartPickCard";
 import { Copy, ExternalLink, CheckSquare, ArrowLeft, RefreshCw, Zap, ShieldAlert, ShieldCheck, Activity, Target } from "lucide-react";
-import { Pick, getPicksByCategory, PickCategory, PICK_REGISTRY } from "@/lib/picksData";
+import { Pick, PickCategory } from "@/lib/picksData";
 import { ReactNode } from "react";
 
 interface PicksPageTemplateProps {
@@ -32,18 +32,8 @@ export function PicksPageTemplate({
   columns = 2,
   accentNote,
 }: PicksPageTemplateProps) {
-  // If no category is provided, we fetch everything and filter by sport
-  const initialPicks = category 
-    ? getPicksByCategory(category) 
-    : PICK_REGISTRY;
-  
-  // Apply sport filter if provided
-  const filteredPicks = sport
-    ? initialPicks.filter(p => p.sport.toLowerCase() === sport.toLowerCase())
-    : initialPicks;
-
   const [picks, setPicks] = useState<{ pick: Pick; preValidation: any; tracking: any }[]>(
-    filteredPicks.map(p => ({ pick: p, preValidation: null, tracking: null }))
+    []
   );
   const [selectedPicks, setSelectedPicks] = useState<Pick[]>([]);
   const [catStats, setCatStats] = useState<any>(null);
@@ -57,7 +47,7 @@ export function PicksPageTemplate({
         fetch("/api/slate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ picks: filteredPicks }),
+          body: JSON.stringify({ category, sport }),
         }),
         fetch("/api/records/summary")
       ]);
@@ -82,7 +72,7 @@ export function PicksPageTemplate({
     } finally {
       setIsSyncing(false);
     }
-  }, [filteredPicks, category]);
+  }, [category, sport]);
 
   useEffect(() => {
     fetchData();
@@ -229,7 +219,7 @@ export function PicksPageTemplate({
               </button>
             )}
 
-            {verifiedPicks.length < initialPicks.length && !isSyncing && (
+            {verifiedPicks.length === 0 && !isSyncing && (
               <div className="flex items-center gap-2 text-[10px] font-black text-amber-500 bg-amber-500/10 px-4 py-2 rounded-xl border border-amber-500/20 uppercase tracking-widest">
                 <ShieldAlert className="w-3.5 h-3.5" /> 
                 System Lock: Quality over Quantity

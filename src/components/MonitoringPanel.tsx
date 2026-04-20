@@ -5,26 +5,53 @@ import { Activity, ShieldCheck, Gamepad2, Target, RefreshCw, Zap, AlertTriangle,
 
 export function MonitoringPanel() {
   const [stats, setStats] = useState({
-    status: "running",
-    games: 32,
-    picks: 14,
-    rechecking: 2,
-    changed: 4,
-    removed: 1,
-    lastRefresh: new Date().toLocaleTimeString(),
-    heartbeat: 100
+      status: "syncing",
+      games: 0,
+      picks: 0,
+      rechecking: 0,
+      changed: 0,
+      removed: 0,
+      lastRefresh: "--",
+      heartbeat: 0,
+      refreshAgeSeconds: 0,
+      runCount: 0,
   });
 
-  // Simulated Heartbeat
   useEffect(() => {
-    const interval = setInterval(() => {
-      setStats(prev => ({
-        ...prev,
-        heartbeat: 95 + Math.floor(Math.random() * 10),
-        lastRefresh: new Date().toLocaleTimeString()
-      }));
-    }, 5000);
-    return () => clearInterval(interval);
+      let mounted = true;
+
+      const poll = async () => {
+         try {
+            const res = await fetch('/api/ops/live-refresh?maxStaleSeconds=120', { cache: 'no-store' });
+            const json = await res.json();
+            if (!mounted || !json?.success || !json?.summary) return;
+
+            const generatedAt = json.snapshot?.generatedAt ? new Date(json.snapshot.generatedAt) : null;
+            setStats({
+               status: 'running',
+               games: Number(json.summary.gamesMonitored || 0),
+               picks: Number(json.summary.researchReady || 0),
+               rechecking: Number(json.summary.upcomingGames || 0),
+               changed: Number(json.summary.lineChanges || 0),
+               removed: 0,
+               lastRefresh: generatedAt ? generatedAt.toLocaleTimeString() : '--',
+               heartbeat: Math.max(0, Math.min(100, 100 - Math.floor(Number(json.summary.refreshAgeSeconds || 0) / 6))),
+               refreshAgeSeconds: Number(json.summary.refreshAgeSeconds || 0),
+               runCount: Number(json.summary.runCount || 0),
+            });
+         } catch {
+            if (!mounted) return;
+            setStats((prev) => ({ ...prev, status: 'degraded' }));
+         }
+      };
+
+      poll();
+      const interval = setInterval(poll, 30000);
+
+      return () => {
+         mounted = false;
+         clearInterval(interval);
+      };
   }, []);
 
   return (
@@ -79,7 +106,7 @@ export function MonitoringPanel() {
       <div className="grid grid-cols-1 md:grid-cols-4 divide-y md:divide-y-0 md:divide-x divide-border border-t border-border">
          <div className="p-3 flex items-center justify-between">
             <span className="text-[10px] font-bold text-muted-foreground uppercase">Live Queue</span>
-            <span className="text-xs font-black text-primary">12 Items</span>
+            <span className="text-xs font-black text-primary">{stats.rechecking} Items</span>
          </div>
          <div className="p-3 flex items-center justify-between">
             <span className="text-[10px] font-bold text-muted-foreground uppercase">Retry Count</span>
@@ -96,10 +123,10 @@ export function MonitoringPanel() {
       </div>
 
       <div className="p-3 bg-secondary/10 flex items-center gap-4 text-[9px] font-black text-muted-foreground border-t border-border uppercase tracking-widest overflow-hidden whitespace-nowrap">
-         <div className="flex items-center gap-1"><ShieldCheck className="w-3 h-3 text-emerald-500" /> ESPN: <span className="text-foreground">8ms</span></div>
-         <div className="flex items-center gap-1"><ShieldCheck className="w-3 h-3 text-emerald-500" /> ROSTER: <span className="text-foreground">14ms</span></div>
-         <div className="flex items-center gap-1"><ShieldCheck className="w-3 h-3 text-emerald-500" /> ODDS: <span className="text-foreground">32ms</span></div>
-         <div className="flex items-center gap-1 animate-pulse"><Activity className="w-3 h-3 text-primary" /> VALIDATION QUEUE: LIVE (POS: 1)</div>
+         <div className="flex items-center gap-1"><ShieldCheck className="w-3 h-3 text-emerald-500" /> LIVE RESEARCH READY: <span className="text-foreground">{stats.picks}</span></div>
+         <div className="flex items-center gap-1"><ShieldCheck className="w-3 h-3 text-emerald-500" /> REFRESH AGE: <span className="text-foreground">{stats.refreshAgeSeconds}s</span></div>
+         <div className="flex items-center gap-1"><ShieldCheck className="w-3 h-3 text-emerald-500" /> TOTAL RUNS: <span className="text-foreground">{stats.runCount}</span></div>
+         <div className="flex items-center gap-1 animate-pulse"><Activity className="w-3 h-3 text-primary" /> VALIDATION QUEUE: LIVE</div>
       </div>
     </div>
   );

@@ -1,28 +1,39 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Bomb, BarChart3, Plus, X, Copy, ExternalLink, CheckSquare, Zap, TrendingUp } from "lucide-react";
 import { hailmaryParlays, tenDollarParlayPlan, overseasPicks, overnightBets } from "@/lib/picksData";
 import { PickCard } from "@/components/PickCard";
 
-// Suggested parlay legs users can mix and match
-const SUGGESTED_LEGS = [
-  { label: "Hawks -0.5 (1Q)", game: "ATL Hawks vs ORL Magic", odds: "-115", sport: "NBA" },
-  { label: "Tatum OVER 6.5 1Q Pts", game: "BOS Celtics vs PHX Suns", odds: "-120", sport: "NBA" },
-  { label: "Rockets -1.5 (1H)", game: "HOU Rockets vs LA Lakers", odds: "-110", sport: "NBA" },
-  { label: "Clippers OVER 58.5 (1H)", game: "SA Spurs vs LA Clippers", odds: "-115", sport: "NBA" },
-  { label: "Fiorentina ML", game: "Cremonese vs Fiorentina", odds: "-115", sport: "Serie A" },
-  { label: "UNDER 2.5 Goals", game: "Cremonese vs Fiorentina", odds: "-120", sport: "Serie A" },
-  { label: "Vejle +0.25", game: "Silkeborg vs Vejle", odds: "-103", sport: "Denmark" },
-  { label: "CFR Cluj ML", game: "Cluj vs CFR Cluj", odds: "-130", sport: "Romania" },
-];
+interface ParlayLeg {
+  id: string;
+  label: string;
+  game: string;
+  odds: string;
+  sport: string;
+  externalLink: string;
+  status: string;
+  startTime: string;
+  oddsSource?: string | null;
+  lineTimestampUtc?: string | null;
+  freshnessMinutes?: number;
+  oddsAvailable?: boolean;
+  research?: {
+    edgeScore?: number;
+    marketType?: string | null;
+    selection?: string | null;
+    reasoningSummary?: string | null;
+  } | null;
+}
 
-function calcParlayOdds(legs: typeof SUGGESTED_LEGS) {
-  if (legs.length === 0) return null;
+function calcParlayOdds(legs: ParlayLeg[]) {
+  const pricedLegs = legs.filter((leg) => /^[-+]?\d+$/.test(leg.odds));
+  if (pricedLegs.length === 0) return null;
+
   let decimal = 1;
-  for (const leg of legs) {
-    const o = parseInt(leg.odds);
+  for (const leg of pricedLegs) {
+    const o = Number.parseInt(leg.odds, 10);
     const d = o > 0 ? o / 100 + 1 : 100 / Math.abs(o) + 1;
     decimal *= d;
   }
@@ -33,14 +44,51 @@ function calcParlayOdds(legs: typeof SUGGESTED_LEGS) {
 }
 
 export default function ParlayCenter() {
-  const [builderLegs, setBuilderLegs] = useState<typeof SUGGESTED_LEGS>([]);
+  const [suggestedLegs, setSuggestedLegs] = useState<ParlayLeg[]>([]);
+  const [builderLegs, setBuilderLegs] = useState<ParlayLeg[]>([]);
   const [stake, setStake] = useState("10");
   const [copied, setCopied] = useState(false);
   const [selectedPicks, setSelectedPicks] = useState<any[]>([]);
+  const [isLoadingLegs, setIsLoadingLegs] = useState(true);
+  const [refreshMeta, setRefreshMeta] = useState<{ generatedAt?: string; lineChanges?: number; researchReady?: number } | null>(null);
 
-  const toggleLeg = (leg: typeof SUGGESTED_LEGS[0]) => {
-    if (builderLegs.find((l) => l.label === leg.label)) {
-      setBuilderLegs(builderLegs.filter((l) => l.label !== leg.label));
+  useEffect(() => {
+    let mounted = true;
+
+    const fetchRealGames = async () => {
+      try {
+        const res = await fetch("/api/games/today", { cache: 'no-store' });
+        const data = await res.json();
+
+        if (!mounted) return;
+
+        if (data.success && Array.isArray(data.suggestedLegs)) {
+          setSuggestedLegs(data.suggestedLegs);
+          setRefreshMeta({
+            generatedAt: data?.refresh?.generatedAt,
+            lineChanges: data?.refresh?.lineChanges,
+            researchReady: data?.refresh?.researchReady,
+          });
+        }
+      } catch (error) {
+        console.error("Failed to load today's games", error);
+      } finally {
+        if (mounted) setIsLoadingLegs(false);
+      }
+    };
+
+    fetchRealGames();
+    const interval = setInterval(fetchRealGames, 60000);
+
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  const toggleLeg = (leg: ParlayLeg) => {
+    if (builderLegs.find((l) => l.id === leg.id)) {
+      setBuilderLegs(builderLegs.filter((l) => l.id !== leg.id));
     } else {
       setBuilderLegs([...builderLegs, leg]);
     }
@@ -95,15 +143,24 @@ export default function ParlayCenter() {
           <h2 className="text-2xl font-black uppercase mb-1 flex items-center gap-2">
             <Zap className="w-6 h-6 text-primary" /> Build Your Parlay
           </h2>
-          <p className="text-muted-foreground text-sm mb-6">Tap picks below to add them. Odds update automatically.</p>
+          <p className="text-muted-foreground text-sm mb-2">Tap today&apos;s real games below to add legs. Odds appear when the odds feed is available.</p>
+          {refreshMeta && (
+            <p className="text-[11px] font-bold text-muted-foreground mb-6 uppercase tracking-widest">
+              Live Sync: {refreshMeta.researchReady ?? 0} research-ready · {refreshMeta.lineChanges ?? 0} line changes · {refreshMeta.generatedAt ? new Date(refreshMeta.generatedAt).toLocaleTimeString() : '--'}
+            </p>
+          )}
 
           {/* Leg Selector */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-            {SUGGESTED_LEGS.map((leg) => {
-              const active = !!builderLegs.find((l) => l.label === leg.label);
+            {isLoadingLegs ? (
+              <div className="col-span-full border border-border rounded-xl p-4 text-sm text-muted-foreground">Loading today&apos;s games...</div>
+            ) : suggestedLegs.length === 0 ? (
+              <div className="col-span-full border border-border rounded-xl p-4 text-sm text-muted-foreground">No verified games found right now. Check back shortly.</div>
+            ) : suggestedLegs.map((leg) => {
+              const active = !!builderLegs.find((l) => l.id === leg.id);
               return (
                 <button
-                  key={leg.label}
+                  key={leg.id}
                   onClick={() => toggleLeg(leg)}
                   className={`flex flex-col items-start gap-1 p-4 rounded-xl border-2 text-left transition-all
                     ${active
@@ -119,6 +176,16 @@ export default function ParlayCenter() {
                   <span className="font-black text-sm text-foreground leading-tight">{leg.label}</span>
                   <span className="text-xs text-muted-foreground truncate w-full">{leg.game}</span>
                   <span className="text-primary font-black text-sm">{leg.odds}</span>
+                  {leg.oddsSource && (
+                    <span className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                      {leg.oddsSource} · {leg.freshnessMinutes ?? 0}m ago
+                    </span>
+                  )}
+                  {leg.research?.edgeScore != null && (
+                    <span className="text-[10px] text-emerald-500 font-black uppercase tracking-wide">
+                      Edge {leg.research.edgeScore} · {leg.research.marketType || 'Market'}
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -166,11 +233,11 @@ export default function ParlayCenter() {
                   </div>
                   <div className="text-center border-l border-border">
                     <div className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Parlay Odds</div>
-                    <div className="text-2xl font-black text-primary">{parlayOdds?.american ?? "-"}</div>
+                    <div className="text-2xl font-black text-primary">{parlayOdds?.american ?? "Unavailable"}</div>
                   </div>
                   <div className="text-center border-l border-border">
                     <div className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Payout on ${stake}</div>
-                    <div className="text-2xl font-black text-emerald-400">${payout}</div>
+                    <div className="text-2xl font-black text-emerald-400">{parlayOdds ? `$${payout}` : "Unavailable"}</div>
                   </div>
                 </div>
 

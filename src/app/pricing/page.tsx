@@ -52,7 +52,7 @@ export default function PricingPage() {
              <ul className="space-y-4 mb-8 flex-1">
                <li className="flex items-start gap-3 text-sm text-muted-foreground">
                  <Check className="w-5 h-5 text-primary flex-shrink-0" />
-                 <span><strong className="text-foreground italic">That ONE pick that should NEVER lose.</strong></span>
+                 <span><strong className="text-foreground italic">Our highest-conviction, research-led daily entry.</strong></span>
                </li>
                <li className="flex items-start gap-3 text-sm text-muted-foreground">
                  <Check className="w-5 h-5 text-primary flex-shrink-0" />

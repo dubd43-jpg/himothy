@@ -22,7 +22,7 @@ export default function ResultsHistoryPage() {
               <History className="w-10 h-10 text-primary" /> Results History
            </h1>
            <p className="text-muted-foreground text-lg mt-2 max-w-2xl">
-              Complete historical performance logs. We track every win, loss, and push across every category to ensure maximum accountability.
+              Official tracking starts April 20, 2026 (ET). Every win, loss, push, and void is recorded permanently from that day forward.
            </p>
         </div>
 
@@ -33,7 +33,7 @@ export default function ResultsHistoryPage() {
               <BarChart3 className="w-12 h-12 text-emerald-500" />
               <h3 className="text-xl font-black uppercase">Transparency First</h3>
               <p className="text-muted-foreground text-sm leading-relaxed">
-                 Unlike other platforms, we do not delete losses. Every pick is recorded in our audit log and finalized at the end of the night.
+                 We do not delete losses or backfill fake history. Daily records finalize at board close and roll into lifetime totals automatically.
               </p>
            </div>
            <div className="p-8 bg-card border border-border rounded-2xl flex flex-col gap-4">

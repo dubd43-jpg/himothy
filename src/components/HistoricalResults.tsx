@@ -33,6 +33,31 @@ interface DailyRecord {
   picks: PickResult[];
 }
 
+const TRACKING_TIMEZONE = 'America/New_York';
+const OFFICIAL_START_DATE = '2026-04-20';
+
+function toEtDateKey(date: Date) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: TRACKING_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const year = parts.find((p) => p.type === 'year')?.value || '1970';
+  const month = parts.find((p) => p.type === 'month')?.value || '01';
+  const day = parts.find((p) => p.type === 'day')?.value || '01';
+  return `${year}-${month}-${day}`;
+}
+
+function formatEtDisplayDate(date: Date) {
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: TRACKING_TIMEZONE,
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(date);
+}
+
 export function HistoricalResults() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [data, setData] = useState<DailyRecord | null>(null);
@@ -41,14 +66,14 @@ export function HistoricalResults() {
   const fetchResults = async (date: Date) => {
     setLoading(true);
     try {
-      const dateStr = date.toISOString().split('T')[0];
+      const dateStr = toEtDateKey(date);
       const res = await fetch(`/api/records/history?date=${dateStr}`);
       const json = await res.json();
       
       if (json.success) {
         const stats = json.stats.today;
         setData({
-          date: date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
+          date: formatEtDisplayDate(date),
           record: `${stats.wins}-${stats.losses}`,
           unitsWon: (stats.units >= 0 ? "+" : "") + stats.units.toFixed(1) + "U",
           winPercentage: stats.winPercentage,
@@ -78,10 +103,12 @@ export function HistoricalResults() {
     const next = new Date(selectedDate);
     next.setDate(next.getDate() + days);
     if (next > new Date()) return;
+    if (toEtDateKey(next) < OFFICIAL_START_DATE) return;
     setSelectedDate(next);
   };
 
-  const isToday = selectedDate.toDateString() === new Date().toDateString();
+  const isToday = toEtDateKey(selectedDate) === toEtDateKey(new Date());
+  const isOfficialStartDate = toEtDateKey(selectedDate) === OFFICIAL_START_DATE;
 
   return (
     <div className="space-y-8">
@@ -89,7 +116,8 @@ export function HistoricalResults() {
       <div className="flex items-center justify-between bg-card border border-border p-4 rounded-2xl">
         <button 
           onClick={() => adjustDate(-1)}
-          className="p-2 hover:bg-secondary rounded-xl transition-colors"
+          disabled={isOfficialStartDate}
+          className={`p-2 rounded-xl transition-colors ${isOfficialStartDate ? 'opacity-20 cursor-not-allowed' : 'hover:bg-secondary'}`}
         >
           <ChevronLeft className="w-6 h-6" />
         </button>
@@ -100,6 +128,7 @@ export function HistoricalResults() {
             {isToday ? "LIVE BOARD" : "HISTORICAL ARCHIVE"}
           </div>
           <span className="text-xl md:text-2xl font-black uppercase">{data?.date || "Loading..."}</span>
+          <span className="text-[10px] font-black uppercase tracking-widest text-white/40 mt-1">Official Record Since 2026-04-20 (ET)</span>
         </div>
 
         <button 

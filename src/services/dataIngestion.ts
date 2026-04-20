@@ -1,3 +1,5 @@
+import { refreshLiveOpsSnapshot } from '@/services/liveOpsService';
+
 export interface IngestionDailyResult {
   gamesAdded: number;
   gamesUpdated: number;
@@ -6,37 +8,45 @@ export interface IngestionDailyResult {
 }
 
 export async function runSchedulesIngestion(sport: string, date: Date): Promise<IngestionDailyResult> {
-  // Stub for calling an external sports data provider (e.g. Sportradar, The-Odds-API)
-  console.log(`[Ingestion] Pulling schedules for ${sport} on ${date.toISOString()}`);
-  
+  const snapshot = await refreshLiveOpsSnapshot({
+    reason: `ingestion-schedules-${sport}`,
+    maxStaleSeconds: 120,
+  });
+
+  const upcoming = snapshot.games.filter((game) => game.startTime && new Date(game.startTime).getTime() > Date.now()).length;
+
   return {
-    gamesAdded: 4,
-    gamesUpdated: 1,
-    oddsUpdated: 0,
+    gamesAdded: 0,
+    gamesUpdated: upcoming,
+    oddsUpdated: snapshot.lineChangeCount,
     injuriesUpdated: 0
   };
 }
 
 export async function runOddsIngestion(): Promise<IngestionDailyResult> {
-  // Pulling odds and creating snapshots
-  console.log(`[Ingestion] Refreshing odds...`);
-  
+  const snapshot = await refreshLiveOpsSnapshot({
+    reason: 'ingestion-odds',
+    maxStaleSeconds: 60,
+  });
+
   return {
     gamesAdded: 0,
     gamesUpdated: 0,
-    oddsUpdated: 14,
+    oddsUpdated: snapshot.lineChangeCount,
     injuriesUpdated: 0
   };
 }
 
 export async function runInjuryUpdates(): Promise<IngestionDailyResult> {
-  // Pulling injury reports
-  console.log(`[Ingestion] Refreshing injury statuses...`);
-  
+  await refreshLiveOpsSnapshot({
+    reason: 'ingestion-injuries',
+    maxStaleSeconds: 180,
+  });
+
   return {
     gamesAdded: 0,
     gamesUpdated: 0,
     oddsUpdated: 0,
-    injuriesUpdated: 5
+    injuriesUpdated: 0
   };
 }

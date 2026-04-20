@@ -10,15 +10,33 @@ interface RecordSummary {
   allTime: { wins: number; losses: number; winPercentage: string; units: number };
 }
 
+interface LiveNightlyRecord {
+  winsTonight: number;
+  lossesTonight: number;
+  pushesTonight: number;
+  pendingTonight: number;
+  liveNightRecordDisplay: string;
+}
+
+interface DashboardPayload {
+  stats: RecordSummary;
+  officialTrackingLabel?: string;
+  liveNightlyRecord?: LiveNightlyRecord;
+}
+
 export function RecordDashboard() {
-  const [data, setData] = useState<RecordSummary | null>(null);
+  const [data, setData] = useState<DashboardPayload | null>(null);
 
   useEffect(() => {
     fetch('/api/records/summary')
       .then(res => res.json())
-      .then(data => {
-        if (data.success && data.stats) {
-          setData(data.stats);
+      .then(payload => {
+        if (payload.success && payload.stats) {
+          setData({
+            stats: payload.stats,
+            officialTrackingLabel: payload.officialTrackingLabel,
+            liveNightlyRecord: payload.liveNightlyRecord,
+          });
         }
       })
       .catch(err => console.error("RecordDashboard fetch error:", err));
@@ -36,35 +54,44 @@ export function RecordDashboard() {
     </div>
   );
 
+  const summary = data.stats;
+  const liveRecord = data.liveNightlyRecord;
+
   const stats = [
     { 
-      label: "Today's Node", 
-      val: `${data?.today?.wins ?? 0}-${data?.today?.losses ?? 0}`, 
-      sub: `+${data?.today?.units ?? 0}U PROFIT`, 
+      label: "Tonight Record", 
+      val: liveRecord?.liveNightRecordDisplay || `${summary?.today?.wins ?? 0}-${summary?.today?.losses ?? 0}`,
+      sub: `${liveRecord?.pendingTonight ?? 0} PENDING`,
       color: "text-primary" 
     },
     { 
       label: "7-Day Pulse", 
-      val: `${data?.last7Days?.wins ?? 0}-${data?.last7Days?.losses ?? 0}`, 
-      sub: `${data?.last7Days?.winPercentage ?? "0%"} HIT RATE`, 
+      val: `${summary?.last7Days?.wins ?? 0}-${summary?.last7Days?.losses ?? 0}`, 
+      sub: `${summary?.last7Days?.winPercentage ?? "0%"} HIT RATE`, 
       color: "text-emerald-400" 
     },
     { 
       label: "Monthly Output", 
-      val: `${data?.thisMonth?.wins ?? 0}-${data?.thisMonth?.losses ?? 0}`, 
-      sub: `+${data?.thisMonth?.units ?? 0}U PROFIT`, 
+      val: `${summary?.thisMonth?.wins ?? 0}-${summary?.thisMonth?.losses ?? 0}`, 
+      sub: `${(summary?.thisMonth?.units ?? 0) >= 0 ? '+' : ''}${summary?.thisMonth?.units ?? 0}U PROFIT`, 
       color: "text-primary/70" 
     },
     { 
       label: "System Lifetime", 
-      val: `${data?.allTime?.wins ?? 0}-${data?.allTime?.losses ?? 0}`, 
-      sub: `+${data?.allTime?.units ?? 0}U PROFIT`, 
+      val: `${summary?.allTime?.wins ?? 0}-${summary?.allTime?.losses ?? 0}`, 
+      sub: `${(summary?.allTime?.units ?? 0) >= 0 ? '+' : ''}${summary?.allTime?.units ?? 0}U PROFIT`, 
       color: "text-white" 
     },
   ];
 
   return (
     <div className="space-y-8">
+      {data.officialTrackingLabel && (
+        <div className="px-4 py-3 rounded-xl border border-white/10 bg-white/[0.02] text-[10px] font-black uppercase tracking-[0.2em] text-white/40">
+          {data.officialTrackingLabel}
+        </div>
+      )}
+
       {/* Tactical Stats Matrix */}
       <div className="grid grid-cols-2 gap-4 md:gap-6">
         {stats.map((s, i) => (
@@ -94,7 +121,7 @@ export function RecordDashboard() {
                <p className="text-xs text-white/20 font-medium tracking-tight">Across all 24 verified international sports nodes</p>
             </div>
             <div className="flex flex-col items-end gap-1">
-               <span className="text-4xl font-black text-emerald-400 font-mono tracking-tighter">{data.allTime.winPercentage}</span>
+               <span className="text-4xl font-black text-emerald-400 font-mono tracking-tighter">{summary.allTime.winPercentage}</span>
                <span className="text-[9px] font-black text-white/20 uppercase tracking-widest">Global Hit Rate</span>
             </div>
          </div>
@@ -103,7 +130,7 @@ export function RecordDashboard() {
             <div className="h-4 w-full bg-white/5 rounded-full overflow-hidden border border-white/5 p-1">
                <div 
                  className="h-full bg-gradient-to-r from-primary via-emerald-500 to-emerald-400 shadow-[0_0_40px_rgba(34,197,94,0.5)] transition-all duration-[2000ms] ease-out rounded-full" 
-                 style={{ width: data.allTime.winPercentage }} 
+                 style={{ width: summary.allTime.winPercentage }} 
                />
             </div>
             {/* Ticks */}

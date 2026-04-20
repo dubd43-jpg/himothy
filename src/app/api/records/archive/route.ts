@@ -1,61 +1,37 @@
 import { NextResponse } from 'next/server';
-
-/**
- * Results Archive API - TRANSPARENCY & INTEGRITY MODE
- * Strictly serves real historical data. Mock data is forbidden.
- * Supports granular tracking for picks, including publish/grade times and corrections.
- */
-
-interface ArchivePick {
-  id: string;
-  sport: string;
-  league: string;
-  game: string;
-  selection: string;
-  pickType: string;
-  odds: string;
-  units: number;
-  category: string;
-  result: "win" | "loss" | "push" | "void" | "pending";
-  publishTime: string;
-  gradeTime: string;
-  correction?: {
-    originalResult: string;
-    correctedResult: string;
-    reason: string;
-    timestamp: string;
-  };
-}
-
-interface ArchiveDay {
-  date: string;
-  summary: {
-    wins: number;
-    losses: number;
-    pushes: number;
-    voids: number;
-    units: number;
-    winRate: string;
-  };
-  sports: Record<string, string>;
-  picks: ArchivePick[];
-}
+import { archiveClosedBoards, getDailyBoardRecords, getRegistryArchive } from '@/services/pickRegistryService';
+import {
+  clampToOfficialStartDate,
+  getOfficialTrackingLabel,
+  OFFICIAL_TRACKING_START_DATE,
+  OFFICIAL_TRACKING_TIMEZONE,
+} from '@/lib/officialTracking';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const filter = searchParams.get('filter') || 'all';
+  const category = searchParams.get('category') || undefined;
+  const productLine = searchParams.get('productLine') || undefined;
+  const fromRaw = searchParams.get('from') || undefined;
+  const from = fromRaw ? clampToOfficialStartDate(fromRaw) : undefined;
+  const to = searchParams.get('to') || undefined;
+  const page = Number.parseInt(searchParams.get('page') || '1', 10);
+  const pageSize = Number.parseInt(searchParams.get('pageSize') || '20', 10);
 
-  // Unified System Integrity Rule: No mock, estimated, or backfilled history.
-  // The archive starts at zero for a fresh deployment.
-  const archiveData: ArchiveDay[] = [];
+  await archiveClosedBoards();
+  const [archive, dailyRecords] = await Promise.all([
+    getRegistryArchive({ page, pageSize, category, productLine, from, to }),
+    getDailyBoardRecords({ from, to, page, pageSize: Math.min(pageSize, 50) }),
+  ]);
 
-  // Logic to filter by today, yesterday, etc. would query the DB with specific date ranges.
-  // For now, we return empty as we are in Zero-Base mode.
-
-  return NextResponse.json({ 
-    success: true, 
-    archive: archiveData,
+  return NextResponse.json({
+    success: true,
+    archive: archive.picks,
+    dailyRecords,
+    pagination: archive.pagination,
     integrityMode: true,
-    message: "Zero-base tracking initialized."
+    officialStartDate: OFFICIAL_TRACKING_START_DATE,
+    officialTrackingLabel: getOfficialTrackingLabel(),
+    timezone: OFFICIAL_TRACKING_TIMEZONE,
+    message: 'Registry-backed archive ledger',
   });
 }

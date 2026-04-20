@@ -1,10 +1,50 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { MonitoringPanel } from "@/components/MonitoringPanel";
 import { ArrowLeft, Activity, Globe, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 
 export default function MonitoringPage() {
+   const [snapshot, setSnapshot] = useState({
+      gamesMonitored: 0,
+      upcomingGames: 0,
+      researchReady: 0,
+      lineChanges: 0,
+      refreshAgeSeconds: 0,
+      runCount: 0,
+   });
+
+   useEffect(() => {
+      let mounted = true;
+
+      const poll = async () => {
+         try {
+            const res = await fetch('/api/ops/live-refresh?maxStaleSeconds=120', { cache: 'no-store' });
+            const json = await res.json();
+            if (!mounted || !json?.success || !json?.summary) return;
+
+            setSnapshot({
+               gamesMonitored: Number(json.summary.gamesMonitored || 0),
+               upcomingGames: Number(json.summary.upcomingGames || 0),
+               researchReady: Number(json.summary.researchReady || 0),
+               lineChanges: Number(json.summary.lineChanges || 0),
+               refreshAgeSeconds: Number(json.summary.refreshAgeSeconds || 0),
+               runCount: Number(json.summary.runCount || 0),
+            });
+         } catch {
+            if (!mounted) return;
+         }
+      };
+
+      poll();
+      const interval = setInterval(poll, 30000);
+      return () => {
+         mounted = false;
+         clearInterval(interval);
+      };
+   }, []);
+
   return (
     <div className="min-h-screen bg-background text-foreground pb-24">
       <div className="px-6 lg:px-10 py-10 max-w-7xl mx-auto flex flex-col gap-8">
@@ -29,10 +69,10 @@ export default function MonitoringPage() {
               <h3 className="text-xs font-black uppercase tracking-widest text-primary mb-4">Feed Health Status</h3>
               <div className="space-y-4">
                  {[
-                   { name: "ESPN Scoreboard API", status: "Active", latency: "12ms", health: 100 },
-                   { name: "Live Roster Feed", status: "Active", latency: "34ms", health: 98 },
-                   { name: "Global Odds Monitor", status: "Active", latency: "61ms", health: 100 },
-                   { name: "Validation Queue Admin", status: "Active", latency: "5ms", health: 100 }
+                   { name: "Verified Games", status: "Active", latency: `${snapshot.refreshAgeSeconds}s age`, health: Math.max(50, 100 - Math.floor(snapshot.refreshAgeSeconds / 4)) },
+                   { name: "Pregame Queue", status: "Active", latency: `${snapshot.upcomingGames} pending`, health: snapshot.upcomingGames > 0 ? 100 : 80 },
+                   { name: "Research Coverage", status: "Active", latency: `${snapshot.researchReady} ready`, health: snapshot.gamesMonitored > 0 ? Math.round((snapshot.researchReady / snapshot.gamesMonitored) * 100) : 0 },
+                   { name: "Line Change Tracker", status: "Active", latency: `${snapshot.lineChanges} changed`, health: 100 }
                  ].map((feed, i) => (
                     <div key={i} className="flex items-center justify-between">
                        <div className="flex flex-col">
@@ -54,17 +94,17 @@ export default function MonitoringPage() {
               <h3 className="text-xs font-black uppercase tracking-widest text-primary mb-4">Background Refresh Activity</h3>
               <div className="space-y-3">
                  {[
-                   "NBA Refresh Cycle Started",
-                   "NFL Roster Sync Completed",
-                   "MLB Line Movement Detected",
-                   "Soccer Match Time Correction Applied",
-                   "Tennis Odds Re-verified",
-                   "Internal Cache Purge Executed"
+                   `Live ops run count: ${snapshot.runCount}`,
+                   `Games monitored this cycle: ${snapshot.gamesMonitored}`,
+                   `Pregame games awaiting lock: ${snapshot.upcomingGames}`,
+                   `Research-ready games: ${snapshot.researchReady}`,
+                   `Detected line changes: ${snapshot.lineChanges}`,
+                   `Last refresh age: ${snapshot.refreshAgeSeconds}s`
                  ].map((act, i) => (
                     <div key={i} className="flex items-center gap-3 py-2 border-b border-border last:border-0">
                        <div className="w-1.5 h-1.5 rounded-full bg-primary" />
                        <span className="text-xs font-medium text-foreground">{act}</span>
-                       <span className="text-[9px] font-mono text-muted-foreground ml-auto uppercase">{60 - (i*8)}s ago</span>
+                       <span className="text-[9px] font-mono text-muted-foreground ml-auto uppercase">LIVE</span>
                     </div>
                  ))}
               </div>

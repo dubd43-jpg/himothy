@@ -12,13 +12,13 @@ export default function GrandSlamPage() {
     <PicksPageTemplate
       category="GRAND_SLAM"
       title="HIMOTHY Grand Slam"
-      subtitle="That ONE pick that should never lose. Our highest confidence play of the entire slate — the algorithm's lock of the day."
-      badge="Never Lose"
+      subtitle="Our highest-conviction entry on the board, selected only after full slate validation and research review."
+      badge="Top Conviction"
       icon={<Trophy className="w-9 h-9 text-primary" />}
       backHref="/picks"
       backLabel="Back to All Picks"
       columns={1}
-      accentNote="🏆 Confidence: 100% — This is our top-tier play. Ride with full conviction."
+      accentNote="Registry locked after publish. Transparent grading follows when the event settles."
     />
   );
 }

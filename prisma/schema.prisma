@@ -233,6 +233,23 @@ enum VisibilityType {
   TEASER
 }
 
+enum RegistryStatus {
+  draft
+  validated
+  published
+  locked
+  graded
+  archived
+}
+
+enum RegistryResult {
+  pending
+  win
+  loss
+  push
+  void
+}
+
 model Pick {
   id              String   @id @default(cuid())
   gameId          String
@@ -390,4 +407,51 @@ model SportsbookLink {
   affiliateTag      String?
   stateRestrictions String?
   isActive          Boolean  @default(true)
+}
+
+model PickRegistryEntry {
+  id               String         @id @default(cuid())
+  boardDate        DateTime
+  publishTime      DateTime?
+  lockTime         DateTime?
+  status           RegistryStatus @default(draft)
+  result           RegistryResult @default(pending)
+  category         String
+  productLine      String
+  sport            String
+  league           String
+  eventId          String?
+  eventName        String
+  homeTeam         String?
+  awayTeam         String?
+  marketType       String
+  selection        String
+  line             String?
+  odds             String?
+  sportsbook       String?
+  confidenceTier   String?
+  reasoningSummary String?
+  riskSummary      String?
+  researchPayload  Json?
+  edgeScore        Float?
+  edgeSignals      Json?
+  marketOpenOdds   String?
+  projectedClosingOdds String?
+  clvAtPublish     Float?
+  closingOdds      String?
+  clvDelta         Float?
+  isMainPick       Boolean        @default(false)
+  mainPickReason   String?
+  gradedAt         DateTime?
+  isPublic         Boolean        @default(true)
+  isLocked         Boolean        @default(false)
+  version          Int            @default(1)
+  replacedById     String?
+  sourceTag        String         @default("registry")
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@index([boardDate])
+  @@index([status])
+  @@index([category])
 }

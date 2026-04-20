@@ -99,46 +99,14 @@ export default function ScoresPage() {
         let homeScoreNum = parseInt(home?.score ?? "0");
         let awayScoreNum = parseInt(away?.score ?? "0");
 
-        // Failsafe: if ESPN is stuck on 'pre' but the game is > 2.5 hours old, force a result
-        // Also force manually for known 6:45 AM games that ESPN has mis-scheduled in the future.
-        if (statusType === "pre" && e.date) {
-           const gameDate = new Date(e.date);
-           const now = new Date();
-           const elapsedMinutes = (now.getTime() - gameDate.getTime()) / 60000;
-           
-           const lName = (e.name || "").toLowerCase();
-           const isKnownMorningGame = 
-             (lName.includes("cremonese") && lName.includes("fiorentina")) ||
-             (lName.includes("silkeborg") && lName.includes("vejle")) ||
-             (lName.includes("korona") || lName.includes("szczecin")) ||
-             (lName.includes("cluj"));
-
-           if (elapsedMinutes > 150 || isKnownMorningGame) {
-              statusType = "post";
-              statusDetail = "Final";
-              
-              // deterministic mock scores
-              const hash = (e.name || "").split('').reduce((acc: number, char: string) => acc + char.charCodeAt(0), 0);
-              homeScoreNum = (hash % 3) + 1;
-              awayScoreNum = ((hash * 2) % 3) + 1;
-              
-              if (lName.includes("cremonese") && lName.includes("fiorentina")) {
-                 // Ensure Fiorentina ML and Under 2.5 hit
-                 if (home?.team?.displayName?.toLowerCase().includes("cremonese")) { homeScoreNum = 0; awayScoreNum = 2; }
-                 else { homeScoreNum = 2; awayScoreNum = 0; }
-              }
-              else if (lName.includes("silkeborg") && lName.includes("vejle")) { homeScoreNum = 1; awayScoreNum = 1; }
-              else if (lName.includes("korona") || lName.includes("szczecin")) { homeScoreNum = 2; awayScoreNum = 1; }
-              else if (lName.includes("cluj")) { homeScoreNum = 0; awayScoreNum = 1; }
-           }
-        }
+          // Preserve feed truth: never synthesize final status or scores.
         
         const homeAbbr = home?.team?.abbreviation ?? home?.team?.shortDisplayName ?? "";
         const awayAbbr = away?.team?.abbreviation ?? away?.team?.shortDisplayName ?? "";
         const key = `${homeAbbr}-${awayAbbr}`;
         
         let pickDef = OUR_PICKS[key];
-        const vegasOdds = comp?.odds?.[0]?.details ?? "N/A";
+        const vegasOdds = comp?.odds?.[0]?.details ?? "Odds unavailable";
 
         const prevGame = prevGamesRef.current.find(pg => pg.id === e.id);
 

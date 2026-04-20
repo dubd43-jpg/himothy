@@ -17,6 +17,9 @@ interface GameScore {
   isFinal: boolean;
   isScheduled: boolean;
   externalLink: string;
+  oddsSource?: string | null;
+  freshnessMinutes?: number;
+  oddsAvailable?: boolean;
 }
 
 export function LiveScoreBoard() {
@@ -115,6 +118,9 @@ export function LiveScoreBoard() {
                     <span className="text-[10px] font-black text-white/20 uppercase tracking-widest">Temporal Status</span>
                     <div className="text-xs font-bold text-primary italic">
                        {game.period} {game.clock !== "0:00" && `• ${game.clock}`}
+                    </div>
+                    <div className="text-[10px] text-white/40 uppercase tracking-wider">
+                     {game.oddsAvailable ? `${game.oddsSource || 'Odds feed'} · ${game.freshnessMinutes ?? 0}m` : 'Odds unavailable'}
                     </div>
                  </div>
                   <div className="flex items-center gap-3">

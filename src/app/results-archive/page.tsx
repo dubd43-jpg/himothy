@@ -35,7 +35,7 @@ export default function ResultsArchivePage() {
              <History className="w-10 h-10 text-primary" /> Results <span className="italic font-light">Archive</span>
           </h1>
           <p className="text-xl text-muted-foreground mt-2 max-w-2xl">
-             Our total historical ledger. Everyauthorized pick since system inception, archived with final market odds and results.
+             Official archive since April 20, 2026 (ET). Every authorized published pick is preserved with final result and settlement timestamps.
           </p>
         </div>
 
@@ -44,9 +44,9 @@ export default function ResultsArchivePage() {
         <div className="bg-card border border-border rounded-3xl p-12 text-center">
             <div className="max-w-md mx-auto space-y-4">
               <History className="w-16 h-16 text-muted-foreground mx-auto opacity-20" />
-              <h3 className="text-2xl font-black uppercase tracking-tight">Accessing Historical Vault</h3>
+              <h3 className="text-2xl font-black uppercase tracking-tight">Official Record Window</h3>
               <p className="text-muted-foreground font-medium">
-                The full archive contains over 1,200 unique decision logs. We are currently formatting the 2025-2026 Season data for indexed search.
+                No fake backfill is used. This archive starts at the official public tracking date and builds forward with real settled outcomes only.
               </p>
               <div className="pt-6">
                  <Link href="/results" className="text-sm font-black text-primary underline underline-offset-8 uppercase tracking-widest">View Recent Results While Loading</Link>

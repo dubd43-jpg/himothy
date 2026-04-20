@@ -45,8 +45,8 @@ export default function ResultsPage() {
               ARCHIVE
             </h1>
             <p className="text-lg md:text-xl text-white/40 font-medium leading-relaxed max-w-2xl">
-              We track every node execution, market audit, and event result with total precision. 
-              Browse the historical record by date below.
+              Official public record tracking starts on April 20, 2026 (ET). Every published pick is logged permanently,
+              graded live as results settle, and never deleted from history.
             </p>
           </div>
         </section>
@@ -62,7 +62,8 @@ export default function ResultsPage() {
                  <h3 className="text-xl font-black uppercase tracking-tight">Zero-Deletion Policy</h3>
               </div>
               <p className="text-white/40 text-sm leading-relaxed font-medium">
-                 Unlike traditional betting trackers, our system is immutable. Once a pick is published to the public board, it CANNOT be removed or edited. Losses are documented with the same intensity as wins to maintain system integrity.
+                  Once a pick is officially published, it remains in the ledger forever. Losses stay visible,
+                  pending picks stay pending until settled, and no fake backfill is added before the official start date.
               </p>
            </div>
            
