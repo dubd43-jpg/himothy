@@ -3,6 +3,7 @@ import { Pick } from '@/lib/picksData';
 import { validateAndTrackGame } from '@/lib/validation';
 import { getRegistryBoardPicks } from '@/services/pickRegistryService';
 import { fetchLiveSlate } from '@/lib/liveSlate';
+import { inferBoardTypeFromContext, parseBoardType } from '@/lib/boardSegmentation';
 
 const FALLBACK_CATEGORIES = [
   'GRAND_SLAM',
@@ -22,12 +23,20 @@ function provisionalCategoryForGame(index: number, league: string) {
   return FALLBACK_CATEGORIES[index % FALLBACK_CATEGORIES.length];
 }
 
-function buildLiveFallbackResults(args: { category?: string; sport?: string; boardDate?: string; games: Awaited<ReturnType<typeof fetchLiveSlate>> }) {
-  const { category, sport, boardDate, games } = args;
+function buildLiveFallbackResults(args: {
+  category?: string;
+  sport?: string;
+  boardDate?: string;
+  board?: string;
+  games: Awaited<ReturnType<typeof fetchLiveSlate>>;
+}) {
+  const { category, sport, boardDate, board, games } = args;
   const fallbackBoardDate = boardDate || new Date().toISOString().slice(0, 10);
+  const selectedBoard = parseBoardType(board);
 
   return games
     .filter((game) => !game.isFinal && game.verified)
+    .filter((game) => inferBoardTypeFromContext({ sport: game.sport, league: game.league }) === selectedBoard)
     .filter((game) => !sport || game.league.toLowerCase().includes(sport.toLowerCase()) || game.sport.toLowerCase().includes(sport.toLowerCase()))
     .slice(0, 24)
     .map((game, idx) => {
@@ -125,6 +134,7 @@ export async function POST(req: Request) {
     const category = typeof body.category === 'string' ? body.category : undefined;
     const sport = typeof body.sport === 'string' ? body.sport : undefined;
     const boardDate = typeof body.boardDate === 'string' ? body.boardDate : undefined;
+    const board = typeof body.board === 'string' ? body.board : 'north-american';
     const candidatePicks = Array.isArray(body.picks) ? (body.picks as Pick[]) : [];
 
     // Candidate mode is used internally for pre-publish validation only.
@@ -150,16 +160,25 @@ export async function POST(req: Request) {
     }
 
     const boardRows = await getRegistryBoardPicks({ boardDate, category, sport });
-    if (boardRows.length === 0) {
+    const filteredRows = boardRows.filter((row) => {
+      const rowBoard = inferBoardTypeFromContext({
+        sport: row.sport,
+        league: row.league,
+        category: row.category,
+        productLine: row.productLine,
+      });
+      return rowBoard === parseBoardType(board);
+    });
+    if (filteredRows.length === 0) {
       const games = await fetchLiveSlate({ maxGames: 30 });
       return NextResponse.json({
         success: true,
         source: 'live-slate-fallback',
-        results: buildLiveFallbackResults({ category, sport, boardDate, games }),
+        results: buildLiveFallbackResults({ category, sport, boardDate, board, games }),
       });
     }
 
-    const results = boardRows.map((row) => ({
+    const results = filteredRows.map((row) => ({
       pick: toPickShape(row),
       preValidation: {
         game_valid: true,
@@ -197,7 +216,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       success: true,
       source: 'live-slate-fallback',
-      results: buildLiveFallbackResults({ games }),
+      results: buildLiveFallbackResults({ board: 'north-american', games }),
     });
   }
 }

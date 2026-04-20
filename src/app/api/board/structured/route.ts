@@ -1,6 +1,13 @@
 import { NextResponse } from 'next/server';
 import { fetchLiveSlate } from '@/lib/liveSlate';
 import { getRegistryBoardPicks, getBoardMainPick, type RegistryPickRow } from '@/services/pickRegistryService';
+import {
+  boardDisplayName,
+  inferBoardTypeFromContext,
+  parseBoardType,
+  type BoardType,
+  BOARD_OPTIONS,
+} from '@/lib/boardSegmentation';
 
 export type ProductType =
   | 'MAIN_PICK'
@@ -36,6 +43,7 @@ interface StructuredPick {
   parentProductId: string | null;
   isMainPick: boolean;
   isParlay: boolean;
+  boardType: BoardType;
   displayPriority: number;
 }
 
@@ -129,6 +137,12 @@ function toStructured(row: RegistryPickRow): StructuredPick {
   const home = row.homeTeam || row.eventName.split(' vs ')[1] || 'Home';
   const edgeWeight = row.edgeScore || 0;
   const type = inferProductType(row);
+  const boardType = inferBoardTypeFromContext({
+    sport: row.sport,
+    league: row.league,
+    category: row.category,
+    productLine: row.productLine,
+  });
 
   return {
     id: row.id,
@@ -151,11 +165,17 @@ function toStructured(row: RegistryPickRow): StructuredPick {
     parentProductId: null,
     isMainPick: row.isMainPick,
     isParlay: isParlayRow(row),
+    boardType,
     displayPriority: (row.isMainPick ? 1000 : 0) + edgeWeight,
   };
 }
 
 function toFallbackCorePick(game: Awaited<ReturnType<typeof fetchLiveSlate>>[number], index: number): StructuredPick {
+  const boardType = inferBoardTypeFromContext({
+    sport: game.sport,
+    league: game.league,
+  });
+
   return {
     id: `fallback-${game.id}-${index}`,
     eventName: `${game.awayTeam} vs ${game.homeTeam}`,
@@ -177,6 +197,7 @@ function toFallbackCorePick(game: Awaited<ReturnType<typeof fetchLiveSlate>>[num
     parentProductId: null,
     isMainPick: false,
     isParlay: false,
+    boardType,
     displayPriority: 20,
   };
 }
@@ -196,6 +217,7 @@ export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     const boardDate = url.searchParams.get('boardDate') || undefined;
+    const board = parseBoardType(url.searchParams.get('board'));
 
     const [rows, mainRow] = await Promise.all([
       getRegistryBoardPicks({ boardDate }),
@@ -207,11 +229,15 @@ export async function GET(req: Request) {
       const core = fallbackGames
         .filter((g) => !g.isFinal && g.verified)
         .slice(0, 8)
-        .map(toFallbackCorePick);
+        .map(toFallbackCorePick)
+        .filter((pick) => pick.boardType === board);
 
       return NextResponse.json({
         success: true,
         source: 'live-fallback',
+        board,
+        boardLabel: boardDisplayName(board),
+        boardOptions: BOARD_OPTIONS,
         boardDate: boardDate || new Date().toISOString().slice(0, 10),
         sections: {
           mainPick: null,
@@ -229,16 +255,18 @@ export async function GET(req: Request) {
     }
 
     const all = dedupeById(rows.map(toStructured)).sort((a, b) => b.displayPriority - a.displayPriority);
+    const boardRows = all.filter((pick) => pick.boardType === board);
 
-    const mainPick = mainRow ? all.find((p) => p.id === mainRow.id) || null : null;
+    const mainPickCandidate = mainRow ? all.find((p) => p.id === mainRow.id) || null : null;
+    const mainPick = board === 'north-american' && mainPickCandidate?.boardType === 'north-american' ? mainPickCandidate : null;
     const mainId = mainPick?.id || null;
 
-    const remaining = all.filter((p) => p.id !== mainId);
+    const remaining = boardRows.filter((p) => p.id !== mainId);
 
     const parlayRows = remaining.filter((p) => p.isParlay);
     const nonParlayRows = remaining.filter((p) => !p.isParlay);
 
-    const groupedTypes = new Set<ProductType>(['VIP_4_PACK', 'PRESSURE_PACK']);
+    const groupedTypes = new Set<ProductType>(board === 'north-american' ? ['VIP_4_PACK', 'PRESSURE_PACK'] : []);
     const groupedPool = nonParlayRows.filter((p) => groupedTypes.has(p.productType));
 
     const groupedProducts: GroupedProduct[] = [];
@@ -290,6 +318,9 @@ export async function GET(req: Request) {
     return NextResponse.json({
       success: true,
       source: 'registry',
+      board,
+      boardLabel: boardDisplayName(board),
+      boardOptions: BOARD_OPTIONS,
       boardDate: boardDate || rows[0]?.boardDate || new Date().toISOString().slice(0, 10),
       sections: {
         mainPick,

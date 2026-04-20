@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   Crown,
@@ -60,6 +61,9 @@ interface ParlayProduct {
 interface StructuredBoardResponse {
   success: boolean;
   source: string;
+  board: string;
+  boardLabel: string;
+  boardOptions?: Array<{ key: string; label: string }>;
   boardDate: string;
   sections: {
     mainPick: BoardPick | null;
@@ -138,6 +142,8 @@ function PickDecisionCard({ pick }: { pick: BoardPick }) {
 }
 
 export default function PicksHubPage() {
+  const searchParams = useSearchParams();
+  const selectedBoard = (searchParams.get("board") || "north-american").toLowerCase();
   const [board, setBoard] = useState<StructuredBoardResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -146,7 +152,7 @@ export default function PicksHubPage() {
 
     const fetchBoard = async () => {
       try {
-        const res = await fetch("/api/board/structured", { cache: "no-store" });
+        const res = await fetch(`/api/board/structured?board=${encodeURIComponent(selectedBoard)}`, { cache: "no-store" });
         const json = (await res.json()) as StructuredBoardResponse;
         if (mounted && json.success) {
           setBoard(json);
@@ -165,7 +171,7 @@ export default function PicksHubPage() {
       mounted = false;
       clearInterval(interval);
     };
-  }, []);
+  }, [selectedBoard]);
 
   const counts = useMemo(
     () =>
@@ -199,7 +205,7 @@ export default function PicksHubPage() {
           <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div>
               <div className="text-xs font-bold uppercase tracking-widest text-slate-500">HIMOTHY BOARD</div>
-              <h1 className="mt-2 text-3xl font-black tracking-tight md:text-4xl">Structured Product Board</h1>
+              <h1 className="mt-2 text-3xl font-black tracking-tight md:text-4xl">{board?.boardLabel || "North American"} Board</h1>
               <p className="mt-2 max-w-3xl text-sm text-slate-600">
                 One game, one card, one official decision. Main Pick is isolated, grouped products stay grouped, and parlays stay in parlay sections.
               </p>
@@ -208,6 +214,30 @@ export default function PicksHubPage() {
               Board Date: {board?.boardDate || new Date().toISOString().slice(0, 10)}
             </div>
           </div>
+
+          <nav className="mt-5 flex flex-wrap gap-2">
+            {(board?.boardOptions || [
+              { key: "north-american", label: "North American" },
+              { key: "soccer", label: "Soccer" },
+              { key: "tennis", label: "Tennis" },
+              { key: "overseas", label: "Overseas" },
+            ]).map((option) => {
+              const active = (board?.board || selectedBoard) === option.key;
+              return (
+                <Link
+                  key={option.key}
+                  href={`/picks?board=${option.key}`}
+                  className={`rounded-full border px-4 py-2 text-xs font-black uppercase tracking-wider transition ${
+                    active
+                      ? "border-slate-900 bg-slate-900 text-white"
+                      : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+                  }`}
+                >
+                  {option.label}
+                </Link>
+              );
+            })}
+          </nav>
 
           <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
             <div className="rounded-xl bg-slate-100 p-3">
@@ -239,11 +269,13 @@ export default function PicksHubPage() {
               <Crown className="h-5 w-5" />
               <h2 className="text-xl font-black">1. HIMOTHY Main Pick</h2>
             </div>
-            {mainPick ? (
+            {board?.board === "north-american" && mainPick ? (
               <PickDecisionCard pick={mainPick} />
             ) : (
               <div className="rounded-xl border border-amber-200 bg-white p-4 text-sm text-slate-700">
-                No elite Main Pick published for this board.
+                {board?.board === "north-american"
+                  ? "No elite Main Pick published for this board."
+                  : "Main Pick is reserved for North American board."}
               </div>
             )}
           </section>

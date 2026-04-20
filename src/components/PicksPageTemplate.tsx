@@ -6,6 +6,7 @@ import { SmartPickCard } from "@/components/SmartPickCard";
 import { Copy, ExternalLink, CheckSquare, ArrowLeft, RefreshCw, Zap, ShieldAlert, ShieldCheck, Activity, Target } from "lucide-react";
 import { Pick, PickCategory } from "@/lib/picksData";
 import { ReactNode } from "react";
+import { inferBoardTypeFromContext } from "@/lib/boardSegmentation";
 
 interface PicksPageTemplateProps {
   category?: PickCategory;
@@ -41,13 +42,18 @@ export function PicksPageTemplate({
   const [lastSync, setLastSync] = useState("");
   const [isSyncing, setIsSyncing] = useState(true);
 
+  const board = inferBoardTypeFromContext({
+    sport,
+    category,
+  });
+
   const fetchData = useCallback(async () => {
     try {
       const [slateRes, recordsRes] = await Promise.all([
         fetch("/api/slate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ category, sport }),
+          body: JSON.stringify({ category, sport, board }),
         }),
         fetch("/api/records/summary")
       ]);
@@ -72,7 +78,7 @@ export function PicksPageTemplate({
     } finally {
       setIsSyncing(false);
     }
-  }, [category, sport]);
+  }, [category, sport, board]);
 
   useEffect(() => {
     fetchData();

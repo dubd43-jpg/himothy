@@ -1,13 +1,22 @@
 import { NextResponse } from 'next/server';
 import { refreshLiveOpsSnapshot } from '@/services/liveOpsService';
+import { inferBoardTypeFromContext, parseBoardType } from '@/lib/boardSegmentation';
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
+    const url = new URL(req.url);
+    const board = parseBoardType(url.searchParams.get('board'));
+
     const snapshot = await refreshLiveOpsSnapshot({
       reason: 'api-games-today',
       maxStaleSeconds: 120,
     });
-    const activeGames = snapshot.games.filter((game) => !game.isFinal && game.verified);
+    const activeGames = snapshot.games.filter(
+      (game) =>
+        !game.isFinal &&
+        game.verified &&
+        inferBoardTypeFromContext({ sport: game.sport, league: game.league }) === board
+    );
 
     const researchByGame = new Map(snapshot.topCandidates.map((candidate) => [candidate.gameId, candidate]));
 
@@ -47,6 +56,7 @@ export async function GET() {
         researchReady: snapshot.researchReadyCount,
         lineChanges: snapshot.lineChangeCount,
       },
+      board,
       timestamp: new Date().toISOString(),
     });
   } catch {
