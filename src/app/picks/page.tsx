@@ -220,14 +220,15 @@ export default function PicksHubPage() {
           {packages.map((pkg) => {
             const Icon = pkg.icon;
             const availableCount = counts ? counts[pkg.id] : 0;
-            const isAvailable = availableCount > 0;
+            const isAvailable = true;
+            const hasLiveCount = availableCount > 0;
             
             return (
               <Link
                 key={pkg.id}
                 href={pkg.href}
                 className={`group glass-morphism rounded-[1.5rem] md:rounded-[2rem] p-6 md:p-8 flex flex-col gap-6 transition-all duration-500 border-white/5 relative overflow-hidden h-full 
-                  ${isAvailable ? pkg.accentColor : 'opacity-30 grayscale pointer-events-none'}`}
+                  ${pkg.accentColor}`}
               >
                 {/* Visual Flair */}
                 <div className="absolute top-0 right-0 w-24 h-24 bg-white/[0.03] -mr-8 -mt-8 rounded-full blur-2xl group-hover:bg-primary/10 transition-colors" />
@@ -266,6 +267,12 @@ export default function PicksHubPage() {
                        <span className="text-xs font-black text-white uppercase italic">{pkg.performance}</span>
                       </div>
                     </div>
+
+                    {!hasLiveCount && (
+                      <div className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-400 bg-amber-400/10 border border-amber-400/20 px-3 py-1.5 rounded-lg inline-flex w-fit">
+                        Monitoring live board
+                      </div>
+                    )}
 
                   <div className="flex items-center justify-between">
                     <div className="flex flex-col">
