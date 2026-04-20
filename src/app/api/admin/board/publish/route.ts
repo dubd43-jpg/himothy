@@ -41,6 +41,20 @@ function countConfirmingSignals(signals: EdgeSignals) {
   return checks.filter(Boolean).length;
 }
 
+function isNorthAmericaMainPickEligible(sportOrLeague: string) {
+  const normalized = (sportOrLeague || '').toLowerCase();
+  return (
+    normalized.includes('nba') ||
+    normalized.includes('nfl') ||
+    normalized.includes('mlb') ||
+    normalized.includes('nhl') ||
+    normalized.includes('wnba') ||
+    normalized.includes('ncaa') ||
+    normalized.includes('college basketball') ||
+    normalized.includes('mls')
+  );
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -74,6 +88,14 @@ export async function POST(req: Request) {
               return {
                 success: false,
                 reason: `Main Pick already exists for this board (${existingMainPick.id}). Only one Main Pick is allowed per board.`,
+                pick,
+              };
+            }
+
+            if (pick.isMainPick === true && !isNorthAmericaMainPickEligible(String(pick.sport || pick.league || ''))) {
+              return {
+                success: false,
+                reason: 'Main Pick rejected: Main Pick is restricted to North America leagues only. Soccer/overseas picks can still be published as regular spots.',
                 pick,
               };
             }
