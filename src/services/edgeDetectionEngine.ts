@@ -178,13 +178,14 @@ function parseTotal(overUnder?: number) {
 function generateDefaultMarketCandidates(args: {
   gameId: string;
   league: string;
+  lane: ResearchLane;
   eventName: string;
   awayName: string;
   homeName: string;
   oddsDetails: string | null;
   totalLine: string | null;
 }) {
-  const { gameId, league, eventName, awayName, homeName, oddsDetails, totalLine } = args;
+  const { gameId, league, lane, eventName, awayName, homeName, oddsDetails, totalLine } = args;
   const markets: MarketContext[] = [];
 
   const push = (marketType: string, selection: string, line: string | null, odds: string | null) => {
@@ -410,6 +411,7 @@ export async function scanEdgeBoard(leagues: string[]) {
         const defaultMarkets = generateDefaultMarketCandidates({
           gameId: String(event.id),
           league,
+          lane,
           eventName,
           awayName: away.team.displayName,
           homeName: home.team.displayName,
