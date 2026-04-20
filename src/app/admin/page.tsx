@@ -1,5 +1,7 @@
 "use client";
 
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Activity, Award, Clock, RefreshCw, TrendingUp, XCircle, Zap } from "lucide-react";
 import { PICK_REGISTRY, Pick } from "@/lib/picksData";
 
 interface LiveGame {
@@ -229,37 +231,34 @@ export default function AdminDashboard() {
                       <p className="text-[9px] font-black text-muted-foreground uppercase tracking-tighter">Live Progress</p>
                       <p className="text-2xl font-black text-emerald-400 drop-shadow-sm">{game.progress || game.score}</p>
                     </div>
-                  </div>
-                    
-                    {
-                  game.pick && (
-                    <div className="mt-4 pt-4 border-t border-white/5 space-y-2">
-                      <div className="flex justify-between items-center">
-                        <span className="text-[10px] font-black uppercase text-white/40 tracking-widest">Market</span>
-                        <span className="text-[10px] font-bold text-white/80">{game.pick.market}</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-[10px] font-black uppercase text-white/40 tracking-widest">Selection</span>
-                        <span className="text-[10px] font-black text-primary uppercase italic">{game.pick.selection}</span>
-                      </div>
-                    </div>
-                  )
-                }
-                  </div>
-          );
-              }) : (
-          <div className="col-span-full py-16 flex flex-col items-center justify-center border-2 border-dashed border-border rounded-xl">
-            <Clock className="w-10 h-10 text-muted-foreground mb-4 opacity-20" />
-            <p className="text-muted-foreground font-bold italic uppercase tracking-wider">Market Quiet • Monitoring for Line Openings</p>
-          </div>
-              )}
-        </div>
-          )}
-    </div>
-      </section >
 
-    {/* ── RECENT OUTCOMESboard ────────────────── */ }
-    < section className = "bg-card border-2 border-border rounded-2xl overflow-hidden shadow-xl border-l-destructive/50 border-l-4" >
+                    {game.pick && (
+                      <div className="mt-4 pt-4 border-t border-border/50 space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Market</span>
+                          <span className="text-[10px] font-bold text-foreground">{game.pick.market}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Selection</span>
+                          <span className="text-[10px] font-black text-primary uppercase italic">{game.pick.selection}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              }) : (
+                <div className="col-span-full py-16 flex flex-col items-center justify-center border-2 border-dashed border-border rounded-xl">
+                  <Clock className="w-10 h-10 text-muted-foreground mb-4 opacity-20" />
+                  <p className="text-muted-foreground font-bold italic uppercase tracking-wider">Market Quiet • Monitoring for Line Openings</p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </section>
+
+    {/* ── RECENT OUTCOMESboard ────────────────── */}
+    <section className="bg-card border-2 border-border rounded-2xl overflow-hidden shadow-xl border-l-destructive/50 border-l-4">
         <div className="bg-destructive/5 px-6 py-4 border-b border-border flex justify-between items-center">
           <h2 className="text-xl font-bold flex items-center gap-2">
             <Award className="w-5 h-5 text-destructive" /> Recent Outcomes (Who Won/Lost)
@@ -299,10 +298,10 @@ export default function AdminDashboard() {
             )}
           </div>
         </div>
-      </section >
+      </section>
 
-    {/* ── MASTER ODDS RECORD LEDGER ────────────────── */ }
-    < section className = "grid grid-cols-1 lg:grid-cols-2 gap-8" >
+    {/* ── MASTER ODDS RECORD LEDGER ────────────────── */}
+    <section className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <div className="bg-card border border-border p-6 rounded-2xl relative overflow-hidden group">
           <div className="absolute -right-4 -top-4 opacity-[0.03] group-hover:opacity-[0.05] transition-opacity">
             <TrendingUp className="w-40 h-40" />
@@ -375,8 +374,8 @@ export default function AdminDashboard() {
             <OddsRow label="+300+" record="3-15" winRate="16%" />
           </div>
         </div>
-      </section >
-    </div >
+      </section>
+    </div>
   );
 }
 
