@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { PICK_REGISTRY, Pick, PickCategory } from '@/lib/picksData';
+import { Pick } from '@/lib/picksData';
 import { validateAndTrackGame } from '@/lib/validation';
 import { getRegistryBoardPicks } from '@/services/pickRegistryService';
 
@@ -20,47 +20,6 @@ function toPickShape(row: any): Pick {
     reasoning: row.reasoningSummary || 'Validated daily entry from HIMOTHY Pick Registry.',
     status: row.result,
   };
-}
-
-function matchesFallbackFilter(pick: Pick, category?: string, sport?: string) {
-  const categoryMatch = !category || pick.category === (category as PickCategory);
-  const sportMatch = !sport || pick.sport.toLowerCase() === sport.toLowerCase();
-  return categoryMatch && sportMatch;
-}
-
-function buildFallbackResults(category?: string, sport?: string) {
-  const fallbackBoardDate = new Date().toISOString().slice(0, 10);
-  return PICK_REGISTRY.filter((pick) => matchesFallbackFilter(pick, category, sport)).map((pick) => ({
-    pick,
-    preValidation: {
-      game_valid: true,
-      safe_to_publish: true,
-      status: 'watching',
-      result: 'pending',
-      publish_time: null,
-      lock_time: null,
-      is_locked: false,
-      lifecycle_state: 'watching',
-      edge_score: 0,
-      edge_signals: {},
-      clv_projection: null,
-      clv_delta: null,
-      is_main_pick: false,
-      main_pick_reason: null,
-      reason_if_invalid: null,
-      source: 'static-fallback',
-    },
-    tracking: null,
-    registry: {
-      id: pick.id,
-      productLine: 'static-registry',
-      boardDate: fallbackBoardDate,
-      projectedClosingOdds: null,
-      closingOdds: null,
-      isMainPick: false,
-      mainPickReason: null,
-    },
-  }));
 }
 
 export async function POST(req: Request) {
@@ -95,7 +54,7 @@ export async function POST(req: Request) {
 
     const boardRows = await getRegistryBoardPicks({ boardDate, category, sport });
     if (boardRows.length === 0) {
-      return NextResponse.json({ success: true, source: 'static-fallback', results: buildFallbackResults(category, sport) });
+      return NextResponse.json({ success: true, source: 'db-registry', results: [] });
     }
 
     const results = boardRows.map((row) => ({
@@ -132,6 +91,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true, source: 'db-registry', results });
   } catch (error) {
     console.error("Error in slate validation:", error);
-    return NextResponse.json({ success: true, source: 'static-fallback', results: buildFallbackResults() });
+    return NextResponse.json({ success: false, source: 'db-registry', results: [] }, { status: 500 });
   }
 }
