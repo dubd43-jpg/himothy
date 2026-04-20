@@ -169,6 +169,7 @@ export async function POST(req: Request) {
         const lane = pick.lane || (pick.sport?.toLowerCase().includes('soccer') ? 'soccer' : pick.sport?.toLowerCase().includes('tennis') ? 'tennis' : 'domestic');
         const marketTypeNormalized = String(pick.market || '').toLowerCase();
         const sportAdjustment = policy.sportAdjustments[pick.sport] || { volumeMultiplier: 1, edgeLift: 0 };
+        const edgeSignalsPayload = edge.signals as unknown as Record<string, unknown>;
 
         if (policy.blockedMarketTypes.some((blocked) => marketTypeNormalized.includes(blocked.toLowerCase()))) {
           return {
@@ -270,7 +271,7 @@ export async function POST(req: Request) {
             fadeReasoning: pick.fadeReasoning || null,
             validationScore: validation.preValidation.validation_score || 0,
             statusAtPublish: validation.preValidation.status,
-            edgeSignals: edge.signals,
+            edgeSignals: edgeSignalsPayload,
             edgeTargetProductLine: edge.targetProductLine,
             lane,
             adaptivePolicyMode: policy.mode,
@@ -280,7 +281,7 @@ export async function POST(req: Request) {
             eventStatusAtPublish: marketSnapshot.eventStatus,
           },
           edgeScore: edge.edgeScore,
-          edgeSignals: edge.signals,
+          edgeSignals: edgeSignalsPayload,
           marketOpenOdds: pick.marketOpenOdds || pick.openOdds || marketSnapshot.odds || null,
           projectedClosingOdds: edge.projectedClosingOdds,
           clvAtPublish: edge.clvProjectionDelta,
