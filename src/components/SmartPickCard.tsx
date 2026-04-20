@@ -51,6 +51,10 @@ function PreGameCard({ pick, validation, isSelected, onToggleSelect }: { pick: P
   useEffect(() => {
     const updateCountdown = () => {
       const startTime = new Date(validation.event_date_utc).getTime();
+      if (!Number.isFinite(startTime)) {
+        setCountdown(null);
+        return;
+      }
       const now = Date.now();
       const diff = startTime - now;
 
@@ -116,7 +120,7 @@ function PreGameCard({ pick, validation, isSelected, onToggleSelect }: { pick: P
                     <span className="text-primary font-black tabular-nums tracking-tighter text-base">{countdown}</span>
                   </span>
                 ) : (
-                  <span className="font-black tracking-[0.2em] text-sm">{validation.display_time_local}</span>
+                  <span className="font-black tracking-[0.2em] text-sm">{validation.display_time_local || "TBD"}</span>
                 )}
               </div>
             </div>

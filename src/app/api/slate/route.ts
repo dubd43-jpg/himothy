@@ -40,7 +40,7 @@ function buildLiveFallbackResults(args: { category?: string; sport?: string; boa
         gameDate: fallbackBoardDate,
         gameTime: game.startTime,
         market: game.line ? 'Spread' : 'Moneyline',
-        selection: game.line ? `${game.awayTeam} ${game.line}` : `${game.awayTeam} ML`,
+        selection: game.line ? `${game.awayTeam} vs ${game.homeTeam} • ${game.awayTeam} ${game.line}` : `${game.awayTeam} vs ${game.homeTeam} • ${game.awayTeam} ML`,
         line: game.line || '-',
         odds: game.odds || '-',
         confidence: game.oddsAvailable ? 7.2 : 6.2,
@@ -56,6 +56,19 @@ function buildLiveFallbackResults(args: { category?: string; sport?: string; boa
         pick,
         preValidation: {
           game_valid: true,
+          sport: game.sport,
+          league: game.league,
+          home_team: game.homeTeam,
+          away_team: game.awayTeam,
+          event_date_utc: game.startTime || new Date().toISOString(),
+          display_time_local: game.startTime
+            ? new Date(game.startTime).toLocaleString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit',
+              })
+            : 'TBD',
           safe_to_publish: true,
           status: game.isLive ? 'live' : 'scheduled',
           result: 'pending',

@@ -22,7 +22,7 @@ export async function GET() {
           }
         : null,
       id: game.id,
-      label: `${game.awayTeam} ML`,
+      label: `${game.awayTeam} vs ${game.homeTeam} • ${game.awayTeam} ML`,
       game: `${game.awayTeam} vs ${game.homeTeam}`,
       odds: game.oddsAvailable ? game.odds : 'Odds unavailable',
       sport: game.league,
