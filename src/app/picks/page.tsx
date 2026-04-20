@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -141,7 +141,7 @@ function PickDecisionCard({ pick }: { pick: BoardPick }) {
   );
 }
 
-export default function PicksHubPage() {
+function PicksHubPageClient() {
   const searchParams = useSearchParams();
   const selectedBoard = (searchParams.get("board") || "north-american").toLowerCase();
   const [board, setBoard] = useState<StructuredBoardResponse | null>(null);
@@ -391,5 +391,13 @@ export default function PicksHubPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function PicksHubPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-50 p-8 text-sm text-slate-600">Loading board...</div>}>
+      <PicksHubPageClient />
+    </Suspense>
   );
 }
