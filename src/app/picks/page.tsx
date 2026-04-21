@@ -257,6 +257,12 @@ function PicksHubPageClient() {
               <div className="text-2xl font-black">{counts.totalUniquePicks}</div>
             </div>
           </div>
+
+          {board?.source?.includes("fallback") && (
+            <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs font-semibold text-amber-900">
+              Showing research-qualified candidates only. These are not official published picks until they pass board publish workflow.
+            </div>
+          )}
         </header>
 
         {loading && (

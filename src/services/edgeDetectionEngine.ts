@@ -2,6 +2,7 @@ import { buildResearchDossier } from '@/services/researchEngine';
 import { scoreBetAngle } from '@/services/scoringModel';
 import { LEAGUE_URLS } from '@/lib/validation';
 import { AdaptivePolicy, getActiveAdaptivePolicy } from '@/services/adaptiveIntelligenceService';
+import { generateExplanation } from '@/services/aiGenerator';
 
 export type ResearchLane = 'domestic' | 'soccer' | 'tennis' | 'overseas';
 
@@ -340,6 +341,22 @@ export async function evaluateEdgeCandidate(
   const quality = dataQualityScore(context);
   const publishable = edgeScore >= 50 && confirmingSignals >= 2 && quality >= 60;
 
+  // Generate AI reasoning only for publishable candidates to save API calls
+  let reasoningSummary = `Edge score ${edgeScore}: ${context.marketType} on ${context.eventName} shows measurable price inefficiency.`;
+  let riskSummary = 'Volatility and uncertainty penalties are applied automatically. If closing value weakens, keep size controlled.';
+
+  if (publishable && process.env.ANTHROPIC_API_KEY) {
+    try {
+      const ai = await generateExplanation(context.gameId, research, model);
+      if (ai.shortReason && ai.shortReason !== 'Model identified a price inefficiency on this market based on edge signals.') {
+        reasoningSummary = ai.shortReason;
+        riskSummary = ai.riskNotes || riskSummary;
+      }
+    } catch {
+      // keep fallback reasoning
+    }
+  }
+
   return {
     edgeScore,
     signals,
@@ -347,8 +364,8 @@ export async function evaluateEdgeCandidate(
     dataQualityScore: quality,
     shouldPublish: publishable,
     targetProductLine,
-    reasoningSummary: `Edge score ${edgeScore}: ${context.marketType} shows measurable price inefficiency against model and movement context.`,
-    riskSummary: 'Volatility and uncertainty penalties are applied automatically. If closing value weakens, keep size controlled.',
+    reasoningSummary,
+    riskSummary,
     projectedClosingOdds: Number.isFinite(projectedCloseAmerican)
       ? `${projectedCloseAmerican > 0 ? '+' : ''}${projectedCloseAmerican}`
       : null,

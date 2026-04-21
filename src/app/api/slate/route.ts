@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { Pick } from '@/lib/picksData';
 import { validateAndTrackGame } from '@/lib/validation';
 import { getRegistryBoardPicks } from '@/services/pickRegistryService';
-import { fetchLiveSlate } from '@/lib/liveSlate';
+import { refreshLiveOpsSnapshot } from '@/services/liveOpsService';
 import { inferBoardTypeFromContext, parseBoardType } from '@/lib/boardSegmentation';
 
 const FALLBACK_CATEGORIES = [
@@ -23,55 +23,71 @@ function provisionalCategoryForGame(index: number, league: string) {
   return FALLBACK_CATEGORIES[index % FALLBACK_CATEGORIES.length];
 }
 
-function buildLiveFallbackResults(args: {
+function buildResearchFallbackResults(args: {
   category?: string;
   sport?: string;
   boardDate?: string;
   board?: string;
-  games: Awaited<ReturnType<typeof fetchLiveSlate>>;
+  candidates: any[];
 }) {
-  const { category, sport, boardDate, board, games } = args;
+  const { category, sport, boardDate, board, candidates } = args;
   const fallbackBoardDate = boardDate || new Date().toISOString().slice(0, 10);
   const selectedBoard = parseBoardType(board);
 
-  return games
-    .filter((game) => !game.isFinal && game.verified)
-    .filter((game) => inferBoardTypeFromContext({ sport: game.sport, league: game.league }) === selectedBoard)
-    .filter((game) => !sport || game.league.toLowerCase().includes(sport.toLowerCase()) || game.sport.toLowerCase().includes(sport.toLowerCase()))
+  const byGame = new Map<string, any>();
+  for (const candidate of candidates || []) {
+    const candidateBoard = inferBoardTypeFromContext({ sport: candidate.sport, league: candidate.league });
+    if (candidateBoard !== selectedBoard) continue;
+    if (!candidate?.edge?.shouldPublish) continue;
+    if (Number(candidate?.edge?.edgeScore || 0) < 62) continue;
+    if (Number(candidate?.edge?.dataQualityScore || 0) < 65) continue;
+    if (sport && !String(candidate.league || '').toLowerCase().includes(sport.toLowerCase()) && !String(candidate.sport || '').toLowerCase().includes(sport.toLowerCase())) {
+      continue;
+    }
+
+    const existing = byGame.get(candidate.gameId);
+    if (!existing || Number(candidate.edge?.edgeScore || 0) > Number(existing.edge?.edgeScore || 0)) {
+      byGame.set(candidate.gameId, candidate);
+    }
+  }
+
+  return Array.from(byGame.values())
+    .sort((a, b) => Number(b.edge?.edgeScore || 0) - Number(a.edge?.edgeScore || 0))
     .slice(0, 24)
-    .map((game, idx) => {
-      const provisionalCategory = category || provisionalCategoryForGame(idx, game.league);
+    .map((candidate, idx) => {
+      const league = String(candidate.league || candidate.sport || 'Unknown');
+      const awayTeam = String(candidate.awayTeam || 'Away');
+      const homeTeam = String(candidate.homeTeam || 'Home');
+      const provisionalCategory = category || provisionalCategoryForGame(idx, league);
       const pick: Pick = {
-        id: `live-${game.id}-${idx}`,
+        id: `research-${candidate.gameId}-${idx}`,
         category: provisionalCategory as Pick['category'],
-        sport: game.league,
-        game: `${game.awayTeam} vs ${game.homeTeam}`,
+        sport: league,
+        game: `${awayTeam} vs ${homeTeam}`,
         gameDate: fallbackBoardDate,
-        gameTime: game.startTime,
-        market: game.line ? 'Spread' : 'Moneyline',
-        selection: game.line ? `${game.awayTeam} vs ${game.homeTeam} • ${game.awayTeam} ${game.line}` : `${game.awayTeam} vs ${game.homeTeam} • ${game.awayTeam} ML`,
-        line: game.line || '-',
-        odds: game.odds || '-',
-        confidence: game.oddsAvailable ? 7.2 : 6.2,
-        edge: game.oddsAvailable ? 'Live Board Candidate' : 'Monitoring',
+        gameTime: candidate.startTime || undefined,
+        market: candidate.marketType || 'Market',
+        selection: `${awayTeam} vs ${homeTeam} • ${candidate.selection}`,
+        line: candidate.line || '-',
+        odds: candidate.odds || '-',
+        confidence: Math.min(10, Math.max(6, Number(candidate.edge?.edgeScore || 0) / 10)),
+        edge: `Research ${Number(candidate.edge?.edgeScore || 0)}`,
         risk: 'Managed',
-        reasoning: game.oddsAvailable
-          ? `Live fallback candidate from verified ${game.league} feed. Publish through admin board for official tracking.`
-          : `Game verified on live slate; odds not currently available from feed.`,
-        status: game.status,
+        reasoning: candidate.edge?.reasoningSummary || 'Research-qualified candidate pending official publish.',
+        status: 'monitoring',
       };
 
       return {
         pick,
         preValidation: {
           game_valid: true,
-          sport: game.sport,
-          league: game.league,
-          home_team: game.homeTeam,
-          away_team: game.awayTeam,
-          event_date_utc: game.startTime || new Date().toISOString(),
-          display_time_local: game.startTime
-            ? new Date(game.startTime).toLocaleString('en-US', {
+          sport: candidate.sport || league,
+          league,
+          home_team: homeTeam,
+          away_team: awayTeam,
+          event_date_utc: candidate.startTime || new Date().toISOString(),
+          display_time_local: candidate.startTime
+            ? new Date(candidate.startTime).toLocaleString('en-US', {
                 month: 'short',
                 day: 'numeric',
                 hour: 'numeric',
@@ -79,7 +95,7 @@ function buildLiveFallbackResults(args: {
               })
             : 'TBD',
           safe_to_publish: true,
-          status: game.isLive ? 'live' : 'scheduled',
+          status: 'scheduled',
           result: 'pending',
           publish_time: null,
           lock_time: null,
@@ -92,12 +108,12 @@ function buildLiveFallbackResults(args: {
           is_main_pick: false,
           main_pick_reason: null,
           reason_if_invalid: null,
-          source: 'live-slate-fallback',
+          source: 'research-fallback',
         },
         tracking: null,
         registry: {
           id: pick.id,
-          productLine: 'live-slate-fallback',
+          productLine: 'research-fallback',
           boardDate: fallbackBoardDate,
           projectedClosingOdds: null,
           closingOdds: null,
@@ -170,11 +186,17 @@ export async function POST(req: Request) {
       return rowBoard === parseBoardType(board);
     });
     if (filteredRows.length === 0) {
-      const games = await fetchLiveSlate({ maxGames: 30 });
+      const snapshot = await refreshLiveOpsSnapshot({ reason: 'api-slate-fallback', maxStaleSeconds: 120 });
       return NextResponse.json({
         success: true,
-        source: 'live-slate-fallback',
-        results: buildLiveFallbackResults({ category, sport, boardDate, board, games }),
+        source: 'research-fallback',
+        results: buildResearchFallbackResults({
+          category,
+          sport,
+          boardDate,
+          board,
+          candidates: snapshot.topCandidates || [],
+        }),
       });
     }
 
@@ -212,11 +234,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true, source: 'db-registry', results });
   } catch (error) {
     console.error("Error in slate validation:", error);
-    const games = await fetchLiveSlate({ maxGames: 18 }).catch(() => []);
+    const snapshot = await refreshLiveOpsSnapshot({ reason: 'api-slate-fallback-error', force: true }).catch(() => null);
     return NextResponse.json({
       success: true,
-      source: 'live-slate-fallback',
-      results: buildLiveFallbackResults({ board: 'north-american', games }),
+      source: 'research-fallback',
+      results: buildResearchFallbackResults({
+        board: 'north-american',
+        candidates: snapshot?.topCandidates || [],
+      }),
     });
   }
 }

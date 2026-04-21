@@ -20,7 +20,18 @@ export async function GET(req: Request) {
 
     const researchByGame = new Map(snapshot.topCandidates.map((candidate) => [candidate.gameId, candidate]));
 
-    const suggestedLegs = activeGames.slice(0, 12).map((game) => ({
+    const suggestedLegs = activeGames
+      .filter((game) => {
+        const candidate = researchByGame.get(game.id);
+        return Boolean(
+          candidate &&
+            candidate.edge?.shouldPublish &&
+            Number(candidate.edge?.edgeScore || 0) >= 62 &&
+            Number(candidate.edge?.dataQualityScore || 0) >= 65
+        );
+      })
+      .slice(0, 12)
+      .map((game) => ({
       research: researchByGame.get(game.id)
         ? {
             edgeScore: researchByGame.get(game.id)?.edge.edgeScore || 0,

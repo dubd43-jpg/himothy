@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { fetchLiveSlate } from '@/lib/liveSlate';
 import { getRegistryBoardPicks, getBoardMainPick, type RegistryPickRow } from '@/services/pickRegistryService';
+import { refreshLiveOpsSnapshot } from '@/services/liveOpsService';
 import {
   boardDisplayName,
   inferBoardTypeFromContext,
@@ -202,6 +203,61 @@ function toFallbackCorePick(game: Awaited<ReturnType<typeof fetchLiveSlate>>[num
   };
 }
 
+function toResearchFallbackPick(candidate: any, index: number): StructuredPick {
+  const boardType = inferBoardTypeFromContext({
+    sport: candidate.sport,
+    league: candidate.league,
+  });
+
+  return {
+    id: `research-fallback-${candidate.gameId}-${index}`,
+    eventName: candidate.eventName,
+    awayTeam: candidate.awayTeam,
+    homeTeam: candidate.homeTeam,
+    league: candidate.league,
+    sport: candidate.sport,
+    startTime: candidate.startTime || null,
+    marketType: candidate.marketType,
+    selection: candidate.selection,
+    line: candidate.line,
+    odds: candidate.odds,
+    sportsbook: 'Best Available',
+    reasoning: candidate.edge?.reasoningSummary || 'Research-qualified candidate pending official publish.',
+    status: 'monitoring',
+    productType: 'CORE_PICK',
+    sectionType: 'core',
+    groupId: null,
+    parentProductId: null,
+    isMainPick: false,
+    isParlay: false,
+    boardType,
+    displayPriority: Number(candidate.edge?.edgeScore || 0),
+  };
+}
+
+async function getQualifiedFallbackCore(board: BoardType) {
+  const snapshot = await refreshLiveOpsSnapshot({ reason: 'structured-board-fallback', maxStaleSeconds: 120 });
+  const byGame = new Map<string, any>();
+
+  for (const candidate of snapshot.topCandidates || []) {
+    const candidateBoard = inferBoardTypeFromContext({ sport: candidate.sport, league: candidate.league });
+    if (candidateBoard !== board) continue;
+    if (!candidate?.edge?.shouldPublish) continue;
+    if (Number(candidate?.edge?.edgeScore || 0) < 62) continue;
+    if (Number(candidate?.edge?.dataQualityScore || 0) < 65) continue;
+
+    const existing = byGame.get(candidate.gameId);
+    if (!existing || Number(candidate.edge.edgeScore || 0) > Number(existing.edge?.edgeScore || 0)) {
+      byGame.set(candidate.gameId, candidate);
+    }
+  }
+
+  return Array.from(byGame.values())
+    .sort((a, b) => Number(b.edge?.edgeScore || 0) - Number(a.edge?.edgeScore || 0))
+    .slice(0, 8)
+    .map(toResearchFallbackPick);
+}
+
 function groupProductLabel(type: ProductType) {
   if (type === 'VIP_4_PACK') return 'VIP 4-Pack';
   if (type === 'PRESSURE_PACK') return 'Pressure Pack';
@@ -220,16 +276,11 @@ export async function GET(req: Request) {
     const board = parseBoardType(url.searchParams.get('board'));
 
     if (!process.env.DATABASE_URL) {
-      const fallbackGames = await fetchLiveSlate({ maxGames: 16 });
-      const core = fallbackGames
-        .filter((g) => !g.isFinal && g.verified)
-        .slice(0, 8)
-        .map(toFallbackCorePick)
-        .filter((pick) => pick.boardType === board);
+      const core = await getQualifiedFallbackCore(board);
 
       return NextResponse.json({
         success: true,
-        source: 'live-fallback-no-db',
+        source: 'research-fallback-no-db',
         board,
         boardLabel: boardDisplayName(board),
         boardOptions: BOARD_OPTIONS,
@@ -255,16 +306,11 @@ export async function GET(req: Request) {
     ]);
 
     if (rows.length === 0) {
-      const fallbackGames = await fetchLiveSlate({ maxGames: 16 });
-      const core = fallbackGames
-        .filter((g) => !g.isFinal && g.verified)
-        .slice(0, 8)
-        .map(toFallbackCorePick)
-        .filter((pick) => pick.boardType === board);
+      const core = await getQualifiedFallbackCore(board);
 
       return NextResponse.json({
         success: true,
-        source: 'live-fallback',
+        source: 'research-fallback',
         board,
         boardLabel: boardDisplayName(board),
         boardOptions: BOARD_OPTIONS,
