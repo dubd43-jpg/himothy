@@ -11,6 +11,17 @@ const SOCCER_KEYWORDS = ['soccer', 'epl', 'mls', 'la liga', 'serie a', 'bundesli
 const TENNIS_KEYWORDS = ['tennis', 'atp', 'wta', 'grand slam'];
 const NORTH_AMERICA_KEYWORDS = ['nba', 'nfl', 'nhl', 'mlb', 'wnba', 'ncaa', 'college basketball', 'college football'];
 
+const CATEGORY_BOARD_MAP: Record<string, BoardType> = {
+  GRAND_SLAM: 'north-american',
+  PRESSURE_PACK: 'north-american',
+  VIP_4_PACK: 'north-american',
+  PARLAY_PLAN: 'north-american',
+  PERSONAL_PLAY: 'north-american',
+  HAILMARY: 'north-american',
+  OVERSEAS: 'overseas',
+  OVERNIGHT: 'tennis',
+};
+
 function normalize(input?: string | null) {
   return String(input || '').toLowerCase();
 }
@@ -25,6 +36,11 @@ export function inferBoardTypeFromContext(args: {
   category?: string | null;
   productLine?: string | null;
 }) {
+  const categoryKey = String(args.category || '').trim();
+  if (categoryKey && CATEGORY_BOARD_MAP[categoryKey]) {
+    return CATEGORY_BOARD_MAP[categoryKey];
+  }
+
   const text = [args.sport, args.league, args.category, args.productLine].map(normalize).join(' | ');
 
   if (hasAnyKeyword(text, SOCCER_KEYWORDS)) return 'soccer' as BoardType;
@@ -35,6 +51,7 @@ export function inferBoardTypeFromContext(args: {
 
 export function parseBoardType(raw: string | null | undefined): BoardType {
   const value = normalize(raw);
+  if (value === 'north-america' || value === 'north_american' || value === 'northamerican') return 'north-american';
   if (value === 'soccer') return 'soccer';
   if (value === 'tennis') return 'tennis';
   if (value === 'overseas') return 'overseas';
