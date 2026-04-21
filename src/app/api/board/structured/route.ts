@@ -219,6 +219,36 @@ export async function GET(req: Request) {
     const boardDate = url.searchParams.get('boardDate') || undefined;
     const board = parseBoardType(url.searchParams.get('board'));
 
+    if (!process.env.DATABASE_URL) {
+      const fallbackGames = await fetchLiveSlate({ maxGames: 16 });
+      const core = fallbackGames
+        .filter((g) => !g.isFinal && g.verified)
+        .slice(0, 8)
+        .map(toFallbackCorePick)
+        .filter((pick) => pick.boardType === board);
+
+      return NextResponse.json({
+        success: true,
+        source: 'live-fallback-no-db',
+        board,
+        boardLabel: boardDisplayName(board),
+        boardOptions: BOARD_OPTIONS,
+        boardDate: boardDate || new Date().toISOString().slice(0, 10),
+        sections: {
+          mainPick: null,
+          corePicks: core,
+          groupedProducts: [],
+          parlayProducts: [],
+        },
+        counts: {
+          officialStraightPicks: core.length,
+          officialGroupedProducts: 0,
+          parlays: 0,
+          totalUniquePicks: core.length,
+        },
+      });
+    }
+
     const [rows, mainRow] = await Promise.all([
       getRegistryBoardPicks({ boardDate }),
       getBoardMainPick(boardDate),
