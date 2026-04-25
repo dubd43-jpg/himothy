@@ -430,10 +430,8 @@ function buildRestContext(
   const now = new Date();
 
   const findLastGame = (team: string): Date | null => {
-    for (const [key, date] of lastGameMap.entries()) {
-      if (teamsMatch(key, team)) return date;
-    }
-    return null;
+    const entry = Array.from(lastGameMap.entries()).find(([key]) => teamsMatch(key, team));
+    return entry ? entry[1] : null;
   };
 
   const homeLastGame = findLastGame(homeTeam);
