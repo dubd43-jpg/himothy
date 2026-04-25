@@ -276,11 +276,18 @@ export async function GET(req: Request) {
     const board = parseBoardType(url.searchParams.get('board'));
 
     if (!process.env.DATABASE_URL) {
-      const core = await getQualifiedFallbackCore(board);
+      const games = await fetchLiveSlate({ maxGames: 40 });
+      const core = games
+        .filter((g) => {
+          const bt = inferBoardTypeFromContext({ sport: g.sport, league: g.league });
+          return bt === board;
+        })
+        .slice(0, 10)
+        .map((g, i) => toFallbackCorePick(g, i));
 
       return NextResponse.json({
         success: true,
-        source: 'research-fallback-no-db',
+        source: 'live-slate-no-db',
         board,
         boardLabel: boardDisplayName(board),
         boardOptions: BOARD_OPTIONS,

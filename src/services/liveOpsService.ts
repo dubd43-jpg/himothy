@@ -170,6 +170,41 @@ function snapshotFromState(state: any): LiveOpsSnapshot | null {
   };
 }
 
+async function runRefreshNoDB(reason: string): Promise<LiveOpsSnapshot> {
+  const [games, lanes] = await Promise.all([
+    fetchLiveSlate({ maxGames: 80 }),
+    scanAllResearchLanes(),
+  ]);
+
+  const verifiedActiveGames = games.filter((game) => game.verified && !game.isFinal);
+  const now = new Date();
+  const upcomingGames = verifiedActiveGames.filter((game) => isUpcoming(game, now));
+
+  const allCandidates = flattenCandidates(lanes);
+  const candidatesByGame = new Map<string, EdgeScanCandidate>();
+  for (const candidate of allCandidates) {
+    const existing = candidatesByGame.get(candidate.gameId);
+    if (!existing || candidate.edge.edgeScore > existing.edge.edgeScore) {
+      candidatesByGame.set(candidate.gameId, candidate);
+    }
+  }
+
+  const researchReadyCount = upcomingGames.filter((game) => candidatesByGame.has(game.id)).length;
+
+  return {
+    generatedAt: new Date().toISOString(),
+    games: verifiedActiveGames,
+    upcomingGameCount: upcomingGames.length,
+    researchReadyCount,
+    lineChangeCount: 0,
+    topCandidates: allCandidates.sort((a, b) => b.edge.edgeScore - a.edge.edgeScore).slice(0, 40),
+    refreshed: true,
+    ageSeconds: 0,
+    runCount: 1,
+    reason,
+  };
+}
+
 export async function refreshLiveOpsSnapshot(options?: {
   force?: boolean;
   reason?: string;
@@ -180,6 +215,10 @@ export async function refreshLiveOpsSnapshot(options?: {
   const maxStaleSeconds = Number.isFinite(Number(options?.maxStaleSeconds))
     ? Number(options?.maxStaleSeconds)
     : DEFAULT_STALE_SECONDS;
+
+  if (!process.env.DATABASE_URL) {
+    return runRefreshNoDB(reason);
+  }
 
   const state = await getStateRow();
   const cached = snapshotFromState(state);

@@ -124,6 +124,8 @@ function computeUnits(result: string, odds?: string | null) {
 }
 
 export async function getActiveAdaptivePolicy(): Promise<AdaptivePolicy> {
+  if (!process.env.DATABASE_URL) return defaultPolicy();
+
   await ensurePolicySchema();
 
   const rows = await prisma.$queryRawUnsafe<any[]>(
