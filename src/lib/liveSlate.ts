@@ -79,8 +79,11 @@ function parseGame(league: string, leagueUrl: string, event: any): LiveSlateGame
   const oddsNode = comp?.odds?.[0];
   const oddsDetails = typeof oddsNode?.details === 'string' ? oddsNode.details : null;
   const sourceName = oddsNode?.provider?.name || oddsNode?.provider?.displayName || oddsNode?.source || null;
-  const lineValue = typeof oddsNode?.overUnder === 'number'
-    ? `${oddsNode.overUnder}`
+  // Use spread for the line value (run line / point spread), NOT overUnder
+  // overUnder is the game total — showing it as "Team 7.5" would be misleading
+  const spreadNum: number | null = typeof oddsNode?.spread === 'number' ? oddsNode.spread : null;
+  const lineValue = spreadNum !== null
+    ? `${spreadNum > 0 ? '+' : ''}${spreadNum}`
     : oddsDetails
       ? (oddsDetails.match(/[+-]\d+(\.\d+)?/)?.[0] || null)
       : null;

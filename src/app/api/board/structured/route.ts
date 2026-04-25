@@ -186,9 +186,12 @@ function toFallbackCorePick(game: Awaited<ReturnType<typeof fetchLiveSlate>>[num
     sport: game.sport,
     startTime: game.startTime || null,
     marketType: game.line ? 'Spread' : 'Moneyline',
-    selection: game.line ? `${game.awayTeam} ${game.line}` : `${game.awayTeam} ML`,
+    selection: game.line
+      ? `${game.awayTeam} ${game.line}`   // e.g. "Boston Red Sox -1.5"
+      : `${game.awayTeam} ML`,             // e.g. "Boston Red Sox ML"
     line: game.line,
-    odds: game.odds,
+    // game.odds is the raw details string like "BAL -115" — extract just the ML number for display
+    odds: game.odds ? (game.odds.match(/[+-]?\d{3,4}/)?.[0] || game.odds) : null,
     sportsbook: game.oddsSource,
     reasoning: 'Live board fallback candidate. Official board appears after publish.',
     status: game.isLive ? 'live' : 'scheduled',
