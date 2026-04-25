@@ -56,7 +56,7 @@ interface Power20Data {
 
 interface AtsRecord { wins: number; losses: number; pushes: number; display: string; coverPct: number; }
 interface TeamProfile {
-  name: string; abbreviation: string; overallRecord: string | null; homeAwayRecord: string | null;
+  id: string; name: string; abbreviation: string; overallRecord: string | null; homeAwayRecord: string | null;
   ats: AtsRecord | null; winProbability: number | null; moneyline: number | null;
   keyPlayers: string[]; injuredOut: string[]; injuredDoubtful: string[]; injuredQuestionable: string[];
 }
@@ -159,61 +159,293 @@ function SGPCard({ sgp }: { sgp: SGPBuild }) {
   );
 }
 
-function PropsAndSGPPanel({ gameId, league }: { gameId: string; league: string }) {
-  const [data, setData] = useState<GamePropsData | null>(null);
-  const [loading, setLoading] = useState(true);
+// ─── H2H Types ────────────────────────────────────────────────────────────────
 
-  useEffect(() => {
-    const run = async () => {
-      try {
-        const res = await fetch(`/api/research/player-props?gameId=${encodeURIComponent(gameId)}&league=${encodeURIComponent(league)}`, { cache: 'no-store' });
-        const json = await res.json();
-        if (json.success) setData(json);
-      } catch { /* silent */ }
-      finally { setLoading(false); }
-    };
-    run();
-  }, [gameId, league]);
+interface H2HGame {
+  gameId: string; date: string; homeTeamAbbr: string; awayTeamAbbr: string;
+  homeScore: number; awayScore: number; winner: 'home' | 'away'; margin: number;
+  spread: number | null; homeTeamCovered: boolean | null;
+  totalLine: number | null; totalResult: 'over' | 'under' | 'push' | null;
+  isPlayoffs: boolean;
+}
+interface RecentGame {
+  gameId: string; date: string; opponent: string; isHome: boolean;
+  teamScore: number; oppScore: number; won: boolean; margin: number;
+  spread: number | null; covered: boolean | null;
+  totalLine: number | null; totalResult: 'over' | 'under' | 'push' | null;
+}
+interface RecentStreak {
+  wins: number; losses: number; winStreak: number; lossStreak: number;
+  atsWins: number; atsLosses: number; avgMargin: number;
+  streakLabel: string; atsStreakLabel: string; totalsLabel: string;
+}
+interface PlayerGameLine {
+  gameId: string; date: string; opponent: string;
+  stats: Record<string, number>; statLabels: string[]; won: boolean;
+}
+interface PlayerVsTeam {
+  playerId: string; playerName: string; vsTeamAbbr: string;
+  games: PlayerGameLine[]; avgStats: Record<string, number>; trend: string | null;
+}
+interface H2HData {
+  h2hGames: H2HGame[]; homeTeamAbbr: string; awayTeamAbbr: string;
+  homeRecent: RecentGame[]; awayRecent: RecentGame[];
+  homeStreak: RecentStreak; awayStreak: RecentStreak;
+  playerLines: PlayerVsTeam[]; seriesSummary: string | null;
+}
 
-  if (loading) return (
-    <div className="flex items-center gap-2 py-3 text-xs text-white/30">
-      <div className="h-3 w-3 rounded-full border border-white/20 border-t-white/60 animate-spin" />
-      Scanning player props...
-    </div>
-  );
+// ─── H2H Components ───────────────────────────────────────────────────────────
 
-  if (!data || !data.dataAvailable) return (
-    <div className="py-3 text-xs text-white/30 font-semibold">Player stats not available for this game yet.</div>
-  );
+function H2HGameRow({ game, focusAbbr }: { game: H2HGame; focusAbbr: string }) {
+  const focusIsHome = game.homeTeamAbbr === focusAbbr;
+  const focusScore = focusIsHome ? game.homeScore : game.awayScore;
+  const oppScore = focusIsHome ? game.awayScore : game.homeScore;
+  const won = game.winner === (focusIsHome ? 'home' : 'away');
+  const covered = focusIsHome ? game.homeTeamCovered : (game.homeTeamCovered !== null ? !game.homeTeamCovered : null);
+  const date = game.date ? new Date(game.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
 
   return (
-    <div className="space-y-4 border-t border-white/5 pt-4">
-      {/* Top Props */}
-      {data.topProps.length > 0 && (
+    <div className="flex items-center gap-2 text-[11px]">
+      <span className="text-white/25 w-12 shrink-0">{date}</span>
+      <span className={`font-black w-5 shrink-0 ${won ? 'text-emerald-400' : 'text-red-400'}`}>{won ? 'W' : 'L'}</span>
+      <span className="text-white/70 font-bold tabular-nums">{focusScore}–{oppScore}</span>
+      {game.spread !== null && (
+        <span className={`text-[10px] font-bold ${covered === true ? 'text-emerald-400/70' : covered === false ? 'text-red-400/70' : 'text-white/25'}`}>
+          {covered === true ? '✓ Covered' : covered === false ? '✗ No cover' : 'ATS ?'}
+          {game.spread !== 0 && ` (${game.spread > 0 ? '+' : ''}${game.spread})`}
+        </span>
+      )}
+      {game.totalResult && game.totalLine && (
+        <span className={`text-[10px] font-bold ml-auto ${game.totalResult === 'over' ? 'text-orange-400/70' : 'text-sky-400/70'}`}>
+          {game.totalResult === 'over' ? '▲' : '▼'} {game.totalLine}
+        </span>
+      )}
+      {game.isPlayoffs && <span className="text-[9px] text-amber-400/60 font-black ml-1">PO</span>}
+    </div>
+  );
+}
+
+function RecentGameRow({ game }: { game: RecentGame }) {
+  const date = game.date ? new Date(game.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+  return (
+    <div className="flex items-center gap-2 text-[11px]">
+      <span className="text-white/25 w-12 shrink-0">{date}</span>
+      <span className={`font-black w-5 shrink-0 ${game.won ? 'text-emerald-400' : 'text-red-400'}`}>{game.won ? 'W' : 'L'}</span>
+      <span className="text-white/50">{game.isHome ? 'vs' : '@'} {game.opponent}</span>
+      <span className="text-white/60 font-bold tabular-nums ml-1">{game.teamScore}–{game.oppScore}</span>
+      {game.covered !== null && (
+        <span className={`text-[10px] font-bold ml-auto ${game.covered ? 'text-emerald-400/70' : 'text-red-400/70'}`}>
+          {game.covered ? '✓' : '✗'} ATS
+        </span>
+      )}
+      {game.totalResult && (
+        <span className={`text-[10px] font-bold ${game.covered !== null ? 'ml-1' : 'ml-auto'} ${game.totalResult === 'over' ? 'text-orange-400/60' : 'text-sky-400/60'}`}>
+          {game.totalResult === 'over' ? '▲O' : '▼U'}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function PlayerVsTeamCard({ pvt }: { pvt: PlayerVsTeam }) {
+  if (pvt.games.length === 0) return null;
+  const labels = pvt.games[0].statLabels;
+  // Pick top 4 most interesting stats
+  const keyStats = ['PTS','AST','REB','3PT','MIN','H','RBI','K','YDS'].filter((s) => labels.includes(s)).slice(0, 4);
+  if (keyStats.length === 0) return null;
+
+  return (
+    <div className="space-y-2 rounded-xl border border-white/8 bg-white/[0.02] p-3">
+      <div className="flex items-center justify-between">
+        <div className="text-xs font-black text-white">{pvt.playerName}</div>
+        {pvt.trend && <div className="text-[10px] text-emerald-400/70 font-bold">{pvt.trend}</div>}
+      </div>
+      {/* Stat labels header */}
+      <div className="grid text-[10px] text-white/25 font-black uppercase" style={{ gridTemplateColumns: `1fr repeat(${keyStats.length}, 2.5rem)` }}>
+        <span>Date</span>
+        {keyStats.map((s) => <span key={s} className="text-right">{s}</span>)}
+      </div>
+      {pvt.games.slice(0, 4).map((g) => (
+        <div key={g.gameId} className="grid text-[11px]" style={{ gridTemplateColumns: `1fr repeat(${keyStats.length}, 2.5rem)` }}>
+          <span className="text-white/30">{new Date(g.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+          {keyStats.map((s) => (
+            <span key={s} className="text-right font-bold tabular-nums text-white/70">{g.stats[s] ?? '—'}</span>
+          ))}
+        </div>
+      ))}
+      {/* Averages row */}
+      <div className="grid text-[10px] border-t border-white/5 pt-1.5 font-black" style={{ gridTemplateColumns: `1fr repeat(${keyStats.length}, 2.5rem)` }}>
+        <span className="text-white/40 uppercase">Avg vs</span>
+        {keyStats.map((s) => (
+          <span key={s} className="text-right text-amber-400/80">{pvt.avgStats[s] ?? '—'}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function H2HPanel({ data, homeAbbr, awayAbbr }: { data: H2HData; homeAbbr: string; awayAbbr: string }) {
+  return (
+    <div className="space-y-5 border-t border-white/5 pt-4">
+      {/* Series summary */}
+      {data.seriesSummary && (
+        <div className="flex items-center gap-2 rounded-xl bg-white/[0.03] border border-white/8 px-3 py-2">
+          <span className="text-[10px] font-black uppercase tracking-widest text-white/30">Series</span>
+          <span className="text-xs font-black text-white">{data.seriesSummary}</span>
+        </div>
+      )}
+
+      {/* H2H games */}
+      {data.h2hGames.length > 0 && (
         <div className="space-y-2">
-          <div className="text-[10px] font-black uppercase tracking-widest text-white/30 flex items-center gap-1.5">
-            <Users className="h-3 w-3" /> Player Props
-          </div>
-          <div className="space-y-2">
-            {data.topProps.slice(0, 4).map((rec, i) => (
-              <PropCard key={i} rec={rec} playerName={rec.playerName} />
-            ))}
+          <div className="text-[10px] font-black uppercase tracking-widest text-white/30">Last {data.h2hGames.length} Meetings</div>
+          <div className="space-y-1.5">
+            {data.h2hGames.map((g) => <H2HGameRow key={g.gameId} game={g} focusAbbr={homeAbbr} />)}
           </div>
         </div>
       )}
 
-      {/* SGP Builds */}
-      {data.sgpBuilds.length > 0 && (
+      {/* Recent form — both teams */}
+      <div className="grid grid-cols-2 gap-4">
+        {[{ abbr: homeAbbr, recent: data.homeRecent, streak: data.homeStreak },
+          { abbr: awayAbbr, recent: data.awayRecent, streak: data.awayStreak }].map(({ abbr, recent, streak }) => (
+          <div key={abbr} className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black uppercase tracking-widest text-white/30">{abbr} Last 5</span>
+              <span className="text-[9px] font-bold text-white/25">{streak.wins}-{streak.losses}</span>
+            </div>
+            {streak.streakLabel && (
+              <div className="text-[10px] font-bold text-white/50">{streak.streakLabel}</div>
+            )}
+            {streak.atsStreakLabel && streak.atsStreakLabel !== 'No ATS data' && (
+              <div className="text-[10px] font-bold text-sky-400/60">{streak.atsStreakLabel}</div>
+            )}
+            {streak.totalsLabel && (
+              <div className="text-[10px] font-bold text-orange-400/50">{streak.totalsLabel}</div>
+            )}
+            <div className="space-y-1">
+              {recent.slice(0, 5).map((g) => <RecentGameRow key={g.gameId} game={g} />)}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Player vs team */}
+      {data.playerLines.length > 0 && (
         <div className="space-y-2">
-          <div className="text-[10px] font-black uppercase tracking-widest text-white/30 flex items-center gap-1.5">
-            <Dices className="h-3 w-3" /> SGP Builds
-          </div>
-          <div className="space-y-2">
-            {data.sgpBuilds.map((sgp, i) => (
-              <SGPCard key={i} sgp={sgp} />
-            ))}
-          </div>
+          <div className="text-[10px] font-black uppercase tracking-widest text-white/30">Player vs {awayAbbr}</div>
+          {data.playerLines.map((pvt) => <PlayerVsTeamCard key={pvt.playerId} pvt={pvt} />)}
         </div>
+      )}
+    </div>
+  );
+}
+
+function PropsAndSGPPanel({ gameId, league, homeTeamId, awayTeamId }: {
+  gameId: string; league: string; homeTeamId: string; awayTeamId: string;
+}) {
+  const [propsData, setPropsData] = useState<GamePropsData | null>(null);
+  const [h2hData, setH2hData] = useState<H2HData | null>(null);
+  const [loadingProps, setLoadingProps] = useState(true);
+  const [loadingH2H, setLoadingH2H] = useState(true);
+  const [tab, setTab] = useState<'props' | 'h2h'>('h2h');
+
+  useEffect(() => {
+    // Fetch player props
+    fetch(`/api/research/player-props?gameId=${encodeURIComponent(gameId)}&league=${encodeURIComponent(league)}`, { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((d) => { if (d.success) setPropsData(d); })
+      .catch(() => {})
+      .finally(() => setLoadingProps(false));
+
+    // Fetch H2H data in parallel
+    if (homeTeamId && awayTeamId) {
+      const playerIds = ''; // will be populated after props load
+      fetch(`/api/research/h2h?league=${encodeURIComponent(league)}&gameId=${encodeURIComponent(gameId)}&homeTeamId=${encodeURIComponent(homeTeamId)}&awayTeamId=${encodeURIComponent(awayTeamId)}`, { cache: 'no-store' })
+        .then((r) => r.json())
+        .then((d) => { if (d.success) setH2hData(d); })
+        .catch(() => {})
+        .finally(() => setLoadingH2H(false));
+    } else {
+      setLoadingH2H(false);
+    }
+  }, [gameId, league, homeTeamId, awayTeamId]);
+
+  const loading = loadingProps && loadingH2H;
+
+  if (loading) return (
+    <div className="flex items-center gap-2 py-3 text-xs text-white/30">
+      <div className="h-3 w-3 rounded-full border border-white/20 border-t-white/60 animate-spin" />
+      Loading matchup data...
+    </div>
+  );
+
+  const hasProps = propsData?.dataAvailable && (propsData.topProps.length > 0 || propsData.sgpBuilds.length > 0);
+  const hasH2H = Boolean(h2hData?.h2hGames?.length || h2hData?.homeRecent?.length);
+
+  return (
+    <div className="border-t border-white/5 pt-3 space-y-3">
+      {/* Tab selector */}
+      <div className="flex gap-1">
+        {hasH2H && (
+          <button type="button" onClick={() => setTab('h2h')}
+            className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-wider transition-all ${tab === 'h2h' ? 'bg-white/10 text-white' : 'text-white/25 hover:text-white/50'}`}>
+            H2H &amp; Form
+          </button>
+        )}
+        {hasProps && (
+          <button type="button" onClick={() => setTab('props')}
+            className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-wider transition-all ${tab === 'props' ? 'bg-white/10 text-white' : 'text-white/25 hover:text-white/50'}`}>
+            Props &amp; SGP
+          </button>
+        )}
+      </div>
+
+      {/* H2H Tab */}
+      {tab === 'h2h' && (
+        loadingH2H ? (
+          <div className="flex items-center gap-2 py-2 text-xs text-white/30">
+            <div className="h-3 w-3 rounded-full border border-white/20 border-t-white/60 animate-spin" />
+            Loading H2H data...
+          </div>
+        ) : hasH2H ? (
+          <H2HPanel data={h2hData!} homeAbbr={h2hData!.homeTeamAbbr} awayAbbr={h2hData!.awayTeamAbbr} />
+        ) : (
+          <div className="py-2 text-xs text-white/25">No H2H history available for this matchup yet.</div>
+        )
+      )}
+
+      {/* Props Tab */}
+      {tab === 'props' && (
+        loadingProps ? (
+          <div className="flex items-center gap-2 py-2 text-xs text-white/30">
+            <div className="h-3 w-3 rounded-full border border-white/20 border-t-white/60 animate-spin" />
+            Scanning player props...
+          </div>
+        ) : hasProps ? (
+          <div className="space-y-4">
+            {propsData!.topProps.length > 0 && (
+              <div className="space-y-2">
+                <div className="text-[10px] font-black uppercase tracking-widest text-white/30 flex items-center gap-1.5">
+                  <Users className="h-3 w-3" /> Player Props
+                </div>
+                {propsData!.topProps.slice(0, 4).map((rec, i) => (
+                  <PropCard key={i} rec={rec} playerName={rec.playerName} />
+                ))}
+              </div>
+            )}
+            {propsData!.sgpBuilds.length > 0 && (
+              <div className="space-y-2">
+                <div className="text-[10px] font-black uppercase tracking-widest text-white/30 flex items-center gap-1.5">
+                  <Dices className="h-3 w-3" /> SGP Builds
+                </div>
+                {propsData!.sgpBuilds.map((sgp, i) => <SGPCard key={i} sgp={sgp} />)}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="py-2 text-xs text-white/25">Player stats not available for this game yet.</div>
+        )
       )}
     </div>
   );
@@ -410,17 +642,24 @@ function DeepPickCard({ pick, variant }: { pick: DeepPick; variant: 'grand-slam'
           league={pick.league}
         />
 
-        {/* Props & SGP panel */}
-        {showProps && <PropsAndSGPPanel gameId={pick.gameId} league={pick.league} />}
+        {/* H2H + Props panel */}
+        {showProps && (
+          <PropsAndSGPPanel
+            gameId={pick.gameId}
+            league={pick.league}
+            homeTeamId={pick.homeTeam.id}
+            awayTeamId={pick.awayTeam.id}
+          />
+        )}
 
-        {/* Props toggle */}
+        {/* Panel toggle */}
         <button
           type="button"
           onClick={() => setShowProps(!showProps)}
           className={`flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider transition-colors ${showProps ? 'text-sky-400 hover:text-sky-300' : 'text-white/20 hover:text-white/50'}`}
         >
-          <Users className="h-3 w-3" />
-          {showProps ? 'Hide Props' : 'Props & SGP'}
+          <TrendingUp className="h-3 w-3" />
+          {showProps ? 'Hide' : 'H2H · Props · Form'}
         </button>
       </div>
     </article>

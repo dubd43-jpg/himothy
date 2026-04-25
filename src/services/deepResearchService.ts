@@ -58,6 +58,7 @@ export interface AtsRecord {
 }
 
 export interface TeamProfile {
+  id: string;
   name: string;
   abbreviation: string;
   homeAway: 'home' | 'away';
@@ -707,6 +708,7 @@ async function processGame(
 
   // Build team profiles
   const home: TeamProfile = {
+    id: String(homeRaw.team?.id || homeRaw.id || ''),
     name: homeRaw.team?.displayName || 'Home', abbreviation: homeRaw.team?.abbreviation || 'HOME',
     homeAway: 'home', overallRecord: homeOverall, homeAwayRecord: homeHomeRec,
     ats: homeAtsData.overall, atsHomeAway: homeAtsData.homeAway,
@@ -716,6 +718,7 @@ async function processGame(
   };
 
   const away: TeamProfile = {
+    id: String(awayRaw.team?.id || awayRaw.id || ''),
     name: awayRaw.team?.displayName || 'Away', abbreviation: awayRaw.team?.abbreviation || 'AWAY',
     homeAway: 'away', overallRecord: awayOverall, homeAwayRecord: awayRoadRec,
     ats: awayAtsData.overall, atsHomeAway: awayAtsData.homeAway,
