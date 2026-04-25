@@ -890,14 +890,11 @@ async function processGameForPower20(
 
   // No injury data without summary fetch — Power 20 skips injury filter
   const hasInjury = false;
-
-  const injuryNote = hasInjury
-    ? `${[...favInj.out, ...favInj.doubtful].slice(0, 2).join(', ')} ${favInj.out.length > 0 ? 'OUT' : 'DOUBTFUL'}`
-    : null;
+  const injuryNote: string | null = null;
 
   // MLB heavy favorites → use run line -1.5 (avoids -250+ ML juice)
   const useRunLine = league === 'MLB' && favML != null && favML < -175;
-  const sbSpread2used = sbSpread2; // referenced below
+  const sbSpread2used = sbSpread2;
 
   let marketType: Power20Pick['marketType'];
   let selection: string;
