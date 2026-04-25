@@ -30,6 +30,7 @@
 
 import { LEAGUE_URLS } from '@/lib/validation';
 import { generateDeepExplanation } from '@/services/aiGenerator';
+import { getSharpIntel, type SharpIntelContext, type SharpFlag } from '@/services/sharpIntelService';
 
 // ─── Board ──────────────────────────────────────────────────────────────────
 
@@ -91,6 +92,13 @@ export interface GameSignals {
   neutralSite: boolean;
   dataQuality: number;
   confirmingSignals: number;           // filled after scoring
+  // Sharp intel signals
+  sharpMoneyAligned: boolean;         // sharp/syndicate money on same side as pick
+  reverseLineMovement: boolean;       // public bets X% but line moved against them
+  restAdvantage: boolean;             // picked side has meaningful rest edge
+  oppOnB2B: boolean;                  // opponent played yesterday
+  weatherAlert: boolean;              // significant weather affecting outdoor game
+  sharpScoreBonus: number;            // 0-25 pts added by sharp intel signals
 }
 
 export interface DeepPickResult {
@@ -118,6 +126,8 @@ export interface DeepPickResult {
     shortReason: string; fullBreakdown: string; keyAngles: string[];
     injuryNotes: string; marketNotes: string; riskNotes: string; killCase: string;
   } | null;
+  sharpFlags: SharpFlag[];
+  sharpIntel: Pick<SharpIntelContext, 'betting' | 'weather' | 'rest' | 'sharpScore'> | null;
 }
 
 export interface BoardPicksResult {
@@ -329,11 +339,20 @@ function countConfirmingSignals(
   // Signal 8: Line value gap (market mispriced vs probability)
   if (signals.lineValueGap >= 2.5) count++;
 
-  // Signal 9: Sharp line movement
-  if (signals.sharpLineDetected) count++;
+  // Signal 9: Sharp line movement or confirmed sharp money
+  if (signals.sharpLineDetected || signals.sharpMoneyAligned) count++;
 
   // Signal 10: Recent form is positive (winning streak)
   if (signals.recentFormStreak >= 3) count++;
+
+  // Signal 13: Reverse line movement — sharp action confirmed
+  if (signals.reverseLineMovement) count++;
+
+  // Signal 14: Rest advantage
+  if (signals.restAdvantage) count++;
+
+  // Signal 15: Opponent on back-to-back
+  if (signals.oppOnB2B) count++;
 
   // Signal 11: Spread is not crazy (not a 14-point dog)
   if (signals.spreadFavorable) count++;
@@ -403,8 +422,20 @@ function scoreGame(signals: Omit<GameSignals, 'confirmingSignals'>): number {
   // ATS and win-prob pointing opposite directions = no edge
   if (signals.signalConflict) score -= 8;
 
-  // Sharp line (±4 pts)
-  if (signals.sharpLineDetected) score += 4;
+  // Sharp line / sharp money confirmed (±10 pts)
+  if (signals.sharpMoneyAligned) score += 7;
+  else if (signals.sharpLineDetected) score += 4;
+  if (signals.reverseLineMovement) score += 5;
+
+  // Rest / fatigue edges (±8 pts)
+  if (signals.oppOnB2B) score += 6;
+  else if (signals.restAdvantage) score += 4;
+
+  // Weather affects totals direction (neutral for side picks)
+  if (signals.weatherAlert) score += 2; // slight edge knowing weather
+
+  // Bonus from full sharp intel context (0-25 pts, already capped)
+  score += Math.round(signals.sharpScoreBonus * 0.5); // half weight to avoid inflation
 
   // Neutral site penalty
   if (signals.neutralSite) score -= 3;
@@ -627,6 +658,21 @@ async function processGame(
   const hasKeyInjuryPicked = pickedInj.out.length > 0 || pickedInj.doubtful.length > 0;
   const hasKeyInjuryOpp = oppInj.out.length > 0 || oppInj.doubtful.length > 0;
 
+  // Sharp intel: run in parallel, zero block if it fails
+  const homeTeamName = homeRaw.team?.displayName || 'Home';
+  const awayTeamName = awayRaw.team?.displayName || 'Away';
+  const gameTime = event.date || null;
+
+  let sharpIntel: SharpIntelContext | null = null;
+  try {
+    sharpIntel = await getSharpIntel({
+      gameId, league, homeTeam: homeTeamName, awayTeam: awayTeamName,
+      pickedSide: pickedSideForSignals, gameTime,
+    });
+  } catch {
+    // Sharp intel is non-blocking — picks still qualify without it
+  }
+
   const signalsPartial: Omit<GameSignals, 'confirmingSignals'> = {
     oddsAvailable: hasOdds,
     winProbabilityGap: winProbGap,
@@ -643,6 +689,13 @@ async function processGame(
     sharpLineDetected: hasOdds && winProbGap > 10,
     neutralSite: Boolean(comp.neutralSite),
     dataQuality: dq,
+    // Sharp intel signals
+    sharpMoneyAligned: sharpIntel?.betting?.sharpFavors === pickedSideForSignals && (sharpIntel.betting.sharpConfidence ?? 0) >= 55,
+    reverseLineMovement: sharpIntel?.betting?.reverseLineMovement ?? false,
+    restAdvantage: sharpIntel?.rest?.restAdvantage === pickedSideForSignals && (sharpIntel.rest.restEdge ?? 0) >= 3,
+    oppOnB2B: pickedSideForSignals === 'home' ? (sharpIntel?.rest?.awayIsB2B ?? false) : (sharpIntel?.rest?.homeIsB2B ?? false),
+    weatherAlert: sharpIntel?.weather?.affectsPlay ?? false,
+    sharpScoreBonus: sharpIntel?.scoreBonus ?? 0,
   };
 
   const confidenceScore = scoreGame(signalsPartial);
@@ -737,6 +790,13 @@ async function processGame(
     selection: pickData.selection, selectionSide: pickData.selectionSide,
     marketType: pickData.marketType, odds: pickData.odds, line: pickData.line,
     confidenceScore, tier, signals, reasonsFor, reasonsAgainst, aiExplanation: null,
+    sharpFlags: sharpIntel?.flags ?? [],
+    sharpIntel: sharpIntel ? {
+      betting: sharpIntel.betting,
+      weather: sharpIntel.weather,
+      rest: sharpIntel.rest,
+      sharpScore: sharpIntel.sharpScore,
+    } : null,
   };
 }
 

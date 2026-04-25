@@ -60,6 +60,13 @@ interface TeamProfile {
   ats: AtsRecord | null; winProbability: number | null; moneyline: number | null;
   keyPlayers: string[]; injuredOut: string[]; injuredDoubtful: string[]; injuredQuestionable: string[];
 }
+interface SharpFlag {
+  type: 'sharp-money' | 'fade' | 'rest-edge' | 'b2b' | 'weather' | 'revenge' | 'look-ahead' | 'value';
+  label: string;
+  side?: 'home' | 'away';
+  intensity: 'low' | 'medium' | 'high';
+}
+
 interface DeepPick {
   gameId: string; eventName: string; league: string; sport: string; startTime: string;
   homeTeam: TeamProfile; awayTeam: TeamProfile;
@@ -68,8 +75,10 @@ interface DeepPick {
   odds: string | null; line: string | null;
   confidenceScore: number; tier: string;
   reasonsFor: string[]; reasonsAgainst: string[];
-  signals: { winProbabilityGap: number; atsCoverPct: number | null; atsCoverPctOpp: number | null; dataQuality: number; };
+  signals: { winProbabilityGap: number; atsCoverPct: number | null; atsCoverPctOpp: number | null; dataQuality: number; sharpMoneyAligned?: boolean; oppOnB2B?: boolean; reverseLineMovement?: boolean; };
   aiExplanation: { shortReason: string; fullBreakdown: string; keyAngles: string[]; injuryNotes: string; marketNotes: string; riskNotes: string; killCase: string; } | null;
+  sharpFlags?: SharpFlag[];
+  sharpIntel?: { betting: any; weather: any; rest: any; sharpScore: number; } | null;
 }
 interface DailyPicksData {
   success: boolean; boardDate: string; generatedAt: string;
@@ -210,6 +219,43 @@ function PropsAndSGPPanel({ gameId, league }: { gameId: string; league: string }
   );
 }
 
+// ─── Sharp Signal Badges ─────────────────────────────────────────────────────
+
+const FLAG_STYLES: Record<SharpFlag['type'], { bg: string; text: string; border: string }> = {
+  'sharp-money': { bg: 'bg-amber-500/15', text: 'text-amber-300', border: 'border-amber-500/30' },
+  'fade':        { bg: 'bg-sky-500/15',   text: 'text-sky-300',   border: 'border-sky-500/30' },
+  'rest-edge':   { bg: 'bg-emerald-500/15', text: 'text-emerald-300', border: 'border-emerald-500/30' },
+  'b2b':         { bg: 'bg-emerald-500/15', text: 'text-emerald-300', border: 'border-emerald-500/30' },
+  'weather':     { bg: 'bg-slate-500/15', text: 'text-slate-300',  border: 'border-slate-500/30' },
+  'revenge':     { bg: 'bg-red-500/15',   text: 'text-red-300',    border: 'border-red-500/30' },
+  'look-ahead':  { bg: 'bg-purple-500/15', text: 'text-purple-300', border: 'border-purple-500/30' },
+  'value':       { bg: 'bg-primary/15',   text: 'text-primary',    border: 'border-primary/30' },
+};
+
+function SharpSignalBadges({ flags }: { flags: SharpFlag[] }) {
+  if (!flags || flags.length === 0) return null;
+  // Only show medium/high intensity flags; low are too noisy
+  const visible = flags.filter((f) => f.intensity !== 'low');
+  if (visible.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {visible.map((flag, i) => {
+        const s = FLAG_STYLES[flag.type];
+        return (
+          <span key={i} className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-wider ${s.bg} ${s.text} ${s.border}`}>
+            {flag.type === 'sharp-money' && '⚡ '}
+            {flag.type === 'fade' && '📉 '}
+            {flag.type === 'b2b' && '😴 '}
+            {flag.type === 'rest-edge' && '💤 '}
+            {flag.type === 'weather' && '🌬 '}
+            {flag.label}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── Live Record Bar ─────────────────────────────────────────────────────────
 
 interface RecordStats {
@@ -345,6 +391,11 @@ function DeepPickCard({ pick, variant }: { pick: DeepPick; variant: 'grand-slam'
             </div>
           )}
         </div>
+
+        {/* Sharp signal badges */}
+        {pick.sharpFlags && pick.sharpFlags.length > 0 && (
+          <SharpSignalBadges flags={pick.sharpFlags} />
+        )}
 
         {/* One reason */}
         {reason && (
