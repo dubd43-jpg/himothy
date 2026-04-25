@@ -28,6 +28,7 @@ import {
   Dices,
   TrendingDown,
   Users,
+  Trophy,
 } from "lucide-react";
 import { LiveScoreBoard } from "@/components/LiveScoreBoard";
 
@@ -205,6 +206,57 @@ function PropsAndSGPPanel({ gameId, league }: { gameId: string; league: string }
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Live Record Bar ─────────────────────────────────────────────────────────
+
+interface RecordStats {
+  wins: number; losses: number; pushes: number; winPercentage: string; units: number;
+}
+
+function LiveRecordBar() {
+  const [stats, setStats] = useState<{ today: RecordStats; last7Days: RecordStats; allTime: RecordStats } | null>(null);
+
+  useEffect(() => {
+    fetch('/api/records/summary', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((d) => { if (d.success && d.stats) setStats(d.stats); })
+      .catch(() => {});
+  }, []);
+
+  if (!stats) return null;
+
+  const at = stats.allTime;
+  const l7 = stats.last7Days;
+  const hasRecord = (at.wins + at.losses) > 0;
+  if (!hasRecord) return null;
+
+  const unitStr = (u: number) => `${u >= 0 ? '+' : ''}${u.toFixed(1)}u`;
+
+  return (
+    <div className="border-b border-white/5 bg-emerald-950/20 px-4 py-2.5">
+      <div className="mx-auto max-w-7xl flex flex-wrap items-center justify-between gap-x-6 gap-y-1">
+        <div className="flex items-center gap-1.5">
+          <Trophy className="h-3 w-3 text-emerald-400 shrink-0" />
+          <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400">Official Record</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-[10px] font-black tabular-nums">
+          <span className="text-white/50">
+            All-Time <span className="text-white">{at.wins}-{at.losses}{at.pushes > 0 ? `-${at.pushes}` : ''}</span>
+            <span className="text-emerald-400/70 ml-1">{at.winPercentage}</span>
+            <span className="text-white/30 ml-1">{unitStr(at.units)}</span>
+          </span>
+          <span className="text-white/50 hidden sm:inline">
+            Last 7 <span className="text-white">{l7.wins}-{l7.losses}</span>
+            <span className="text-emerald-400/70 ml-1">{l7.winPercentage}</span>
+          </span>
+          <Link href="/results" className="text-white/30 hover:text-emerald-400 transition-colors underline underline-offset-2">
+            Full Record →
+          </Link>
+        </div>
+      </div>
     </div>
   );
 }
@@ -999,6 +1051,9 @@ function PicksHubPageClient() {
           </Link>
         </div>
       </header>
+
+      {/* Live record bar — visible to all customers */}
+      <LiveRecordBar />
 
       <div className="mx-auto max-w-7xl px-4 py-8 md:px-8">
 
