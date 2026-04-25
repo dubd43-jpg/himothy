@@ -211,46 +211,9 @@ function PropsAndSGPPanel({ gameId, league }: { gameId: string; league: string }
 
 // ─── Deep Research Components ─────────────────────────────────────────────────
 
-function ConfidencePill({ score }: { score: number }) {
-  const color = score >= 88 ? "bg-amber-500 text-black" : score >= 78 ? "bg-purple-500 text-white" : score >= 65 ? "bg-emerald-600 text-white" : "bg-orange-500 text-white";
-  return (
-    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-black uppercase tracking-wider ${color}`}>
-      {score}% conf
-    </span>
-  );
-}
-
-function AtsTag({ ats, label }: { ats: AtsRecord | null; label: string }) {
-  if (!ats) return null;
-  const color = ats.coverPct >= 58 ? "text-emerald-400" : ats.coverPct <= 44 ? "text-red-400" : "text-white/50";
-  return (
-    <span className={`text-xs font-bold ${color}`}>
-      {label} ATS: {ats.display} ({ats.coverPct.toFixed(0)}%)
-    </span>
-  );
-}
-
-function WinProbBar({ home, away, homeName, awayName }: { home: number | null; away: number | null; homeName: string; awayName: string }) {
-  if (home === null || away === null) return null;
-  return (
-    <div className="mt-3">
-      <div className="flex justify-between text-[10px] font-black uppercase tracking-wider text-white/40 mb-1">
-        <span>{awayName} {away.toFixed(0)}%</span>
-        <span>{homeName} {home.toFixed(0)}%</span>
-      </div>
-      <div className="h-1.5 rounded-full bg-white/10 overflow-hidden flex">
-        <div className="h-full bg-sky-500 rounded-l-full transition-all" style={{ width: `${away}%` }} />
-        <div className="h-full bg-amber-500 rounded-r-full transition-all" style={{ width: `${home}%` }} />
-      </div>
-    </div>
-  );
-}
 
 function DeepPickCard({ pick, variant }: { pick: DeepPick; variant: 'grand-slam' | 'pressure' | 'vip' | 'parlay' }) {
-  const [expanded, setExpanded] = useState(variant === 'grand-slam');
   const [showProps, setShowProps] = useState(false);
-  const picked = pick.selectionSide === 'home' ? pick.homeTeam : pick.awayTeam;
-  const opp = pick.selectionSide === 'home' ? pick.awayTeam : pick.homeTeam;
 
   const borderCls = variant === 'grand-slam' ? 'border-amber-500/40' : variant === 'pressure' ? 'border-purple-500/40' : variant === 'vip' ? 'border-emerald-500/20' : 'border-orange-500/20';
   const bgCls = variant === 'grand-slam' ? 'bg-gradient-to-br from-amber-950/60 via-amber-900/20 to-slate-900' : variant === 'pressure' ? 'bg-gradient-to-br from-purple-950/50 via-purple-900/20 to-slate-900' : 'bg-white/[0.03]';
@@ -258,23 +221,20 @@ function DeepPickCard({ pick, variant }: { pick: DeepPick; variant: 'grand-slam'
   const oddsTextCls = pick.odds && pick.odds.startsWith('+') ? 'text-emerald-400' : 'text-sky-400';
 
   const startTime = pick.startTime ? new Date(pick.startTime).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'TBD';
+  const reason = pick.aiExplanation?.shortReason || pick.reasonsFor[0] || null;
 
   return (
     <article className={`relative overflow-hidden rounded-2xl border ${borderCls} ${bgCls} p-5`}>
       {glowCls && <div className={`absolute -top-8 -right-8 h-32 w-32 rounded-full blur-3xl ${glowCls} pointer-events-none`} />}
 
-      <div className="relative z-10">
-        {/* Header row */}
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div>
-            <div className="text-[10px] font-black uppercase tracking-widest text-white/30">{pick.league} · {startTime}</div>
-            <div className="mt-0.5 text-sm font-bold text-white/60">{pick.awayTeam.name} @ {pick.homeTeam.name}</div>
-          </div>
-          <ConfidencePill score={pick.confidenceScore} />
+      <div className="relative z-10 space-y-3">
+        {/* Matchup context */}
+        <div className="text-[10px] font-black uppercase tracking-widest text-white/30">
+          {pick.league} · {pick.awayTeam.name} @ {pick.homeTeam.name} · {startTime}
         </div>
 
-        {/* Selection + Odds */}
-        <div className="mt-4 flex items-end justify-between gap-3">
+        {/* THE PICK */}
+        <div className="flex items-center justify-between gap-3">
           <div className="text-2xl font-black text-white leading-tight md:text-3xl">{pick.selection}</div>
           {pick.odds && (
             <div className={`shrink-0 rounded-xl border border-current/20 bg-current/10 px-4 py-2 text-2xl font-black tabular-nums ${oddsTextCls}`}>
@@ -283,96 +243,23 @@ function DeepPickCard({ pick, variant }: { pick: DeepPick; variant: 'grand-slam'
           )}
         </div>
 
-        {/* Win prob bar */}
-        <WinProbBar
-          home={pick.homeTeam.winProbability}
-          away={pick.awayTeam.winProbability}
-          homeName={pick.homeTeam.abbreviation}
-          awayName={pick.awayTeam.abbreviation}
-        />
-
-        {/* ATS records */}
-        <div className="mt-3 flex flex-wrap gap-3">
-          <AtsTag ats={picked.ats} label={`${picked.abbreviation}`} />
-          <AtsTag ats={opp.ats} label={`${opp.abbreviation}`} />
-        </div>
-
-        {/* Quick reasons */}
-        {pick.reasonsFor.length > 0 && !expanded && (
-          <p className="mt-3 text-xs text-white/40 leading-relaxed line-clamp-2">{pick.reasonsFor[0]}</p>
-        )}
-
-        {/* Expanded AI analysis */}
-        {expanded && pick.aiExplanation && (
-          <div className="mt-4 space-y-3 border-t border-white/5 pt-4">
-            <p className="text-sm font-semibold text-white/80 leading-relaxed">{pick.aiExplanation.shortReason}</p>
-            <p className="text-xs text-white/50 leading-relaxed">{pick.aiExplanation.fullBreakdown}</p>
-            {pick.aiExplanation.keyAngles.length > 0 && (
-              <ul className="space-y-1">
-                {pick.aiExplanation.keyAngles.map((angle, i) => (
-                  <li key={i} className="flex items-start gap-2 text-xs text-white/50">
-                    <span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
-                    {angle}
-                  </li>
-                ))}
-              </ul>
-            )}
-            <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-              <div className="rounded-xl bg-white/[0.03] p-3">
-                <div className="text-[9px] font-black uppercase tracking-wider text-white/30 mb-1">Market Edge</div>
-                <p className="text-xs text-white/50">{pick.aiExplanation.marketNotes}</p>
-              </div>
-              <div className="rounded-xl bg-red-500/5 border border-red-500/10 p-3">
-                <div className="text-[9px] font-black uppercase tracking-wider text-red-400/60 mb-1">Kill Case</div>
-                <p className="text-xs text-red-300/60">{pick.aiExplanation.killCase}</p>
-              </div>
-            </div>
-            {pick.aiExplanation.injuryNotes && pick.aiExplanation.injuryNotes !== 'No significant injury concerns for this market.' && (
-              <div className="rounded-xl bg-amber-500/5 border border-amber-500/10 p-3">
-                <div className="text-[9px] font-black uppercase tracking-wider text-amber-400/60 mb-1">Injury Watch</div>
-                <p className="text-xs text-amber-300/60">{pick.aiExplanation.injuryNotes}</p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Expanded reasons (no AI) */}
-        {expanded && !pick.aiExplanation && (
-          <div className="mt-4 space-y-2 border-t border-white/5 pt-4">
-            {pick.reasonsFor.map((r, i) => (
-              <div key={i} className="flex items-start gap-2 text-xs text-white/50">
-                <span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" /> {r}
-              </div>
-            ))}
-            {pick.reasonsAgainst.map((r, i) => (
-              <div key={i} className="flex items-start gap-2 text-xs text-white/40">
-                <span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-red-400" /> {r}
-              </div>
-            ))}
-          </div>
+        {/* One reason */}
+        {reason && (
+          <p className="text-xs text-white/50 leading-relaxed">{reason}</p>
         )}
 
         {/* Props & SGP panel */}
         {showProps && <PropsAndSGPPanel gameId={pick.gameId} league={pick.league} />}
 
-        {/* Action bar */}
-        <div className="mt-3 flex items-center gap-4">
-          <button
-            type="button"
-            onClick={() => setExpanded(!expanded)}
-            className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-white/30 hover:text-white/60 transition-colors"
-          >
-            {expanded ? <><ChevronUp className="h-3 w-3" /> Less</> : <><ChevronDown className="h-3 w-3" /> Full Analysis</>}
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowProps(!showProps)}
-            className={`flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider transition-colors ${showProps ? 'text-sky-400 hover:text-sky-300' : 'text-white/30 hover:text-white/60'}`}
-          >
-            <Users className="h-3 w-3" />
-            {showProps ? 'Hide Props' : 'Props & SGP'}
-          </button>
-        </div>
+        {/* Props toggle */}
+        <button
+          type="button"
+          onClick={() => setShowProps(!showProps)}
+          className={`flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider transition-colors ${showProps ? 'text-sky-400 hover:text-sky-300' : 'text-white/20 hover:text-white/50'}`}
+        >
+          <Users className="h-3 w-3" />
+          {showProps ? 'Hide Props' : 'Props & SGP'}
+        </button>
       </div>
     </article>
   );
@@ -390,7 +277,6 @@ function CompactParlayLeg({ pick, index }: { pick: DeepPick; index: number }) {
         <div className="text-[11px] text-white/40">{pick.awayTeam.name} @ {pick.homeTeam.name} · {pick.league}</div>
       </div>
       {pick.odds && <span className={`text-sm font-black tabular-nums ${oddsTextCls}`}>{pick.odds}</span>}
-      <ConfidencePill score={pick.confidenceScore} />
     </div>
   );
 }
