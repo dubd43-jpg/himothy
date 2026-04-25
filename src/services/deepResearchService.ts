@@ -860,6 +860,8 @@ async function processGameForPower20(
   const awayRaw = comp.competitors?.find((c: any) => c.homeAway === 'away');
   if (!homeRaw || !awayRaw) return null;
 
+  const gameId = String(event.id);
+
   // Extract from scoreboard directly — no summary call needed
   const oddsNode = comp.odds?.[0];
   const sbHomeML: number | null = oddsNode?.homeTeamOdds?.moneyLine ?? null;
