@@ -209,8 +209,59 @@ function PropsAndSGPPanel({ gameId, league }: { gameId: string; league: string }
   );
 }
 
-// ─── Deep Research Components ─────────────────────────────────────────────────
+// ─── Public Money Badge ───────────────────────────────────────────────────────
 
+interface PublicMoneyData {
+  success: boolean;
+  awayBetPct: number | null;
+  homeBetPct: number | null;
+  awayMoneyPct: number | null;
+  homeMoneyPct: number | null;
+  spreadAwayBetPct: number | null;
+  spreadHomeBetPct: number | null;
+}
+
+function PublicMoneyBadge({ awayTeam, homeTeam, selectionSide, league }: {
+  awayTeam: string; homeTeam: string; selectionSide: 'home' | 'away'; league: string;
+}) {
+  const [pub, setPub] = useState<PublicMoneyData | null>(null);
+
+  useEffect(() => {
+    fetch(`/api/research/public-money?awayTeam=${encodeURIComponent(awayTeam)}&homeTeam=${encodeURIComponent(homeTeam)}&league=${encodeURIComponent(league)}`, { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((d) => { if (d.success) setPub(d); })
+      .catch(() => {});
+  }, [awayTeam, homeTeam, league]);
+
+  if (!pub) return null;
+
+  const betPct = selectionSide === 'away' ? pub.awayBetPct : pub.homeBetPct;
+  const moneyPct = selectionSide === 'away' ? pub.awayMoneyPct : pub.homeMoneyPct;
+
+  if (betPct == null && moneyPct == null) return null;
+
+  const isWithPublic = betPct != null && betPct >= 50;
+  const isAgainstPublic = betPct != null && betPct < 45;
+
+  return (
+    <div className="flex items-center gap-2 text-[10px] text-white/25 font-semibold">
+      <span className="uppercase tracking-wider">Public</span>
+      {betPct != null && (
+        <span className={isAgainstPublic ? 'text-amber-400/60' : isWithPublic ? 'text-white/35' : 'text-white/25'}>
+          {betPct}% bets
+        </span>
+      )}
+      {moneyPct != null && (
+        <span className={moneyPct >= 55 ? 'text-emerald-400/50' : 'text-white/25'}>
+          {moneyPct}% $
+        </span>
+      )}
+      {isAgainstPublic && <span className="text-amber-400/60">← fade</span>}
+    </div>
+  );
+}
+
+// ─── Deep Research Components ─────────────────────────────────────────────────
 
 function DeepPickCard({ pick, variant }: { pick: DeepPick; variant: 'grand-slam' | 'pressure' | 'vip' | 'parlay' }) {
   const [showProps, setShowProps] = useState(false);
@@ -247,6 +298,14 @@ function DeepPickCard({ pick, variant }: { pick: DeepPick; variant: 'grand-slam'
         {reason && (
           <p className="text-xs text-white/50 leading-relaxed">{reason}</p>
         )}
+
+        {/* Public money — subtle, loads async */}
+        <PublicMoneyBadge
+          awayTeam={pick.awayTeam.name}
+          homeTeam={pick.homeTeam.name}
+          selectionSide={pick.selectionSide}
+          league={pick.league}
+        />
 
         {/* Props & SGP panel */}
         {showProps && <PropsAndSGPPanel gameId={pick.gameId} league={pick.league} />}
