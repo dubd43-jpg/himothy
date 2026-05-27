@@ -23,7 +23,7 @@ const PICKS_FAQS = [
 
 export const metadata = pageMeta({
   title: "Today's Sports Picks — Free Daily Plays & Parlays",
-  description: "Tonight's full slate: MLB, NBA, WNBA, NHL, NFL, UFC, tennis, golf, soccer. Grand Slam · Pressure Pack · VIP 4-Pack · $10 Parlay Plan · Asleep Picks · Hot Tendencies · Value Plays. Real plays, real reasons, verified record.",
+  description: "Tonight's full slate across MLB, NBA, NHL, NFL, UFC, tennis, golf. Grand Slam, Pressure Pack, VIP 4-Pack, $10 Parlay Plan. Real plays, verified record.",
   path: '/picks',
   keywords: [
     "sports picks today", "free sports picks", "daily picks", "best picks tonight",

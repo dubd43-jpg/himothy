@@ -5,7 +5,7 @@ import { Globe } from "lucide-react";
 
 export const metadata = pageMeta({
   title: "Sports Picks Today — Free Daily Plays Across Every Sport",
-  description: "Today's full multi-sport board: NBA, NFL, MLB, NHL, WNBA, UFC, tennis, golf, soccer, NCAA, and international. Real plays, tendency math on every pick, capped at -185 single / -450 parlay legs.",
+  description: "Today's full multi-sport board across NBA, NFL, MLB, NHL, WNBA, UFC, tennis, golf, soccer, NCAA. Real plays, tendency math on every pick.",
   path: "/sports-picks-today",
   keywords: [
     "sports picks today", "expert sports picks", "free sports picks today",

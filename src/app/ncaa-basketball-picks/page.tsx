@@ -5,7 +5,7 @@ import { Zap } from "lucide-react";
 
 export const metadata = pageMeta({
   title: "College Basketball Picks Today — NCAAB ATS, Total & ML",
-  description: "Today's NCAAB slate: spread, moneyline, and total picks for every Division I game. Pace-adjusted analytics, ATS L10 tendencies, multi-book best prices, conference-tournament edges.",
+  description: "Today's NCAAB slate: spread, moneyline, and total picks for every D-I game. Pace-adjusted analytics, ATS L10 tendencies, multi-book best prices.",
   path: "/ncaa-basketball-picks",
   keywords: [
     "ncaa basketball picks", "college basketball picks today", "ncaab picks",

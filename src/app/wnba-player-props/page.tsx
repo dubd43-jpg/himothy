@@ -5,7 +5,7 @@ import { Target } from "lucide-react";
 
 export const metadata = pageMeta({
   title: "WNBA Player Props Today — Points, Rebounds, Assists, Threes",
-  description: "Today's WNBA player prop picks: points, rebounds, assists, threes, and steals across every game. Alt-line ladders, multi-book best prices, last-5 streak data. Caitlin Clark, A'ja Wilson, Sabrina Ionescu props daily.",
+  description: "Today's WNBA player prop picks: points, rebounds, assists, threes, steals. Alt-line ladders, multi-book best prices, last-5 streak data, top-star props daily.",
   path: "/wnba-player-props",
   keywords: [
     "wnba player props today", "wnba props", "caitlin clark props", "a'ja wilson props",

@@ -5,7 +5,7 @@ import { Target } from "lucide-react";
 
 export const metadata = pageMeta({
   title: "MLB Picks Today — Free Run Line, F5, NRFI & Total Plays",
-  description: "Today's full MLB slate analyzed: moneyline, run line, totals, F5 (first 5 innings), NRFI, and player prop picks. Multi-book best prices, pitcher matchups, weather, ATS L10 tendencies.",
+  description: "Today's MLB slate: moneyline, run line, totals, F5, NRFI, and player prop picks. Multi-book best prices, pitcher matchups, weather, ATS L10 tendencies.",
   path: "/mlb-picks",
   keywords: [
     "mlb picks today", "free mlb picks", "mlb run line picks", "mlb f5 picks",

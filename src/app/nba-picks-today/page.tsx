@@ -5,7 +5,7 @@ import { Trophy } from "lucide-react";
 
 export const metadata = pageMeta({
   title: "NBA Picks Today — Free Daily NBA Plays, ATS & Player Props",
-  description: "Tonight's full NBA slate analyzed: moneyline, spread, total, and player prop picks for every game. Multi-book best prices, ATS L10 tendencies, alt prop ladders. Real plays, real reasons.",
+  description: "Tonight's NBA slate: moneyline, spread, total, and player prop picks for every game. Multi-book best prices, ATS L10 tendencies, alt prop ladders.",
   path: "/nba-picks-today",
   keywords: [
     "nba picks today", "free nba picks", "nba ats picks", "nba spread picks",

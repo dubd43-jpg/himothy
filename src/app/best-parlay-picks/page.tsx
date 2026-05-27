@@ -4,8 +4,8 @@ import { pageMeta } from "@/lib/seo";
 import { BarChart3 } from "lucide-react";
 
 export const metadata = pageMeta({
-  title: "Best Parlay Picks Today — $10 Parlay Plan, Power 20 & SGP",
-  description: "Today's strategic parlay picks built on real math. The $10 Parlay Plan, Power 20 heavy-chalk parlay, and Same Game Parlay legs. Every leg capped at -450 so payouts stay real.",
+  title: "Best Parlay Picks Today — Parlay Plan, Power of Parlays",
+  description: "Today's strategic parlay picks built on real math. The $10 Parlay Plan, Power of Parlays heavy-chalk stack, and Power 10 daily. Legs capped at -450.",
   path: "/best-parlay-picks",
   keywords: [
     "best parlay picks", "best parlays today", "daily parlay picks", "$10 parlay",

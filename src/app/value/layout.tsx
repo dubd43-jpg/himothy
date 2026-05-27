@@ -2,7 +2,7 @@ import { pageMeta } from '@/lib/seo';
 
 export const metadata = pageMeta({
   title: "Value Plays — Picks With Real Edge vs True Line",
-  description: "Today's moneyline picks where our best available price beats the consensus true line across all books. Real positive expected value, sorted by edge size. The honest math of where to bet.",
+  description: "Today's moneyline picks where our best price beats the consensus true line. Real positive expected value, sorted by edge size. The honest math.",
   path: "/value",
   keywords: [
     "value picks today", "positive ev picks", "line shopping", "best sportsbook price",

@@ -5,7 +5,7 @@ import { Target } from "lucide-react";
 
 export const metadata = pageMeta({
   title: "MLB F5 Picks Today — First 5 Innings Totals, Spread, ML",
-  description: "Today's MLB First 5 Innings (F5) picks. Isolate the starting pitcher matchup, skip bullpen variance. F5 totals, run lines, and moneylines with multi-book best prices for every MLB game tonight.",
+  description: "Today's MLB First 5 Innings (F5) picks. Isolate the starting pitcher matchup, skip bullpen variance. F5 totals, run lines, moneylines.",
   path: "/mlb-f5-picks",
   keywords: [
     "mlb f5 picks", "first 5 innings picks", "mlb first five innings", "f5 picks today",

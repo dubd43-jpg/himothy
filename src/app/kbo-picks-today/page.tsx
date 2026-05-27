@@ -5,7 +5,7 @@ import { Target } from "lucide-react";
 
 export const metadata = pageMeta({
   title: "KBO Picks Today — Korean Baseball Plays For US Bettors",
-  description: "Today's KBO (Korea Baseball Organization) picks: moneyline, run line, totals, and player props for every game. Soft US markets, sharp F5 pitcher angles, multi-book best prices. Free daily KBO plays.",
+  description: "Today's KBO picks: moneyline, run line, totals, and player props for every game. Soft US markets, sharp F5 pitcher angles, multi-book best prices.",
   path: "/kbo-picks-today",
   keywords: [
     "kbo picks today", "korean baseball picks", "kbo predictions", "kbo run line picks",
