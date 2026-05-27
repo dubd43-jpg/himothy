@@ -244,6 +244,7 @@ export interface BoardPicksResult {
   allScored: DeepPickResult[];
   totalGamesScanned: number;
   valuePlays?: DeepPickResult[];    // moneyline picks whose best price beats the true line (set in the API route)
+  emptyReason?: string;             // explains why a non-NA board returned empty (e.g., "need 4, found 1")
 }
 
 // MLB No-Runs-First-Inning play (the NRFI prop the user loves)
@@ -2043,6 +2044,16 @@ export async function runDailyDeepResearch(board: BoardType = 'north-american'):
     promote(parlayPlan, 6, 'PARLAY_PLAN', t3);
   }
 
+  // A parlay needs at least 2 legs — otherwise it's just a straight bet. If the thin-
+  // slate backfill couldn't fill the Parlay Plan past 1 pick, clear it entirely. We
+  // don't want a "Parlay Plan" section displaying a single play and calling it a parlay.
+  if (parlayPlan.length < 2) {
+    // Push the lonely pick back into the candidate pool so it can land somewhere honest
+    // (e.g., asleepPicks, value plays, or just nowhere).
+    for (const p of parlayPlan) usedGames.delete(p.gameId);
+    parlayPlan.length = 0;
+  }
+
   // Tonight's big games — headline NBA/NHL/NFL/WNBA matchups we always cover, even if
   // they're coin-flips that didn't make a product. People bet these; we talk about them.
   // Only TRULY big games — playoffs/finals/championship/Game 7 — not just two good
@@ -2092,6 +2103,33 @@ export async function runDailyDeepResearch(board: BoardType = 'north-american'):
   const enrichedMap = new Map<string, DeepPickResult>();
   for (const r of enriched) {
     if (r.status === 'fulfilled') enrichedMap.set(r.value.gameId, r.value);
+  }
+
+  // Non-NA board minimum: per user "if we're gonna do soccer, make sure it's 4 picks or
+  // more." Soccer / tennis / combat / individual / racing / global boards only publish
+  // when there's at least 4 total qualifying picks (Pressure + VIP + Parlay Plan + Marquee +
+  // Asleep + Outrights contenders). On a sparse day, the whole board returns empty so we
+  // don't ship a board with 1 lonely pick masquerading as a slate.
+  if (board !== 'north-american') {
+    const total = pressurePack.length + vip4Pack.length + parlayPlan.length + marquee.length + asleepPicks.length + (outrights || []).reduce((s, t: any) => s + (t.contenders?.length || 0), 0);
+    if (total < 4) {
+      return {
+        generatedAt: now.toISOString(),
+        boardDate: now.toISOString().slice(0, 10),
+        board,
+        grandSlam: null,
+        pressurePack: [],
+        vip4Pack: [],
+        parlayPlan: [],
+        marquee: [],
+        asleepPicks: [],
+        outrights: [],
+        nrfi: [],
+        allScored: [],
+        totalGamesScanned: totalScanned,
+        emptyReason: `Not enough qualifying picks for the ${board} board today (need 4, found ${total}).`,
+      };
+    }
   }
 
   return {

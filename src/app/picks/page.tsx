@@ -969,7 +969,7 @@ function DeepResearchSection({ board }: { board: string }) {
           <CategoryTile href="/grand-slam" icon={Crown} title="HIMOTHY 1-Pick Grand Slam" count={data.grandSlam ? 1 : 0} unit="pick" restingLabel="Resting today" />
           <CategoryTile href="/pressure-pack" icon={Flame} title="HIMOTHY 2-Pick Pressure Pack" count={data.pressurePack.length} unit="pick" />
           <CategoryTile href="/vip-picks" icon={ShieldCheck} title="HIMOTHY VIP 4-Pack" count={data.vip4Pack.length} unit="pick" />
-          <CategoryTile href="/parlay-plan" icon={DollarSign} title="$10 Parlay Plan" count={data.parlayPlan.length} unit="leg" />
+          <CategoryTile href="/parlay-plan" icon={DollarSign} title="$10 Parlay Plan" count={data.parlayPlan.length} unit="leg" restingLabel="Not enough legs today" />
           <CategoryTile href="/big-games" icon={Trophy} title="Tonight's Big Games" count={data.marquee?.length ?? 0} unit="game" restingLabel="No big game today" />
           <CategoryTile href="/nrfi" icon={Radio} title="NRFI — No Runs 1st" count={data.nrfi?.length ?? 0} unit="game" />
           <CategoryTile href="/value" icon={Target} title="Value Plays — real edge" count={data.valuePlays?.length ?? 0} unit="edge" restingLabel="No value today — sit out" />
