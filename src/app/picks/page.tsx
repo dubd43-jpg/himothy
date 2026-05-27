@@ -966,6 +966,7 @@ function DeepResearchSection({ board }: { board: string }) {
       {/* Main board → category tiles (click in to see that category's picks). */}
       {board === 'north-american' ? (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <CategoryTile href="/himothy-picks" icon={Crown} title="HIMOTHY Personal Pick" count={1} unit="prop" restingLabel="Best prop across every sport" />
           <CategoryTile href="/grand-slam" icon={Crown} title="HIMOTHY 1-Pick Grand Slam" count={data.grandSlam ? 1 : 0} unit="pick" restingLabel="Resting today" />
           <CategoryTile href="/pressure-pack" icon={Flame} title="HIMOTHY 2-Pick Pressure Pack" count={data.pressurePack.length} unit="pick" />
           <CategoryTile href="/vip-picks" icon={ShieldCheck} title="HIMOTHY VIP 4-Pack" count={data.vip4Pack.length} unit="pick" />
