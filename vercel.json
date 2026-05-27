@@ -1,0 +1,9 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "crons": [
+    { "path": "/api/cron/record-board", "schedule": "0 13 * * *" },
+    { "path": "/api/cron/prewarm-lines", "schedule": "30 11 * * *" },
+    { "path": "/api/cron/warm-cache", "schedule": "0 12 * * *" }
+  ]
+}

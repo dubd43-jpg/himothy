@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { hasDatabase } from '@/lib/hasDatabase';
 import { randomUUID } from 'crypto';
 
 export type AdaptationMode = 'normal' | 'tightened' | 'defensive';
@@ -124,7 +125,7 @@ function computeUnits(result: string, odds?: string | null) {
 }
 
 export async function getActiveAdaptivePolicy(): Promise<AdaptivePolicy> {
-  if (!process.env.DATABASE_URL) return defaultPolicy();
+  if (!hasDatabase()) return defaultPolicy();
 
   await ensurePolicySchema();
 

@@ -2,37 +2,71 @@ import { Pick } from './picksData';
 import { PreGameValidation, LiveGameTracking } from './types';
 import { getMultiBookMarketSnapshot } from '@/services/oddsProviderService';
 
-// Comprehensive league mapping for the Multi-Sport Aggregation Engine
+// Comprehensive league mapping for the Multi-Sport Aggregation Engine.
+// Every league Hard Rock Bet offers that ESPN exposes via the public site API.
 export const LEAGUE_URLS: Record<string, string> = {
+  // North American team sports
   "NBA": "https://site.api.espn.com/apis/site/v2/sports/basketball/nba",
+  "WNBA": "https://site.api.espn.com/apis/site/v2/sports/basketball/wnba",
   "NHL": "https://site.api.espn.com/apis/site/v2/sports/hockey/nhl",
   "MLB": "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb",
   "NFL": "https://site.api.espn.com/apis/site/v2/sports/football/nfl",
+  "College Football": "https://site.api.espn.com/apis/site/v2/sports/football/college-football",
+  "NCAA Football": "https://site.api.espn.com/apis/site/v2/sports/football/college-football",
   "NCAA Basketball": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball",
   "NCAA": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball",
   "College Basketball": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball",
+  // College / minor team sports — lesser-known, more "asleep" picks (user priority)
+  "NCAA Baseball": "https://site.api.espn.com/apis/site/v2/sports/baseball/college-baseball",
+  "College Baseball": "https://site.api.espn.com/apis/site/v2/sports/baseball/college-baseball",
+  "NCAA Softball": "https://site.api.espn.com/apis/site/v2/sports/baseball/college-softball",
+  "WNCAA Basketball": "https://site.api.espn.com/apis/site/v2/sports/basketball/womens-college-basketball",
+  // Soccer (US-most-bet)
   "Soccer - EPL": "https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1",
   "Soccer - La Liga": "https://site.api.espn.com/apis/site/v2/sports/soccer/esp.1",
   "Soccer - Bundesliga": "https://site.api.espn.com/apis/site/v2/sports/soccer/ger.1",
   "Soccer - Serie A": "https://site.api.espn.com/apis/site/v2/sports/soccer/ita.1",
   "Soccer - Ligue 1": "https://site.api.espn.com/apis/site/v2/sports/soccer/fra.1",
   "Soccer - Champions League": "https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.champions",
+  "Soccer - Europa": "https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.europa",
+  "Soccer - Conference": "https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.europa.conf",
+  "Soccer - MLS": "https://site.api.espn.com/apis/site/v2/sports/soccer/usa.1",
+  "Soccer - Liga MX": "https://site.api.espn.com/apis/site/v2/sports/soccer/mex.1",
+  "Soccer - Brazil Serie A": "https://site.api.espn.com/apis/site/v2/sports/soccer/bra.1",
+  "Soccer - Argentina": "https://site.api.espn.com/apis/site/v2/sports/soccer/arg.1",
   "Soccer": "https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1",
   "Italy Serie A": "https://site.api.espn.com/apis/site/v2/sports/soccer/ita.1",
   "Denmark Superliga": "https://site.api.espn.com/apis/site/v2/sports/soccer/den.1",
   "Poland Ekstraklasa": "https://site.api.espn.com/apis/site/v2/sports/soccer/pol.1",
   "Romania Liga 1": "https://site.api.espn.com/apis/site/v2/sports/soccer/rou.1",
   "Netherlands Eredivisie": "https://site.api.espn.com/apis/site/v2/sports/soccer/ned.1",
+  // Individual sports
   "Tennis - ATP": "https://site.api.espn.com/apis/site/v2/sports/tennis/atp",
   "Tennis - WTA": "https://site.api.espn.com/apis/site/v2/sports/tennis/wta",
   "Tennis": "https://site.api.espn.com/apis/site/v2/sports/tennis/atp",
+  "Golf - PGA": "https://site.api.espn.com/apis/site/v2/sports/golf/pga",
+  "Golf - LIV": "https://site.api.espn.com/apis/site/v2/sports/golf/liv",
+  "Golf - LPGA": "https://site.api.espn.com/apis/site/v2/sports/golf/lpga",
+  "Golf - European": "https://site.api.espn.com/apis/site/v2/sports/golf/eur",
+  "Golf": "https://site.api.espn.com/apis/site/v2/sports/golf/pga",
+  // Combat sports
   "MMA - UFC": "https://site.api.espn.com/apis/site/v2/sports/mma/ufc",
+  "MMA - PFL": "https://site.api.espn.com/apis/site/v2/sports/mma/pfl",
   "MMA": "https://site.api.espn.com/apis/site/v2/sports/mma/ufc",
   "Boxing": "https://site.api.espn.com/apis/site/v2/sports/boxing",
-  "Golf - PGA": "https://site.api.espn.com/apis/site/v2/sports/golf/pga",
-  "Golf": "https://site.api.espn.com/apis/site/v2/sports/golf/pga",
+  // Racing
+  "F1": "https://site.api.espn.com/apis/site/v2/sports/racing/f1",
+  "Formula 1": "https://site.api.espn.com/apis/site/v2/sports/racing/f1",
+  "NASCAR": "https://site.api.espn.com/apis/site/v2/sports/racing/nascar-premier",
+  "IndyCar": "https://site.api.espn.com/apis/site/v2/sports/racing/irl",
+  // Cricket / rugby / global
   "Cricket": "https://site.api.espn.com/apis/site/v2/sports/cricket",
+  "Cricket - IPL": "https://site.api.espn.com/apis/site/v2/sports/cricket/8048",
+  "Rugby - NRL": "https://site.api.espn.com/apis/site/v2/sports/rugby/9",
+  "Rugby - Top 14": "https://site.api.espn.com/apis/site/v2/sports/rugby/270557",
+  "Rugby - Premiership": "https://site.api.espn.com/apis/site/v2/sports/rugby/267979",
   "Australian Football": "https://site.api.espn.com/apis/site/v2/sports/australian-football/afl",
+  "AFL": "https://site.api.espn.com/apis/site/v2/sports/australian-football/afl",
 };
 
 const DEFAULT_SOCCER_URL = "https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1";

@@ -27,10 +27,13 @@ export interface LiveSlateGame {
 }
 
 const DEFAULT_ACTIVE_LEAGUES = [
-  'NBA',
   'NFL',
-  'MLB',
   'NHL',
+  'NBA',
+  'WNBA',
+  'MLB',
+  'College Football',
+  'NCAA Basketball',
   'Soccer - EPL',
   'Soccer - La Liga',
   'Soccer - Serie A',
@@ -68,6 +71,8 @@ function getSportLabel(league: string) {
   if (league === 'NHL') return 'Hockey';
   if (league === 'MLB') return 'Baseball';
   if (league === 'NFL') return 'Football';
+  if (league === 'College Football' || league === 'NCAA Football') return 'College Football';
+  if (league === 'WNBA') return 'Basketball';
   if (league.includes('NCAA')) return 'College Basketball';
   return 'Basketball';
 }

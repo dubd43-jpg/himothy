@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server';
+import { isAdminRequest, adminUnauthorized } from '@/lib/adminAuth';
 import { lockRegistryBoard } from '@/services/pickRegistryService';
 import { runCoordinatedBoardAction } from '@/services/agentCoordinationService';
 
 export async function POST(req: Request) {
+  if (!isAdminRequest(req)) return adminUnauthorized();
   try {
     const body = await req.json().catch(() => ({}));
     const boardDate = typeof body.boardDate === 'string' ? body.boardDate : undefined;

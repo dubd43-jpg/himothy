@@ -13,9 +13,40 @@ import {
   OFFICIAL_TRACKING_START_DATE,
   OFFICIAL_TRACKING_TIMEZONE,
 } from '@/lib/officialTracking';
+import { hasDatabase } from '@/lib/hasDatabase';
 
 function dateKey(date: Date) {
   return getEtDateKey(date);
+}
+
+const EMPTY_STAT = {
+  wins: 0, losses: 0, pushes: 0, voids: 0, pending: 0, units: 0,
+  winPercentage: '0.0%', avgEdgeScore: 0, clvBeatRate: '0.0%', clvTracked: 0,
+};
+
+/** Clean zeroed payload used before any history exists or when no DB is configured. */
+function emptyRecordPayload() {
+  return {
+    success: true,
+    stats: {
+      today: EMPTY_STAT, yesterday: EMPTY_STAT, last7Days: EMPTY_STAT,
+      thisMonth: EMPTY_STAT, allTime: EMPTY_STAT,
+    },
+    category_stats: {},
+    product_line_stats: {},
+    sport_stats: {},
+    market_stats: {},
+    adaptive_policy: null,
+    totals: { ...EMPTY_STAT, totalPicks: 0, winRate: '0.0%' },
+    hasHistory: false,
+    officialStartDate: OFFICIAL_TRACKING_START_DATE,
+    officialTrackingLabel: getOfficialTrackingLabel(),
+    timezone: OFFICIAL_TRACKING_TIMEZONE,
+    liveNightlyRecord: { winsTonight: 0, lossesTonight: 0, pushesTonight: 0, pendingTonight: 0, liveNightRecordDisplay: '0-0' },
+    dailyRecord: null,
+    lifetimeRecord: null,
+    timestamp: new Date().toISOString(),
+  };
 }
 
 function toStats(totals: any) {
@@ -39,9 +70,16 @@ function toStats(totals: any) {
  */
 
 export async function GET() {
+  // No real database yet → return a clean 0-0 record instead of a 500 that
+  // leaves the dashboard stuck on its loading skeleton.
+  if (!hasDatabase()) {
+    return NextResponse.json(emptyRecordPayload());
+  }
   try {
-    await archiveClosedBoards();
+    // Grade BEFORE archiving so finished games settle to W/L while still active —
+    // otherwise they'd be archived as "pending" and never counted.
     await gradeRegistryBoard();
+    await archiveClosedBoards();
     const now = new Date();
     const today = dateKey(now);
     const sevenDaysAgo = new Date(now);
@@ -104,10 +142,7 @@ export async function GET() {
     });
   } catch (error) {
     console.error("Grading Engine Error:", error);
-    return NextResponse.json({ 
-      success: false, 
-      stats: null,
-      error: "Engine synchronization failed" 
-    }, { status: 500 });
+    // Degrade gracefully: show a clean 0-0 record rather than breaking the dashboard.
+    return NextResponse.json(emptyRecordPayload());
   }
 }

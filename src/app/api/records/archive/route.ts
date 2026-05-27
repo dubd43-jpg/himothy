@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { archiveClosedBoards, getDailyBoardRecords, getRegistryArchive } from '@/services/pickRegistryService';
+import { hasDatabase } from '@/lib/hasDatabase';
 import {
   clampToOfficialStartDate,
   getOfficialTrackingLabel,
@@ -16,6 +17,21 @@ export async function GET(request: Request) {
   const to = searchParams.get('to') || undefined;
   const page = Number.parseInt(searchParams.get('page') || '1', 10);
   const pageSize = Number.parseInt(searchParams.get('pageSize') || '20', 10);
+
+  // No database yet → empty archive instead of a 500.
+  if (!hasDatabase()) {
+    return NextResponse.json({
+      success: true,
+      archive: [],
+      dailyRecords: [],
+      pagination: { page: 1, pageSize, total: 0, totalPages: 0 },
+      integrityMode: true,
+      officialStartDate: OFFICIAL_TRACKING_START_DATE,
+      officialTrackingLabel: getOfficialTrackingLabel(),
+      timezone: OFFICIAL_TRACKING_TIMEZONE,
+      message: 'No archived results yet — connect a database to track day-over-day history.',
+    });
+  }
 
   await archiveClosedBoards();
   const [archive, dailyRecords] = await Promise.all([

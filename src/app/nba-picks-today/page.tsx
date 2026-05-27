@@ -1,16 +1,22 @@
-import { Metadata } from "next";
 import { PicksPageTemplate } from "@/components/PicksPageTemplate";
+import { NbaSeoContent } from "@/components/SportSeoContent";
+import { pageMeta } from "@/lib/seo";
 import { Trophy } from "lucide-react";
 
-export const metadata: Metadata = {
-  title: "NBA Picks Today | Sharp NBA Betting & Predictions | HIMOTHY",
-  description: "Get the best NBA picks today from HIMOTHY's decision engine. Advanced roster-verified analysis for every NBA game on the slate.",
-  keywords: ["NBA picks", "NBA picks today", "NBA betting", "NBA predictions", "sharp NBA plays"],
-};
+export const metadata = pageMeta({
+  title: "NBA Picks Today — Free Daily NBA Plays, ATS & Player Props",
+  description: "Tonight's full NBA slate analyzed: moneyline, spread, total, and player prop picks for every game. Multi-book best prices, ATS L10 tendencies, alt prop ladders. Real plays, real reasons.",
+  path: "/nba-picks-today",
+  keywords: [
+    "nba picks today", "free nba picks", "nba ats picks", "nba spread picks",
+    "nba over under picks", "nba player props today", "nba parlay picks",
+    "nba predictions", "best nba picks tonight",
+  ],
+});
 
 export default function NBAPicksTodayPage() {
   const today = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
-  
+
   return (
     <PicksPageTemplate
       sport="NBA"
@@ -21,6 +27,7 @@ export default function NBAPicksTodayPage() {
       backHref="/picks"
       backLabel="All Picks"
       accentNote="🏀 NBA Analysis: We monitor minute-by-minute injury reports and official roster moves."
+      seoContent={<NbaSeoContent />}
     />
   );
 }

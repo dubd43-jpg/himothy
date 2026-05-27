@@ -24,11 +24,45 @@ model User {
   authProviderId   String?   @unique
   role             Role      @default(USER)
   planType         PlanType  @default(FREE)
+  stripeCustomerId String?   @unique
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
   Profile          Profile?
   AuditLogs        AuditLog[]
+  Subscriptions    Subscription[]
+}
+
+// One row per product-access grant. A user may have many. Each row maps to either a
+// Stripe Subscription (recurring) or a one-time payment (day/week pass) — `isOneTime`
+// + `stripeSubscriptionId` distinguishes them. `accessUntil` is the load-bearing field:
+// the access gate just checks `accessUntil > now()` for each productKey.
+model Subscription {
+  id                    String    @id @default(cuid())
+  userId                String
+  productKey            String    // "himothy_pick", "pressure_pack", etc. — see src/lib/products.ts
+  stripeCustomerId      String?   // Stripe Customer this row belongs to
+  stripeSubscriptionId  String?   @unique // Stripe Subscription ID for recurring; null for one-time
+  stripePriceId         String?   // The Price the customer purchased
+  stripePaymentIntentId String?   // For one-time charges
+  status                String    @default("incomplete") // active | trialing | past_due | cancelled | unpaid | incomplete | one_time
+  isOneTime             Boolean   @default(false) // True for day/week passes
+  accessUntil           DateTime  // Hard expiration — the source of truth for "do they have access"
+  currentPeriodEnd      DateTime? // For recurring: end of current billing period
+  cancelAtPeriodEnd     Boolean   @default(false)
+  amountPaidCents       Int?
+  currency              String    @default("usd")
+  metadata              Json?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  cancelledAt           DateTime?
+
+  User                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([productKey])
+  @@index([accessUntil])
+  @@index([stripeCustomerId])
 }
 
 model Profile {

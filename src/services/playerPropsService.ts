@@ -21,10 +21,38 @@
  */
 
 import { LEAGUE_URLS } from '@/lib/validation';
+import { getPlayerPropsForGame, normTeam, type PropLine } from '@/services/oddsApiService';
+
+// Map our internal stat -> The Odds API market key, so we can look up the REAL line.
+function statToMarketKey(stat: PropStat): string | null {
+  switch (stat) {
+    case 'points': return 'player_points';
+    case 'rebounds': return 'player_rebounds';
+    case 'assists': return 'player_assists';
+    case 'threes': return 'player_threes';
+    case 'goals': return 'player_goals';
+    case 'shots': return 'player_shots_on_goal';
+    case 'hits': return 'batter_hits';
+    case 'rbis': return 'batter_rbis';
+    case 'strikeouts': return 'pitcher_strikeouts';
+    case 'passyards': return 'player_pass_yds';
+    case 'rushyards': return 'player_rush_yds';
+    case 'recyards': return 'player_reception_yds';
+    case 'steals': return 'player_steals';
+    case 'blocks': return 'player_blocks';
+    case 'passtd': return 'player_pass_tds';
+    case 'rushtd': return 'player_rush_tds';
+    case 'receptions': return 'player_receptions';
+    case 'homeruns': return 'batter_home_runs';
+    case 'totalbases': return 'batter_total_bases';
+    case 'walks': return 'batter_walks';
+    default: return null;
+  }
+}
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-export type PropStat = 'points' | 'assists' | 'rebounds' | 'threes' | 'goals' | 'shots' | 'hits' | 'rbis' | 'strikeouts' | 'passyards' | 'rushyards' | 'recyards';
+export type PropStat = 'points' | 'assists' | 'rebounds' | 'threes' | 'goals' | 'shots' | 'hits' | 'rbis' | 'strikeouts' | 'passyards' | 'rushyards' | 'recyards' | 'steals' | 'blocks' | 'passtd' | 'rushtd' | 'receptions' | 'homeruns' | 'totalbases' | 'walks';
 export type PropDirection = 'over' | 'under';
 export type PropConfidence = 'ELITE' | 'HIGH' | 'MEDIUM' | 'LOW';
 
@@ -32,6 +60,8 @@ const STAT_DISPLAY: Record<PropStat, string> = {
   points: 'Points', assists: 'Assists', rebounds: 'Rebounds', threes: '3-Pointers',
   goals: 'Goals', shots: 'Shots on Goal', hits: 'Hits', rbis: 'RBIs',
   strikeouts: 'Strikeouts', passyards: 'Pass Yards', rushyards: 'Rush Yards', recyards: 'Rec Yards',
+  steals: 'Steals', blocks: 'Blocks', passtd: 'Pass TDs', rushtd: 'Rush TDs',
+  receptions: 'Receptions', homeruns: 'Home Runs', totalbases: 'Total Bases', walks: 'Walks',
 };
 
 // How much of a player's season average the prop line is typically set at.
@@ -49,6 +79,14 @@ const PROP_LINE_DISCOUNT: Record<PropStat, number> = {
   passyards: 0.87,
   rushyards: 0.85,
   recyards: 0.85,
+  steals: 0.78,    // very volatile defensive stat
+  blocks: 0.76,    // even more volatile
+  passtd: 0.80,
+  rushtd: 0.75,    // TDs are inherently low-frequency
+  receptions: 0.86,
+  homeruns: 0.65,  // HR props are roughly 0.5 or 1.5; line set low
+  totalbases: 0.84,
+  walks: 0.78,
 };
 
 export interface PlayerPropEdge {
@@ -69,12 +107,23 @@ export interface PropRec {
   displayStat: string;
   seasonAvg: number;
   recentAvg: number | null;
-  estimatedLine: number;
+  estimatedLine: number;        // the line we display (REAL market line when available, else a projection)
+  marketLine: number | null;    // the real sportsbook line, if we got one
+  hasRealLine: boolean;         // true = edge measured against the real line (a true value play)
+  overPrice: number | null;
+  underPrice: number | null;
+  bestBook: string | null;
   direction: PropDirection;
   edgePct: number;
   confidence: PropConfidence;
   reason: string;
   sgpFriendly: boolean;
+  // Per-game trend signals (from ESPN gamelog). Populated when game-by-game data exists.
+  last5Avg: number | null;
+  last3Avg: number | null;
+  streakOver: number;          // # of last N games that went OVER the real line
+  streakWindow: number;        // size of the streak window (typically 5)
+  trendDirection: 'up' | 'down' | 'flat';
 }
 
 export interface SGPLeg {
@@ -109,6 +158,126 @@ export interface GamePropsResult {
 
 const gamelogCache = new Map<string, { fetchedAt: number; stats: Partial<Record<PropStat, number>> | null }>();
 const GAMELOG_TTL = 600_000; // 10 min
+
+// ─── PER-GAME GAMELOG (last N games, per stat) ──────────────────────────────
+// Pulls each individual game's stats so we can compute last-5 averages, streak vs the
+// real prop line ("over 4 of 5"), and trend direction — the real prop edge.
+
+const SPORT_URL_PATH: Record<string, string> = {
+  MLB: 'baseball/mlb',
+  NBA: 'basketball/nba',
+  WNBA: 'basketball/wnba',
+  'NCAA Basketball': 'basketball/mens-college-basketball',
+  NHL: 'hockey/nhl',
+  NFL: 'football/nfl',
+  'College Football': 'football/college-football',
+  'NCAA Football': 'football/college-football',
+};
+
+// PropStat -> possible field names in ESPN gamelog `names[]` array (case-insensitive).
+const STAT_NAME_MAP: Record<PropStat, string[]> = {
+  points: ['points', 'pts'],
+  rebounds: ['rebounds', 'totalRebounds', 'reb'],
+  assists: ['assists', 'ast'],
+  threes: ['threePointFieldGoalsMade', 'threes', 'three3pt', '3pm'],
+  goals: ['goals'],
+  shots: ['shotsOnGoal', 'shots'],
+  hits: ['hits'],
+  rbis: ['RBIs', 'rbi'],
+  strikeouts: ['strikeouts', 'strikeOuts'],
+  passyards: ['passingYards', 'passYards', 'passingYds'],
+  rushyards: ['rushingYards', 'rushYards', 'rushingYds'],
+  recyards: ['receivingYards', 'recyards', 'receivingYds'],
+  steals: ['steals', 'stl'],
+  blocks: ['blocks', 'blk'],
+  passtd: ['passingTouchdowns', 'passTouchdowns', 'passingTDs'],
+  rushtd: ['rushingTouchdowns', 'rushTouchdowns', 'rushingTDs'],
+  receptions: ['receptions', 'rec'],
+  homeruns: ['homeRuns', 'hr'],
+  totalbases: ['totalBases', 'totalBasesAB'],
+  walks: ['walks', 'bb', 'baseOnBalls'],
+};
+
+interface PerGameResult { perGame: Partial<Record<PropStat, number[]>>; gameCount: number }
+const perGameCache = new Map<string, { fetchedAt: number; data: PerGameResult | null }>();
+const PERGAME_TTL = 30 * 60_000; // 30 min — game-by-game data doesn't change between fetches
+
+async function fetchAthletePerGameStats(
+  athleteId: string,
+  league: string,
+  statKeys: PropStat[],
+): Promise<PerGameResult | null> {
+  const path = SPORT_URL_PATH[league];
+  if (!path || !athleteId) return null;
+  const cacheKey = `pergame:${league}:${athleteId}`;
+  const cached = perGameCache.get(cacheKey);
+  if (cached && Date.now() - cached.fetchedAt < PERGAME_TTL) return cached.data;
+  try {
+    const r = await fetch(`https://site.web.api.espn.com/apis/common/v3/sports/${path}/athletes/${athleteId}/gamelog`, { cache: 'no-store' });
+    if (!r.ok) { perGameCache.set(cacheKey, { fetchedAt: Date.now(), data: null }); return null; }
+    const j = await r.json();
+    const names: string[] = (j.names || []).map((s: string) => s.toLowerCase());
+    const eventsMap: Record<string, any> = j.events || {};
+    const seasonTypes: any[] = j.seasonTypes || [];
+
+    // Pull every per-game entry across all categories of the current season type.
+    const allEntries: Array<{ eventId: string; date: string; stats: string[] }> = [];
+    for (const sT of seasonTypes) {
+      for (const cat of sT?.categories || []) {
+        for (const ev of cat?.events || []) {
+          const eventId = String(ev.eventId || ev.id || '');
+          const meta = eventsMap[eventId] || {};
+          const date = meta.gameDate || ev.gameDate || '';
+          const stats = ev.stats || [];
+          if (date && Array.isArray(stats)) allEntries.push({ eventId, date, stats });
+        }
+      }
+    }
+    // Most recent first.
+    allEntries.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    const perGame: Partial<Record<PropStat, number[]>> = {};
+    for (const sk of statKeys) {
+      const candidates = STAT_NAME_MAP[sk] || [];
+      let idx = -1;
+      for (const c of candidates) {
+        idx = names.indexOf(c.toLowerCase());
+        if (idx >= 0) break;
+      }
+      if (idx < 0) continue;
+      const series: number[] = [];
+      for (const e of allEntries) {
+        const v = Number.parseFloat(e.stats[idx]);
+        if (Number.isFinite(v)) series.push(v);
+      }
+      if (series.length > 0) perGame[sk] = series;
+    }
+
+    const result: PerGameResult = { perGame, gameCount: allEntries.length };
+    perGameCache.set(cacheKey, { fetchedAt: Date.now(), data: result });
+    return result;
+  } catch {
+    return null;
+  }
+}
+
+// Compute trend signals for a single (player, stat, line) combo from per-game data.
+function computePropTrend(games: number[] | undefined, line: number | null): { last5Avg: number | null; last3Avg: number | null; streakOver: number; streakWindow: number; trendDirection: 'up' | 'down' | 'flat' } {
+  if (!games || games.length === 0) return { last5Avg: null, last3Avg: null, streakOver: 0, streakWindow: 0, trendDirection: 'flat' };
+  const last5 = games.slice(0, 5);
+  const last3 = games.slice(0, 3);
+  const avg = (arr: number[]) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+  const last5Avg = last5.length ? Math.round(avg(last5) * 10) / 10 : null;
+  const last3Avg = last3.length ? Math.round(avg(last3) * 10) / 10 : null;
+  let streakOver = 0;
+  if (line != null && Number.isFinite(line)) {
+    for (const g of last5) if (g > line) streakOver++;
+  }
+  const seasonAvg = avg(games);
+  const last5Real = avg(last5);
+  const trendDirection: 'up' | 'down' | 'flat' = last5Real > seasonAvg * 1.08 ? 'up' : last5Real < seasonAvg * 0.92 ? 'down' : 'flat';
+  return { last5Avg, last3Avg, streakOver, streakWindow: last5.length, trendDirection };
+}
 
 async function fetchAthleteRecentStats(
   athleteId: string,
@@ -237,56 +406,67 @@ function scoreProp(
   recentAvg: number | null,
   injuryStatus: string | null,
   usageBoost: boolean,
+  realLine: PropLine | null,
+  trend: { last5Avg: number | null; last3Avg: number | null; streakOver: number; streakWindow: number; trendDirection: 'up' | 'down' | 'flat' } | null,
 ): PropRec | null {
   if (seasonAvg < 3) return null;  // too small to be meaningful
 
-  const discount = PROP_LINE_DISCOUNT[stat] ?? 0.88;
-  const estimatedLine = Math.round(seasonAvg * discount * 2) / 2;  // round to nearest .5
+  const hasRealLine = !!realLine && Number.isFinite(realLine.line);
+  // Use the REAL sportsbook line when we have it. Only fall back to a projected line for
+  // display when there's no market line — and in that case we do NOT claim any edge.
+  const line = hasRealLine ? realLine!.line : Math.round(seasonAvg * (PROP_LINE_DISCOUNT[stat] ?? 0.88) * 2) / 2;
 
-  // Use recent form if available, otherwise season avg
-  const effectiveAvg = recentAvg ?? seasonAvg;
+  // Projection priority: last-5 game average > recent-aggregated > season avg. Trend > average.
+  const effectiveAvg = trend?.last5Avg ?? recentAvg ?? seasonAvg;
+  const projection = usageBoost ? effectiveAvg * 1.12 : effectiveAvg;
 
-  // Apply usage boost if a key teammate is injured
-  const boostedAvg = usageBoost ? effectiveAvg * 1.12 : effectiveAvg;
-
-  const edge = boostedAvg - estimatedLine;
-  const edgePct = (edge / estimatedLine) * 100;
-
+  const edge = projection - line;
+  const edgePct = line > 0 ? (edge / line) * 100 : 0;
   const direction: PropDirection = edge >= 0 ? 'over' : 'under';
   const absEdgePct = Math.abs(edgePct);
 
+  const injuredSelf = injuryStatus != null && ['OUT', 'DOUBTFUL'].includes(injuryStatus.toUpperCase());
+
   let confidence: PropConfidence;
-  if (absEdgePct >= 20) confidence = 'ELITE';
-  else if (absEdgePct >= 12) confidence = 'HIGH';
+  if (!hasRealLine) {
+    // No real market line → this is a projection only, never a graded value play.
+    confidence = 'LOW';
+  } else if (injuredSelf) {
+    confidence = 'LOW';
+  } else if (absEdgePct >= 18) confidence = 'ELITE';
+  else if (absEdgePct >= 11) confidence = 'HIGH';
   else if (absEdgePct >= 6) confidence = 'MEDIUM';
   else confidence = 'LOW';
 
-  // Injury on pick side degrades confidence
-  if (injuryStatus && ['OUT', 'DOUBTFUL'].includes((injuryStatus || '').toUpperCase())) {
-    confidence = 'LOW';
-  }
-
-  let reason = '';
-  if (direction === 'over') {
-    if (recentAvg && recentAvg > seasonAvg) {
-      reason = `Averaging ${seasonAvg.toFixed(1)} for the season but ${recentAvg.toFixed(1)} recently — line of ~${estimatedLine} is soft.`;
-    } else {
-      reason = `Season avg of ${seasonAvg.toFixed(1)} clears estimated line of ~${estimatedLine} by ${edge.toFixed(1)} (${edgePct.toFixed(0)}% edge).`;
-    }
+  let reason: string;
+  if (!hasRealLine) {
+    reason = `No live market line for this prop yet — shown as a projection (${projection.toFixed(1)}), not a graded value play.`;
+  } else if (direction === 'over') {
+    reason = `We project ${projection.toFixed(1)} vs the real line of ${line} — OVER by ${edge.toFixed(1)} (${edgePct.toFixed(0)}% edge).`;
+    if (recentAvg && recentAvg > seasonAvg) reason += ` Trending up: ${recentAvg.toFixed(1)} recently vs ${seasonAvg.toFixed(1)} on the season.`;
   } else {
-    if (recentAvg && recentAvg < seasonAvg) {
-      reason = `Averaging ${seasonAvg.toFixed(1)} for the season but only ${recentAvg.toFixed(1)} recently — line may be inflated.`;
-    } else {
-      reason = `Line of ~${estimatedLine} exceeds effective avg of ${effectiveAvg.toFixed(1)} — UNDER has value here.`;
-    }
+    reason = `We project ${projection.toFixed(1)} vs the real line of ${line} — UNDER by ${Math.abs(edge).toFixed(1)} (${Math.abs(edgePct).toFixed(0)}% edge).`;
+    if (recentAvg && recentAvg < seasonAvg) reason += ` Cooling off: ${recentAvg.toFixed(1)} recently vs ${seasonAvg.toFixed(1)} on the season.`;
   }
-
-  if (usageBoost) reason += ' Usage boost factored in due to teammate injury.';
+  if (usageBoost && hasRealLine) reason += ' Usage bump applied — a teammate is out.';
+  // Trend reason: weave in the real "X of last N" + heating/cooling signal.
+  if (hasRealLine && trend && trend.streakWindow > 0) {
+    reason += ` OVER in ${trend.streakOver} of last ${trend.streakWindow}.`;
+    if (trend.trendDirection === 'up') reason += ' Trending up.';
+    else if (trend.trendDirection === 'down') reason += ' Cooling off.';
+  }
 
   return {
     stat, displayStat: STAT_DISPLAY[stat], seasonAvg, recentAvg: recentAvg ?? null,
-    estimatedLine, direction, edgePct: Math.round(edgePct * 10) / 10, confidence, reason,
-    sgpFriendly: confidence !== 'LOW' && !['OUT', 'DOUBTFUL'].includes((injuryStatus || '').toUpperCase()),
+    estimatedLine: line, marketLine: hasRealLine ? realLine!.line : null, hasRealLine,
+    overPrice: realLine?.overPrice ?? null, underPrice: realLine?.underPrice ?? null, bestBook: realLine?.bestBook ?? null,
+    direction, edgePct: Math.round(edgePct * 10) / 10, confidence, reason,
+    sgpFriendly: hasRealLine && confidence !== 'LOW' && !injuredSelf,
+    last5Avg: trend?.last5Avg ?? null,
+    last3Avg: trend?.last3Avg ?? null,
+    streakOver: trend?.streakOver ?? 0,
+    streakWindow: trend?.streakWindow ?? 0,
+    trendDirection: trend?.trendDirection ?? 'flat',
   };
 }
 
@@ -461,6 +641,9 @@ export async function buildGamePropsResearch(
   const spread = pickcenter[0]?.spread != null ? Number(pickcenter[0].spread) : null;
   const gameTotal = pickcenter[0]?.overUnder != null ? Number(pickcenter[0].overUnder) : null;
 
+  // Real player-prop lines from the multi-book feed (empty if no key / quota / coverage).
+  const propsMap = await getPlayerPropsForGame(league, awayTeamName, homeTeamName);
+
   // Identify injured players for usage boost detection
   const allInjuredHome = injuredOut.home;
   const allInjuredAway = injuredOut.away;
@@ -489,13 +672,25 @@ export async function buildGamePropsResearch(
 
     if (usageBoostReason) profile.usageBoostReason = usageBoostReason;
 
-    const statsToScore: PropStat[] = ['points', 'assists', 'rebounds', 'threes', 'goals', 'shots', 'hits', 'rbis', 'strikeouts'];
+    const statsToScore: PropStat[] = [
+      'points', 'assists', 'rebounds', 'threes', 'steals', 'blocks',          // NBA / WNBA / NCAAB
+      'goals', 'shots',                                                       // NHL (assists already in)
+      'hits', 'rbis', 'strikeouts', 'homeruns', 'totalbases', 'walks',        // MLB
+      'passyards', 'passtd', 'rushyards', 'rushtd', 'recyards', 'receptions', // NFL / CFB
+    ];
+    // Pull per-game gamelog ONCE per player — feeds last-5 + streak vs the real line.
+    let perGame: PerGameResult | null = null;
+    try { perGame = await fetchAthletePerGameStats(profile.athleteId, league, statsToScore); } catch { /* non-blocking */ }
     for (const stat of statsToScore) {
       const seasonAvg = profile.seasonAvg[stat];
       if (seasonAvg === undefined || seasonAvg < 3) continue;
 
       const recentAvg = profile.recentAvg?.[stat] ?? null;
-      const rec = scoreProp(stat, seasonAvg, recentAvg, profile.injuryStatus, usageBoost);
+      const marketKey = statToMarketKey(stat);
+      const realLine = marketKey ? (propsMap[`${normTeam(profile.playerName)}|${marketKey}`] ?? null) : null;
+      const games = perGame?.perGame?.[stat];
+      const trend = games && games.length > 0 ? computePropTrend(games, realLine?.line ?? null) : null;
+      const rec = scoreProp(stat, seasonAvg, recentAvg, profile.injuryStatus, usageBoost, realLine, trend);
       if (rec) profile.propRecs.push(rec);
     }
 

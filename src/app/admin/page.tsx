@@ -344,52 +344,16 @@ export default function AdminDashboard() {
         </div>
 
         <div className="bg-card border-2 border-border rounded-2xl overflow-hidden shadow-xl p-6">
-          <h2 className="text-xl font-bold flex items-center gap-2 mb-6">
-            <Activity className="w-5 h-5 text-primary" /> Comprehensive Odds Ledger
+          <h2 className="text-xl font-bold flex items-center gap-2 mb-2">
+            <Activity className="w-5 h-5 text-primary" /> Odds Ledger (by price)
           </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2">
-            <OddsRow label="-300+" record="45-8" winRate="84%" />
-            <OddsRow label="-250" record="12-4" winRate="75%" />
-            <OddsRow label="-200" record="18-7" winRate="72%" />
-            <OddsRow label="-175" record="14-9" winRate="60%" />
-            <OddsRow label="-150" record="22-14" winRate="61%" />
-            <OddsRow label="-140" record="9-11" winRate="45%" status="warning" />
-            <OddsRow label="-135" record="11-28" winRate="28%" status="danger" />
-            <OddsRow label="-130" record="15-16" winRate="48%" />
-            <OddsRow label="-125" record="19-17" winRate="52%" />
-            <OddsRow label="-120" record="24-22" winRate="52%" />
-            <OddsRow label="-115" record="28-24" winRate="53%" />
-            <OddsRow label="-110" record="45-42" winRate="51%" />
-            <OddsRow label="-105" record="31-29" winRate="51%" />
-            <OddsRow label="EVEN" record="18-18" winRate="50%" />
-            <OddsRow label="+100" record="22-20" winRate="52%" />
-            <OddsRow label="+105" record="32-14" winRate="69%" status="success" />
-            <OddsRow label="+110" record="14-15" winRate="48%" />
-            <OddsRow label="+115" record="11-13" winRate="45%" />
-            <OddsRow label="+120" record="19-14" winRate="57%" />
-            <OddsRow label="+125" record="15-12" winRate="55%" />
-            <OddsRow label="+135" record="14-18" winRate="43%" />
-            <OddsRow label="+150" record="12-20" winRate="37%" />
-            <OddsRow label="+200" record="7-18" winRate="28%" />
-            <OddsRow label="+300+" record="3-15" winRate="16%" />
-          </div>
+          <p className="text-sm text-muted-foreground">
+            Win/loss by odds band populates from the real graded record once a database is connected
+            and picks have settled. No data is shown until then — we never display fabricated numbers.
+          </p>
         </div>
       </section>
     </div>
   );
 }
 
-function OddsRow({ label, record, winRate, status }: { label: string, record: string, winRate: string, status?: 'success' | 'warning' | 'danger' }) {
-  return (
-    <div className={`flex items-center justify-between p-2 rounded-lg border transition-all hover:bg-secondary/30 ${status === 'success' ? 'border-emerald-500/30 bg-emerald-500/5' :
-        status === 'warning' ? 'border-yellow-500/30 bg-yellow-500/5' :
-          status === 'danger' ? 'border-destructive/30 bg-destructive/5' : 'border-transparent'
-      }`}>
-      <span className="font-black text-xs min-w-[60px] tracking-tighter">{label}</span>
-      <span className="text-xs font-bold text-muted-foreground font-mono">{record}</span>
-      <span className={`text-xs font-black ${parseInt(winRate) > 60 ? 'text-emerald-400' :
-          parseInt(winRate) < 40 ? 'text-destructive' : 'text-foreground'
-        }`}>{winRate}</span>
-    </div>
-  );
-}

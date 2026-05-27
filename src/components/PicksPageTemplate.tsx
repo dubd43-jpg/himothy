@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { SmartPickCard } from "@/components/SmartPickCard";
 import { Copy, ExternalLink, CheckSquare, ArrowLeft, RefreshCw, Zap, ShieldAlert, ShieldCheck, Activity, Target } from "lucide-react";
 import { Pick, PickCategory } from "@/lib/picksData";
@@ -19,6 +20,9 @@ interface PicksPageTemplateProps {
   backLabel?: string;
   columns?: 1 | 2 | 3;
   accentNote?: string;
+  // Evergreen prose content rendered below the picks grid for SEO depth.
+  // Pass JSX with semantic <section>/<h2>/<p> markup so Google has real text to index.
+  seoContent?: ReactNode;
 }
 
 export function PicksPageTemplate({
@@ -32,6 +36,7 @@ export function PicksPageTemplate({
   backLabel = "Back to All Picks",
   columns = 2,
   accentNote,
+  seoContent,
 }: PicksPageTemplateProps) {
   const [picks, setPicks] = useState<{ pick: Pick; preValidation: any; tracking: any }[]>(
     []
@@ -118,13 +123,19 @@ export function PicksPageTemplate({
   return (
     <div className="min-h-screen bg-background text-foreground pb-32">
       <div className="px-6 lg:px-10 py-10 max-w-7xl mx-auto flex flex-col gap-8">
-        {/* Back Button */}
-        <Link
-          href={backHref}
-          className="inline-flex items-center gap-2 text-sm font-bold text-muted-foreground hover:text-foreground transition-colors w-max"
-        >
-          <ArrowLeft className="w-4 h-4" /> {backLabel}
-        </Link>
+        {/* Brand + Back Button */}
+        <div className="flex items-center justify-between gap-4">
+          <Link
+            href={backHref}
+            className="inline-flex items-center gap-2 text-sm font-bold text-muted-foreground hover:text-foreground transition-colors w-max"
+          >
+            <ArrowLeft className="w-4 h-4" /> {backLabel}
+          </Link>
+          <Link href="/" className="inline-flex items-center gap-2.5">
+            <Image src="/logo-badge.png" alt="HIMOTHY PLAYS AND PARLAYS" width={34} height={34} className="rounded-full border border-primary/40" />
+            <span className="hidden sm:block text-xs font-black uppercase tracking-tight leading-none">HIMOTHY <span className="text-primary italic">Plays &amp; Parlays</span></span>
+          </Link>
+        </div>
 
         {/* Page Header */}
         <div className="border-b border-border pb-8 relative">
@@ -249,9 +260,9 @@ export function PicksPageTemplate({
                  {title.toLowerCase().includes("grand slam") ? "Holding for Perfection" : "No Action Today"}
                </h3>
                <p className="text-muted-foreground mt-4 max-w-md mx-auto leading-relaxed font-semibold text-lg">
-                 {title.toLowerCase().includes("grand slam") 
-                   ? "The Grand Slam only drops when we hit a 97%+ confidence threshold. We are skipping today to protect your bankroll."
-                   : "Our quality-control audit found no plays that met our strict edge requirements for this category today."
+                 {title.toLowerCase().includes("grand slam")
+                   ? "The Grand Slam is rare — it only drops when we have a genuine near-lock. No qualifying play today, so we're sitting out to protect your bankroll."
+                   : "No plays met our requirements for this category today. Quality over quantity."
                  }
                </p>
             </div>
@@ -274,9 +285,17 @@ export function PicksPageTemplate({
            <ShieldCheck className="w-8 h-8 text-primary" />
            <div>
               <p className="text-xs font-black text-foreground uppercase tracking-widest">HIMOTHY SINGLE SOURCE OF TRUTH</p>
-              <p className="text-xs text-muted-foreground font-medium mt-0.5">Every play rendered is cross-checked across 4 private nodes before being authorized for display.</p>
+              <p className="text-xs text-muted-foreground font-medium mt-0.5">Every play is built from real data and graded honestly against official results — win or lose.</p>
            </div>
         </div>
+
+        {/* SEO content block — sport-specific evergreen prose. Lives below the picks so
+           it never blocks the live data, but gives Google something substantial to index. */}
+        {seoContent && (
+          <section className="mt-12 prose prose-invert max-w-none">
+            {seoContent}
+          </section>
+        )}
       </div>
 
       {/* Floating Slip Bar */}

@@ -4,25 +4,26 @@
  
 @layer base {
   :root {
-    --background: 240 10% 3.9%;
+    /* HIMOTHY PLAYS AND PARLAYS — deep navy + gold, matched to the logo badge */
+    --background: 218 52% 7%;
     --foreground: 0 0% 98%;
-    --card: 240 10% 4.5%;
+    --card: 218 46% 10%;
     --card-foreground: 0 0% 98%;
-    --popover: 240 10% 3.9%;
+    --popover: 218 52% 7%;
     --popover-foreground: 0 0% 98%;
-    --primary: 45 61% 55%;
-    --primary-foreground: 240 5.9% 10%;
-    --secondary: 240 3.7% 15.9%;
+    --primary: 43 74% 54%;
+    --primary-foreground: 218 52% 8%;
+    --secondary: 218 40% 15%;
     --secondary-foreground: 0 0% 98%;
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
-    --accent: 240 3.7% 15.9%;
+    --muted: 218 35% 14%;
+    --muted-foreground: 218 18% 60%;
+    --accent: 218 40% 15%;
     --accent-foreground: 0 0% 98%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
-    --border: 240 3.7% 12%;
-    --input: 240 3.7% 15.9%;
-    --ring: 45 61% 55%;
+    --border: 218 38% 16%;
+    --input: 218 40% 15%;
+    --ring: 43 74% 54%;
     --radius: 0.75rem;
   }
 }
@@ -42,12 +43,12 @@
 }
 
 .premium-gradient {
-  background: radial-gradient(at top left, hsla(45, 61%, 55%, 0.15) 0%, transparent 50%),
-              radial-gradient(at bottom right, hsla(240, 10%, 15%, 0.1) 0%, transparent 50%);
+  background: radial-gradient(at top left, hsla(43, 74%, 54%, 0.14) 0%, transparent 50%),
+              radial-gradient(at bottom right, hsla(218, 60%, 22%, 0.18) 0%, transparent 55%);
 }
 
 .himo-glow {
-  box-shadow: 0 0 30px -10px hsla(45, 61%, 55%, 0.3);
+  box-shadow: 0 0 30px -10px hsla(43, 74%, 54%, 0.35);
 }
 
 .animate-float {

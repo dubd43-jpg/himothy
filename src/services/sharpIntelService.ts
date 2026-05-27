@@ -274,6 +274,12 @@ function teamsMatch(a: string, b: string): boolean {
 }
 
 async function fetchActionNetworkGame(league: string, homeTeam: string, awayTeam: string): Promise<any | null> {
+  // HIMOTHY's own data + AI model is the source of truth. We ALSO pull public
+  // betting splits / sharp money from the market as a CORROBORATING signal — when
+  // it agrees with our read it adds confidence and we surface it on the pick.
+  // It is non-blocking (bonus-only). Set DISABLE_EXTERNAL_CAPPERS=true to turn off.
+  if (process.env.DISABLE_EXTERNAL_CAPPERS === 'true') return null;
+
   const sport = AN_SPORT_MAP[league];
   if (!sport) return null;
 

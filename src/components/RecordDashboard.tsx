@@ -118,7 +118,7 @@ export function RecordDashboard() {
                   <ShieldCheck className="w-6 h-6 text-emerald-500" />
                   <span className="text-[12px] font-black uppercase text-white/60 tracking-[0.3em]">Master Accuracy Index</span>
                </div>
-               <p className="text-xs text-white/20 font-medium tracking-tight">Across all 24 verified international sports nodes</p>
+               <p className="text-xs text-white/20 font-medium tracking-tight">Across all tracked leagues — graded against official results</p>
             </div>
             <div className="flex flex-col items-end gap-1">
                <span className="text-4xl font-black text-emerald-400 font-mono tracking-tighter">{summary.allTime.winPercentage}</span>
@@ -144,7 +144,7 @@ export function RecordDashboard() {
          <div className="flex items-center gap-5 p-6 rounded-2xl bg-black/40 border border-white/5">
             <Cpu className="w-5 h-5 text-primary opacity-40" />
             <p className="text-[10px] text-white/30 font-bold leading-relaxed uppercase tracking-widest">
-               HIMOTHY CORE: REAL-TIME VERIFICATION ENABLED. ALL RECORDS ARE SOURCE-VALIDATED AGAINST OFFICIAL FEEDS.
+               HIMOTHY PLAYS AND PARLAYS: REAL-TIME VERIFICATION ENABLED. EVERY RECORD IS KEPT 100% TRUE — WINS AND LOSSES — AGAINST OFFICIAL FEEDS.
             </p>
          </div>
       </div>

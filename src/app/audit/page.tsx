@@ -67,7 +67,7 @@ export default function AuditPage() {
               <div className="divide-y divide-border">
                  {[
                    { type: "SUPPRESSION", event: "LAL vs GSW", reason: "Stephen Curry (Out) - Roster Integrity Failure", time: "2 min ago" },
-                   { type: "CORRECTION", event: "NYK vs PHI", reason: "Start time variance > 5 min - Synchronized with ESPN Core", time: "14 min ago" },
+                   { type: "CORRECTION", event: "NYK vs PHI", reason: "Start time variance > 5 min - Synchronized with official feed", time: "14 min ago" },
                    { type: "STALE_BLOCK", event: "MCI vs LIV", reason: "Odds feed latency > 30s - Market Validity Failure", time: "21 min ago" },
                    { type: "SUPPRESSION", event: "Personal Play #082", reason: "League phase mismatch: Preseason detection", time: "1 hour ago" }
                  ].map((log, i) => (

@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server';
-import { runDailyDeepResearch, type BoardType } from '@/services/deepResearchService';
+import { type BoardType } from '@/services/deepResearchService';
+import { CACHE_TTL_MS, getOrComputeBoard, getCachedBoard, invalidateBoardCache } from '@/services/dailyBoardCache';
 
-// Per-board cache — each board is cached independently
-const boardCache = new Map<string, { data: any; generatedAt: number }>();
-const CACHE_TTL_MS = 3 * 60 * 1000; // 3 minutes
+// Heavy multi-league research scan — give it room so Vercel doesn't kill it at 10s.
+export const maxDuration = 60;
+export const dynamic = 'force-dynamic';
 
-const VALID_BOARDS: BoardType[] = ['north-american', 'soccer', 'tennis', 'overseas'];
+const VALID_BOARDS: BoardType[] = ['north-american', 'soccer', 'tennis', 'combat', 'individual', 'racing', 'global', 'overseas'];
 
 function parseBoard(raw: string | null): BoardType {
   const lower = (raw || '').toLowerCase();
@@ -19,14 +20,13 @@ export async function GET(req: Request) {
     const board = parseBoard(url.searchParams.get('board'));
     const forceRefresh = url.searchParams.get('refresh') === 'true';
 
-    const cached = boardCache.get(board);
+    const cached = getCachedBoard(board);
     if (!forceRefresh && cached && Date.now() - cached.generatedAt < CACHE_TTL_MS) {
       return NextResponse.json({ success: true, cached: true, ...cached.data });
     }
 
-    const result = await runDailyDeepResearch(board);
-    boardCache.set(board, { data: result, generatedAt: Date.now() });
-
+    if (forceRefresh) invalidateBoardCache(board);
+    const result = await getOrComputeBoard(board);
     return NextResponse.json({ success: true, cached: false, ...result });
   } catch (error) {
     console.error('Daily picks research failed', error);

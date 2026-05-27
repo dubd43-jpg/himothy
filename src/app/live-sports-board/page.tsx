@@ -4,9 +4,9 @@ import { LiveScoreBoard } from "@/components/LiveScoreBoard";
 import { Activity, ArrowLeft } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Live Sports Board | Real-Time Scores & Updates | HIMOTHY",
-  description: "Track live sports scores and real-time game updates on the HIMOTHY Live Board. Continuous feed monitoring for NBA, NHL, and more.",
-  keywords: ["live sports board", "live scores", "real-time sports", "game tracker", "HIMOTHY live"],
+  title: "Live Scores | HIMOTHY Plays and Parlays",
+  description: "Follow the games we're on, live. Real-time scores for every HIMOTHY play.",
+  keywords: ["live scores", "live sports", "game tracker", "HIMOTHY live"],
 };
 
 export default function LiveSportsBoardPage() {
@@ -19,21 +19,14 @@ export default function LiveSportsBoardPage() {
 
         <div className="border-b border-border pb-8">
            <h1 className="text-4xl md:text-5xl font-black uppercase tracking-tight flex items-center gap-4">
-              <Activity className="w-10 h-10 text-red-500 animate-pulse" /> Live Sports Board
+              <Activity className="w-10 h-10 text-primary animate-pulse" /> Live Scores
            </h1>
            <p className="text-muted-foreground text-lg mt-2 max-w-2xl">
-              Our real-time aggregator monitoring every game on the active slate. Roster moves and market updates synchronized in real-time.
+              Every game we have a play on, live. Watch it happen right here.
            </p>
         </div>
 
         <LiveScoreBoard />
-
-        <div className="mt-8 p-6 bg-card border border-border rounded-2xl flex items-center gap-4">
-           <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-           <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">
-              Feed Integrity: All scores verified via consensus truth engine.
-           </p>
-        </div>
       </div>
     </div>
   );

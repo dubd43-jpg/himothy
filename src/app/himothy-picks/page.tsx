@@ -12,7 +12,7 @@ export default function MyPlayPage() {
     <PicksPageTemplate
       category="PERSONAL_PLAY"
       title="My Personal Play"
-      subtitle="The system is for everyone. But occasionally, my own read supersedes the algorithm. This is the play I'm personally riding today — no committee, just me."
+      subtitle="Occasionally my own read supersedes the board. This is the play I'm personally riding today — no committee, just me."
       badge="Exclusive"
       icon={<Crown className="w-9 h-9 text-primary" />}
       backHref="/picks"

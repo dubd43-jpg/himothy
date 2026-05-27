@@ -5,9 +5,17 @@ import { buildGamePropsResearch } from '@/services/playerPropsService';
 const propCache = new Map<string, { data: any; generatedAt: number }>();
 const CACHE_TTL = 2 * 60 * 1000; // 2 minutes
 
-function todayDateStr() {
-  const d = new Date();
-  return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+function etDateStr(offset = 0) {
+  // ET-anchored YYYYMMDD so we don't miss evening games during UTC rollover.
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(new Date());
+  const y = Number(parts.find((p) => p.type === 'year')?.value);
+  const m = Number(parts.find((p) => p.type === 'month')?.value);
+  const d = Number(parts.find((p) => p.type === 'day')?.value);
+  const base = new Date(Date.UTC(y, m - 1, d));
+  base.setUTCDate(base.getUTCDate() + offset);
+  return `${base.getUTCFullYear()}${String(base.getUTCMonth() + 1).padStart(2, '0')}${String(base.getUTCDate()).padStart(2, '0')}`;
 }
 
 async function fetchGameSummary(gameId: string, baseUrl: string) {
@@ -20,13 +28,17 @@ async function fetchGameSummary(gameId: string, baseUrl: string) {
 async function findEvent(gameId: string, league: string) {
   const baseUrl = LEAGUE_URLS[league];
   if (!baseUrl) return null;
-  try {
-    const res = await fetch(`${baseUrl}/scoreboard?dates=${todayDateStr()}`, { cache: 'no-store' });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const event = (data.events || []).find((e: any) => String(e.id) === String(gameId));
-    return event ? { event, baseUrl } : null;
-  } catch { return null; }
+  // Probe today + yesterday + tomorrow ET — handles late games and timezone edges.
+  for (const offset of [0, -1, 1]) {
+    try {
+      const res = await fetch(`${baseUrl}/scoreboard?dates=${etDateStr(offset)}`, { cache: 'no-store' });
+      if (!res.ok) continue;
+      const data = await res.json();
+      const event = (data.events || []).find((e: any) => String(e.id) === String(gameId));
+      if (event) return { event, baseUrl };
+    } catch { /* keep trying */ }
+  }
+  return null;
 }
 
 function extractInjuriesOut(summary: any): { home: string[]; away: string[] } {

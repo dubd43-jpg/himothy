@@ -138,7 +138,7 @@ function buildDeepPrompt(pick: DeepPickResult): string {
     ? 'Focus on: head-to-head, surface suitability, recent tournament form, serving stats, and moneyline value.'
     : 'Focus on: ATS trends, matchup advantages, injury impact, spread value, and closing line projection.';
 
-  return `You are HIMOTHY, an elite sports betting analyst. You are writing analysis for a paying subscriber who trusts your picks completely. Be sharp, specific, and confident. No hedging, no generic statements. Every sentence must reference actual data from the game.
+  return `Analyze this pick and produce the JSON. Use web_search to verify current injuries/lineups/line moves/weather first.
 
 SPORT CONTEXT: ${boardContext}
 
@@ -185,18 +185,7 @@ SYSTEM ANALYSIS:
 FOR: ${pick.reasonsFor.join(' | ')}
 AGAINST: ${pick.reasonsAgainst.join(' | ')}
 
-Write analysis that justifies why this is a ${pick.tier.replace(/_/g, ' ')} pick. Be specific. Reference actual teams, stats, and ATS numbers. Do not use generic phrases.
-
-Respond ONLY with valid JSON:
-{
-  "shortReason": "2-3 sentence sharp summary referencing specific stats/ATS numbers/matchup factors",
-  "fullBreakdown": "4-5 sentence comprehensive breakdown covering ATS trends, injury situation, win probability edge, and why this market has value",
-  "keyAngles": ["angle with specific stat", "ATS or injury angle", "matchup or situational angle"],
-  "injuryNotes": "specific impact of injuries on the pick, or 'Both rosters healthy — no injury concerns.' if none",
-  "marketNotes": "analysis of the spread/line and where the value sits relative to true probability",
-  "riskNotes": "the exact scenario (team performance, injury update, etc.) that makes this pick lose",
-  "killCase": "one specific event before tipoff/kickoff that would make you pass on this pick entirely"
-}`;
+Justify why this is a ${pick.tier.replace(/_/g, ' ')} pick using the data above PLUS what you find via web_search. Then return the JSON object.`;
 }
 
 // ─── Fallbacks ────────────────────────────────────────────────────────────────
@@ -222,6 +211,28 @@ const DEEP_FALLBACK: DeepAIExplanation = {
   riskNotes: 'Variance in team execution and last-minute lineup changes are the main risk factors.',
   killCase: 'A key player ruled out within 2 hours of tip-off/first pitch would reduce confidence significantly.',
 };
+
+// Stable system prompt (cached) — instructs Claude to dive deep with live web research.
+const DEEP_SYSTEM = `You are HIMOTHY, an elite sports betting analyst writing for a paying subscriber who trusts your picks completely. You are not a hype machine — you are honest, sharp, and specific.
+
+Before you finalize, USE THE web_search TOOL to pull the most current real-world context for this exact game:
+- Confirmed injuries, scratches, and starting lineups / starting pitchers (search team + "injury report" or "starting lineup" + today's date)
+- Late line movement and where sharp money is going
+- Weather for outdoor games
+- Any breaking news (rest, travel, suspensions, motivation) that the raw stats miss
+
+Synthesize what you find with the model's data signals into a clear, confident, honest case for why this is the best pick — and be straight about the real risk. Cite concrete facts (names, numbers, ERAs, line moves). Never invent a stat. If web search contradicts the pick, say so in riskNotes/killCase.
+
+Respond ONLY with a valid JSON object, no prose before or after:
+{
+  "shortReason": "2-3 sentence sharp summary referencing specific stats/numbers/matchup factors and anything notable found via web search",
+  "fullBreakdown": "4-6 sentence deep breakdown combining the data signals with current real-world context (injuries, lineups, line moves, weather) and why this market has value",
+  "keyAngles": ["angle with a specific stat or fact", "injury/lineup or sharp-money angle", "matchup or situational angle"],
+  "injuryNotes": "specific, CURRENT injury/lineup impact verified via web search, or 'Both sides healthy per latest reports.'",
+  "marketNotes": "where the line/price sits vs true probability, plus any line movement found",
+  "riskNotes": "the exact scenario that makes this pick lose",
+  "killCase": "one specific event before game time that would make you pass entirely"
+}`;
 
 // ─── Exported functions ───────────────────────────────────────────────────────
 
@@ -263,15 +274,34 @@ export async function generateDeepExplanation(pick: DeepPickResult): Promise<Dee
 
   try {
     const client = new Anthropic({ apiKey });
-    const prompt = buildDeepPrompt(pick);
 
-    const message = await client.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 1024,
-      messages: [{ role: 'user', content: prompt }],
-    });
+    // Server-side web search: Claude pulls current injuries/lineups/line moves/weather
+    // from around the web and synthesizes it into the reasoning. Dynamic filtering is
+    // built into this tool version (no code-execution tool, no beta header needed).
+    const tools: any[] = [{ type: 'web_search_20260209', name: 'web_search', max_uses: 5 }];
 
-    const text = message.content[0]?.type === 'text' ? message.content[0].text : '';
+    const system: any[] = [{ type: 'text', text: DEEP_SYSTEM, cache_control: { type: 'ephemeral' } }];
+    const messages: any[] = [{ role: 'user', content: buildDeepPrompt(pick) }];
+
+    const params = { model: 'claude-opus-4-7', max_tokens: 2048, system, tools, messages };
+
+    let response = await client.messages.create(params as any);
+
+    // Web search runs as a server-side loop; if it hits the server cap it returns
+    // stop_reason "pause_turn" — re-send the accumulated turn to resume (no extra prompt).
+    let guard = 0;
+    while (response.stop_reason === 'pause_turn' && guard < 4) {
+      messages.push({ role: 'assistant', content: response.content });
+      response = await client.messages.create({ ...params, messages } as any);
+      guard++;
+    }
+
+    // Concatenate all text blocks (the response may interleave search-result blocks).
+    const text = (response.content as any[])
+      .filter((b) => b?.type === 'text')
+      .map((b) => b.text)
+      .join('\n');
+
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return DEEP_FALLBACK;
 

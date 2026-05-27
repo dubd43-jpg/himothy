@@ -1,12 +1,18 @@
-import { Metadata } from "next";
 import { PicksPageTemplate } from "@/components/PicksPageTemplate";
+import { NcaaBasketballSeoContent } from "@/components/SportSeoContent";
+import { pageMeta } from "@/lib/seo";
 import { Zap } from "lucide-react";
 
-export const metadata: Metadata = {
-  title: "NCAA Basketball Picks | College Basketball Best Bets | HIMOTHY",
-  description: "Expert NCAA basketball picks and college basketball best bets. Our model analyzes volume and lineup efficiency to find the edge.",
-  keywords: ["NCAA basketball picks", "college basketball picks", "CBB best bets", "March Madness picks", "college basketball predictions"],
-};
+export const metadata = pageMeta({
+  title: "College Basketball Picks Today — NCAAB ATS, Total & ML",
+  description: "Today's NCAAB slate: spread, moneyline, and total picks for every Division I game. Pace-adjusted analytics, ATS L10 tendencies, multi-book best prices, conference-tournament edges.",
+  path: "/ncaa-basketball-picks",
+  keywords: [
+    "ncaa basketball picks", "college basketball picks today", "ncaab picks",
+    "cbb picks", "march madness picks", "college basketball predictions",
+    "ncaab ats picks", "college hoops picks today", "ncaab spread picks",
+  ],
+});
 
 export default function NCAABasketBallPicksPage() {
   const today = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
@@ -21,6 +27,7 @@ export default function NCAABasketBallPicksPage() {
       backHref="/picks"
       backLabel="All Picks"
       accentNote="🔥 CBB Edge: High-variance markets where our model identifies massive efficiency gaps."
+      seoContent={<NcaaBasketballSeoContent />}
     />
   );
 }

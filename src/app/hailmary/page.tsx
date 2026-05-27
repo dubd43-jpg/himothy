@@ -12,7 +12,7 @@ export default function HailmarysPage() {
     <PicksPageTemplate
       category="HAILMARY"
       title="The Hailmarys"
-      subtitle="We preach bankroll management. But for the true degens and flip chasers, we drop 10-leg, 15-leg, and 20-leg calculated lottos every single night. Small stakes, massive payouts."
+      subtitle="High-variance long shots — 10-, 15-, and 20-leg lottery tickets. Keep stakes tiny ($1–$5); these rarely hit, but pay big when they do. Always bet responsibly."
       badge="Lotto Tickets"
       icon={<Bomb className="w-9 h-9 text-primary animate-pulse" />}
       backHref="/picks"

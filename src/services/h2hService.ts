@@ -253,7 +253,8 @@ async function buildH2HGames(
   const h2hGames: H2HGame[] = [];
   for (let i = 0; i < uniqueEvents.length; i++) {
     const ev = uniqueEvents[i];
-    const summary = summaries[i].status === 'fulfilled' ? summaries[i].value : null;
+    const settled = summaries[i];
+    const summary = settled.status === 'fulfilled' ? (settled as PromiseFulfilledResult<any>).value : null;
     const { spread, total } = summary ? parseSpreadFromSummary(summary) : { spread: null, total: null };
 
     const totalScore = ev.homeScore + ev.awayScore;

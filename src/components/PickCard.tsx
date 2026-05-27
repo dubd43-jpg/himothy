@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Activity, ShieldAlert, CheckCircle2, Clock, CheckSquare, Square, ExternalLink, Trophy, Cpu, Globe, Medal, ShieldCheck, ListChecks } from "lucide-react";
 import { MouseEvent } from "react";
+import { buildHardRockUrl } from "@/lib/hardRock";
 
 export interface PickProps {
   sport: string;
@@ -243,7 +244,7 @@ export function PickCard({
       <div className="p-12 md:p-16 border-t border-white/5 bg-black/60 space-y-12">
          <div className="flex flex-col lg:flex-row items-center justify-between gap-12">
            <div className="flex flex-col gap-3">
-              <span className="text-[12px] font-black text-white/20 uppercase tracking-[0.4em]">HIMOTHY CORE v4.2 Deployment Ready</span>
+              <span className="text-[12px] font-black text-white/20 uppercase tracking-[0.4em]">HIMOTHY PLAYS AND PARLAYS</span>
               <div className="flex items-center gap-3 text-emerald-400 font-bold text-base uppercase tracking-[0.3em]">
                  <ShieldCheck className="w-6 h-6" />
                  Market Node Authenticated via {sportsbook}
@@ -251,14 +252,14 @@ export function PickCard({
            </div>
            
            {!liveStatus || liveStatus === "PENDING" ? (
-             <a 
-               href="https://hardrock.bet"
-               target="_blank" 
+             <a
+               href={buildHardRockUrl({ league: sport, selection, homeTeam: game.split(/\s+(?:vs?|@|at)\s+/i)[1], awayTeam: game.split(/\s+(?:vs?|@|at)\s+/i)[0] })}
+               target="_blank"
                rel="noopener noreferrer"
                onClick={handleOutboundClick}
                className="w-full lg:w-auto px-16 py-8 bg-primary hover:bg-white text-black text-lg font-black rounded-[2rem] transition-all flex items-center justify-center gap-5 shadow-[0_30px_70px_-10px_rgba(212,168,67,0.4)] hover:shadow-[0_30px_80px_-10px_rgba(255,255,255,0.3)] transform hover:-translate-y-3 active:scale-95"
              >
-               EXECUTE STRATEGY <ExternalLink className="w-6 h-6" />
+               BET ON HARD ROCK <ExternalLink className="w-6 h-6" />
              </a>
            ) : (
               <div className={`w-full lg:w-auto px-16 py-8 border-2 rounded-[2rem] text-center flex flex-col gap-2 min-w-[300px]

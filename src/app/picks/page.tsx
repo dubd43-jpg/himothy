@@ -2,6 +2,10 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
+import { useLiveScores } from "@/components/useLiveScores";
+import { computeLiveState, type LivePickState } from "@/lib/livePickStatus";
+import { OutrightTournaments } from "@/components/OutrightTournaments";
 import {
   ArrowLeft,
   Crown,
@@ -30,7 +34,6 @@ import {
   Users,
   Trophy,
 } from "lucide-react";
-import { LiveScoreBoard } from "@/components/LiveScoreBoard";
 
 // ─── Power 20 Types ───────────────────────────────────────────────────────────
 
@@ -46,10 +49,18 @@ interface Power20Group {
   group: number; label: string; legs: Power20Pick[];
   estimatedOdds: string; estimatedDecimal: number;
 }
+interface Power20Parlay {
+  label: string; legCount: number; legs: Power20Pick[];
+  estimatedOdds: string; estimatedDecimal: number; payoutOnDollar: string;
+  avgWinProbability: number;
+}
 interface Power20Data {
   success: boolean; boardDate: string; generatedAt: string;
   totalScanned: number; picks: Power20Pick[];
   parlayGroups: Power20Group[]; avgWinProbability: number;
+  parlay20?: Power20Parlay | null;
+  parlay10?: Power20Parlay | null;
+  excludedFromRegularCards?: number;
 }
 
 // ─── Deep Research Types ──────────────────────────────────────────────────────
@@ -79,11 +90,30 @@ interface DeepPick {
   aiExplanation: { shortReason: string; fullBreakdown: string; keyAngles: string[]; injuryNotes: string; marketNotes: string; riskNotes: string; killCase: string; } | null;
   sharpFlags?: SharpFlag[];
   sharpIntel?: { betting: any; weather: any; rest: any; sharpScore: number; } | null;
+  bigGameLabel?: string | null;
+}
+interface NrfiPlay {
+  gameId: string; eventName: string; league: string; startTime: string;
+  awayTeam: string; homeTeam: string; awayPitcher: string; homePitcher: string;
+  awayERA: number | null; homeERA: number | null; nrfiScore: number; reason: string; odds: string;
 }
 interface DailyPicksData {
   success: boolean; boardDate: string; generatedAt: string;
   grandSlam: DeepPick | null; pressurePack: DeepPick[]; vip4Pack: DeepPick[]; parlayPlan: DeepPick[];
+  marquee?: DeepPick[];
+  nrfi?: NrfiPlay[];
+  valuePlays?: DeepPick[];
+  asleepPicks?: DeepPick[];
+  outrights?: OutrightTournament[];
   totalGamesScanned: number;
+}
+
+interface OutrightTournament {
+  sportKey: string;
+  title: string;
+  commenceTime: string | null;
+  contenders: { name: string; bestPrice: number | null; bestBook: string | null; consensusProb: number | null }[];
+  bookCount: number;
 }
 
 // ─── Player Props Types ───────────────────────────────────────────────────────
@@ -92,7 +122,7 @@ type PropConf = 'ELITE' | 'HIGH' | 'MEDIUM' | 'LOW';
 interface PropRec { stat: string; displayStat: string; seasonAvg: number; recentAvg: number | null; estimatedLine: number; direction: 'over' | 'under'; edgePct: number; confidence: PropConf; reason: string; sgpFriendly: boolean; playerName?: string; }
 interface SGPLeg { type: string; description: string; player: string | null; team: string | null; correlation: string; }
 interface SGPBuild { label: string; legs: SGPLeg[]; theme: string; rationale: string; estimatedMultiple: number; riskLevel: string; }
-interface PlayerPropEdge { playerName: string; position: string; teamName: string; seasonAvg: Record<string, number>; recentAvg: Record<string, number> | null; usageBoostReason: string | null; propRecs: PropRec[]; }
+interface PlayerPropEdge { athleteId: string; playerName: string; position: string; teamName: string; seasonAvg: Record<string, number>; recentAvg: Record<string, number> | null; usageBoostReason: string | null; propRecs: PropRec[]; }
 interface GamePropsData { success: boolean; dataAvailable: boolean; playerProps: PlayerPropEdge[]; sgpBuilds: SGPBuild[]; topProps: (PropRec & { playerName: string })[]; }
 
 // ─── Props & SGP Components ───────────────────────────────────────────────────
@@ -350,25 +380,41 @@ function PropsAndSGPPanel({ gameId, league, homeTeamId, awayTeamId }: {
   const [loadingH2H, setLoadingH2H] = useState(true);
   const [tab, setTab] = useState<'props' | 'h2h'>('h2h');
 
+  const fetchH2H = async (playerIds: string) => {
+    if (!homeTeamId || !awayTeamId) { setLoadingH2H(false); return; }
+    const url = `/api/research/h2h?league=${encodeURIComponent(league)}&gameId=${encodeURIComponent(gameId)}&homeTeamId=${encodeURIComponent(homeTeamId)}&awayTeamId=${encodeURIComponent(awayTeamId)}${playerIds ? `&playerIds=${encodeURIComponent(playerIds)}` : ''}`;
+    try {
+      const r = await fetch(url, { cache: 'no-store' });
+      const d = await r.json();
+      if (d.success) setH2hData(d);
+    } catch { /* silent */ }
+    setLoadingH2H(false);
+  };
+
   useEffect(() => {
-    // Fetch player props
+    // Start H2H fetch immediately (no player IDs yet)
+    fetchH2H('');
+
+    // Fetch player props; when done, re-fetch H2H with player IDs to add player vs team rows
     fetch(`/api/research/player-props?gameId=${encodeURIComponent(gameId)}&league=${encodeURIComponent(league)}`, { cache: 'no-store' })
       .then((r) => r.json())
-      .then((d) => { if (d.success) setPropsData(d); })
+      .then((d) => {
+        if (d.success) {
+          setPropsData(d);
+          // Enrich H2H with player IDs from top props players (max 5 to avoid overloading)
+          const ids: string[] = (d.playerProps as PlayerPropEdge[])
+            .filter((p) => p.athleteId)
+            .slice(0, 5)
+            .map((p) => p.athleteId);
+          if (ids.length > 0) {
+            setLoadingH2H(true);
+            fetchH2H(ids.join(','));
+          }
+        }
+      })
       .catch(() => {})
       .finally(() => setLoadingProps(false));
-
-    // Fetch H2H data in parallel
-    if (homeTeamId && awayTeamId) {
-      const playerIds = ''; // will be populated after props load
-      fetch(`/api/research/h2h?league=${encodeURIComponent(league)}&gameId=${encodeURIComponent(gameId)}&homeTeamId=${encodeURIComponent(homeTeamId)}&awayTeamId=${encodeURIComponent(awayTeamId)}`, { cache: 'no-store' })
-        .then((r) => r.json())
-        .then((d) => { if (d.success) setH2hData(d); })
-        .catch(() => {})
-        .finally(() => setLoadingH2H(false));
-    } else {
-      setLoadingH2H(false);
-    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameId, league, homeTeamId, awayTeamId]);
 
   const loading = loadingProps && loadingH2H;
@@ -593,78 +639,75 @@ function PublicMoneyBadge({ awayTeam, homeTeam, selectionSide, league }: {
 
 // ─── Deep Research Components ─────────────────────────────────────────────────
 
-function DeepPickCard({ pick, variant }: { pick: DeepPick; variant: 'grand-slam' | 'pressure' | 'vip' | 'parlay' }) {
-  const [showProps, setShowProps] = useState(false);
-
-  const borderCls = variant === 'grand-slam' ? 'border-amber-500/40' : variant === 'pressure' ? 'border-purple-500/40' : variant === 'vip' ? 'border-emerald-500/20' : 'border-orange-500/20';
-  const bgCls = variant === 'grand-slam' ? 'bg-gradient-to-br from-amber-950/60 via-amber-900/20 to-slate-900' : variant === 'pressure' ? 'bg-gradient-to-br from-purple-950/50 via-purple-900/20 to-slate-900' : 'bg-white/[0.03]';
-  const glowCls = variant === 'grand-slam' ? 'bg-amber-500/10' : variant === 'pressure' ? 'bg-purple-500/10' : '';
-  const oddsTextCls = pick.odds && pick.odds.startsWith('+') ? 'text-emerald-400' : 'text-sky-400';
-
+// Clean, clickable SUMMARY card. The full breakdown (win %, H2H, props, form, reasons)
+// lives on the breakdown page the card links to — the whole card is the click target.
+function DeepPickCard({ pick, variant, href, live }: { pick: DeepPick; variant: 'grand-slam' | 'pressure' | 'vip' | 'parlay'; href?: string; live?: LivePickState | null }) {
   const startTime = pick.startTime ? new Date(pick.startTime).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'TBD';
-  const reason = pick.aiExplanation?.shortReason || pick.reasonsFor[0] || null;
+  const accent = variant === 'grand-slam'
+    ? 'border-primary/40 bg-gradient-to-br from-primary/[0.08] to-transparent'
+    : 'border-white/10 bg-white/[0.03]';
+  const showLive = !!live && live.state !== 'pre';
+  const liveClockStr = live ? [live.period, live.clock && live.clock !== '0:00' ? live.clock : null].filter(Boolean).join(' · ') : '';
 
-  return (
-    <article className={`relative overflow-hidden rounded-2xl border ${borderCls} ${bgCls} p-5`}>
-      {glowCls && <div className={`absolute -top-8 -right-8 h-32 w-32 rounded-full blur-3xl ${glowCls} pointer-events-none`} />}
-
-      <div className="relative z-10 space-y-3">
-        {/* Matchup context */}
-        <div className="text-[10px] font-black uppercase tracking-widest text-white/30">
-          {pick.league} · {pick.awayTeam.name} @ {pick.homeTeam.name} · {startTime}
+  const inner = (
+    <article className={`group relative overflow-hidden rounded-2xl border ${accent} p-5 transition-all ${href ? 'hover:border-primary/50' : ''}`}>
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-2 text-[10px] font-black uppercase tracking-widest text-white/30">
+          <span className="truncate">{pick.league} · {pick.awayTeam.name} @ {pick.homeTeam.name}</span>
+          <span className="shrink-0">
+            {showLive
+              ? live!.state === 'live'
+                ? <span className="inline-flex items-center gap-1 text-red-400"><span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" /> Live</span>
+                : <span className="text-white/50">Final</span>
+              : startTime}
+          </span>
         </div>
-
-        {/* THE PICK */}
         <div className="flex items-center justify-between gap-3">
           <div className="text-2xl font-black text-white leading-tight md:text-3xl">{pick.selection}</div>
           {pick.odds && (
-            <div className={`shrink-0 rounded-xl border border-current/20 bg-current/10 px-4 py-2 text-2xl font-black tabular-nums ${oddsTextCls}`}>
-              {pick.odds}
-            </div>
+            <div className="shrink-0 rounded-xl border border-primary/25 bg-primary/10 px-4 py-2 text-xl font-black tabular-nums text-primary">{pick.odds}</div>
           )}
         </div>
-
-        {/* Sharp signal badges */}
-        {pick.sharpFlags && pick.sharpFlags.length > 0 && (
-          <SharpSignalBadges flags={pick.sharpFlags} />
+        {showLive && (
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between gap-2 text-sm font-bold tabular-nums">
+              <span className="text-white/70">
+                {pick.awayTeam.abbreviation} <span className="text-white">{live!.awayScore}</span>
+                <span className="text-white/25"> – </span>
+                <span className="text-white">{live!.homeScore}</span> {pick.homeTeam.abbreviation}
+              </span>
+              {liveClockStr && <span className="text-[11px] font-bold italic text-primary">{liveClockStr}</span>}
+            </div>
+            {live!.meterPct != null && (
+              <div className="h-1.5 w-full rounded-full bg-white/5 overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-700 ${
+                    live!.state === 'final'
+                      ? live!.result === 'won' ? 'bg-emerald-400' : live!.result === 'push' ? 'bg-white/30' : 'bg-red-500'
+                      : live!.trend === 'down' ? 'bg-amber-500' : 'bg-emerald-400'
+                  }`}
+                  style={{ width: `${live!.meterPct}%` }}
+                />
+              </div>
+            )}
+          </div>
         )}
-
-        {/* One reason */}
-        {reason && (
-          <p className="text-xs text-white/50 leading-relaxed">{reason}</p>
+        {pick.sharpFlags && pick.sharpFlags.length > 0 && <SharpSignalBadges flags={pick.sharpFlags} />}
+        {href && (
+          <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-primary/70 group-hover:text-primary transition-colors">
+            {showLive && live!.state === 'final' ? 'View result & breakdown →' : 'View full breakdown →'}
+          </div>
         )}
-
-        {/* Public money — subtle, loads async */}
-        <PublicMoneyBadge
-          awayTeam={pick.awayTeam.name}
-          homeTeam={pick.homeTeam.name}
-          selectionSide={pick.selectionSide}
-          league={pick.league}
-        />
-
-        {/* H2H + Props panel */}
-        {showProps && (
-          <PropsAndSGPPanel
-            gameId={pick.gameId}
-            league={pick.league}
-            homeTeamId={pick.homeTeam.id}
-            awayTeamId={pick.awayTeam.id}
-          />
-        )}
-
-        {/* Panel toggle */}
-        <button
-          type="button"
-          onClick={() => setShowProps(!showProps)}
-          className={`flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider transition-colors ${showProps ? 'text-sky-400 hover:text-sky-300' : 'text-white/20 hover:text-white/50'}`}
-        >
-          <TrendingUp className="h-3 w-3" />
-          {showProps ? 'Hide' : 'H2H · Props · Form'}
-        </button>
       </div>
     </article>
   );
+
+  if (!href) return inner;
+  return href.startsWith('http')
+    ? <a href={href} target="_blank" rel="noopener noreferrer" className="block">{inner}</a>
+    : <Link href={href} className="block">{inner}</Link>;
 }
+
 
 function CompactParlayLeg({ pick, index }: { pick: DeepPick; index: number }) {
   const oddsTextCls = pick.odds && pick.odds.startsWith('+') ? 'text-emerald-400' : 'text-sky-400';
@@ -757,8 +800,12 @@ function Power20Section() {
     );
   }
 
-  const group = data.parlayGroups[activeGroup];
+  const parlay20 = data.parlay20;
+  const parlay10 = data.parlay10;
+  const activeParlay = activeGroup === 0 ? parlay20 : parlay10;
 
+  // One full 20-leg parlay + a 10-leg variant. Both are heavy chalk and dedupe against
+  // the regular cards — same game is OK, same EXACT pick is not.
   return (
     <div className="space-y-8">
       {/* Meta bar */}
@@ -767,9 +814,11 @@ function Power20Section() {
           <div className="text-[10px] font-black uppercase tracking-widest text-white/30">
             {data.picks.length} favorites found · {data.totalScanned} games scanned · Avg win prob {data.avgWinProbability.toFixed(1)}%
           </div>
-          <div className="text-[10px] text-white/20 font-semibold">
-            {data.parlayGroups.length} mini-parlays built · 5 legs each
-          </div>
+          {data.excludedFromRegularCards ? (
+            <div className="text-[10px] text-white/20 font-semibold">
+              {data.excludedFromRegularCards} excluded (already on the regular cards)
+            </div>
+          ) : null}
         </div>
         <button
           type="button"
@@ -781,73 +830,54 @@ function Power20Section() {
         </button>
       </div>
 
-      {/* Parlay group tabs */}
+      {/* Two-parlay toggle: Power 20 (moonshot) vs Power 10 (daily play) */}
       <div>
-        <div className="flex flex-wrap gap-2 mb-5">
-          {data.parlayGroups.map((g, i) => {
+        <div className="grid grid-cols-2 gap-2 mb-5">
+          {[parlay20, parlay10].map((p, i) => {
+            if (!p) return <div key={i} className="rounded-2xl border border-white/8 bg-white/[0.02] p-4 text-center text-xs text-white/30">Not enough chalk</div>;
             const active = activeGroup === i;
-            const decColor = g.estimatedDecimal >= 5 ? 'text-emerald-400' : g.estimatedDecimal >= 2.5 ? 'text-sky-400' : 'text-white/50';
             return (
               <button
-                key={g.group}
+                key={p.label}
                 type="button"
                 onClick={() => setActiveGroup(i)}
-                className={`rounded-2xl border px-4 py-2.5 transition-all text-left ${
-                  active
-                    ? 'border-white/20 bg-white/[0.08]'
-                    : 'border-white/8 bg-white/[0.02] hover:border-white/15'
+                className={`rounded-2xl border p-4 transition-all text-left ${
+                  active ? 'border-emerald-400/40 bg-emerald-400/10' : 'border-white/8 bg-white/[0.02] hover:border-white/15'
                 }`}
               >
-                <div className="text-[10px] font-black uppercase tracking-wider text-white/40">{g.label}</div>
-                <div className={`text-lg font-black tabular-nums mt-0.5 ${decColor}`}>{g.estimatedOdds}</div>
-                <div className="text-[10px] text-white/20 font-semibold mt-0.5">{g.legs.length} legs</div>
+                <div className="text-[10px] font-black uppercase tracking-widest text-white/50">{p.label}</div>
+                <div className={`text-2xl font-black tabular-nums mt-1 ${active ? 'text-emerald-400' : 'text-white'}`}>{p.estimatedOdds}</div>
+                <div className="text-[10px] text-white/40 font-bold mt-1">{p.legCount} legs · {p.payoutOnDollar}</div>
               </button>
             );
           })}
         </div>
 
-        {/* Active group legs */}
-        {group && (
-          <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4 space-y-3">
-            <div className="flex items-center justify-between mb-2">
+        {activeParlay && (
+          <div className="rounded-2xl border-2 border-emerald-400/30 bg-gradient-to-br from-emerald-400/[0.05] to-white/[0.02] p-5 space-y-4">
+            <div className="flex items-center justify-between gap-3">
               <div>
-                <div className="text-xs font-black text-white">{group.label}</div>
-                <div className="text-[10px] text-white/30 font-semibold mt-0.5">
-                  Estimated parlay: <span className="text-emerald-400 font-black">{group.estimatedOdds}</span>
-                  {' '}· Place on DraftKings / FanDuel SGP+
+                <div className="text-sm font-black uppercase tracking-widest text-emerald-400">{activeParlay.label}</div>
+                <div className="text-[11px] text-white/40 font-semibold mt-1">
+                  {activeParlay.legCount}-leg parlay · Avg win prob {activeParlay.avgWinProbability.toFixed(1)}%
                 </div>
               </div>
               <div className="text-right">
-                <div className="text-2xl font-black text-white tabular-nums">{group.estimatedOdds}</div>
-                <div className="text-[10px] text-white/30">{(group.estimatedDecimal).toFixed(2)}x</div>
+                <div className="text-3xl font-black text-emerald-400 tabular-nums">{activeParlay.estimatedOdds}</div>
+                <div className="text-[11px] text-white/30 font-bold">{activeParlay.payoutOnDollar}</div>
               </div>
             </div>
             <div className="space-y-2">
-              {group.legs.map((leg, i) => (
-                <Power20Leg key={leg.gameId} pick={leg} index={i} />
+              {activeParlay.legs.map((leg, i) => (
+                <Power20Leg key={leg.gameId + leg.selection} pick={leg} index={i} />
               ))}
             </div>
-            <div className="pt-2 border-t border-white/5 text-[10px] text-white/20 font-semibold leading-relaxed">
-              These are the highest win-probability favorites on today's slate. Each leg has ≥63% win prob per ESPN model.
-              Injury notes shown where applicable. Always verify lines at your book before placing.
+            <div className="pt-2 border-t border-white/5 text-[10px] text-white/30 font-semibold leading-relaxed">
+              All heavy favorites. None of these legs duplicate picks on your regular cards. Verify lines at your book before placing.
             </div>
           </div>
         )}
       </div>
-
-      {/* Full 20 list toggle */}
-      <details className="group">
-        <summary className="cursor-pointer list-none flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-white/30 hover:text-white/60 transition-colors">
-          <ChevronDown className="h-3 w-3 group-open:hidden" />
-          <ChevronUp className="h-3 w-3 hidden group-open:block" />
-          All {data.picks.length} Favorites
-        </summary>
-        <div className="mt-3 space-y-2">
-          {data.picks.map((pick, i) => (
-            <Power20Leg key={pick.gameId} pick={pick} index={i} />
-          ))}
-        </div>
-      </details>
     </div>
   );
 }
@@ -856,6 +886,7 @@ function DeepResearchSection({ board }: { board: string }) {
   const [data, setData] = useState<DailyPicksData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const liveMap = useLiveScores();
 
   const load = async (force = false) => {
     if (force) setRefreshing(true);
@@ -874,7 +905,14 @@ function DeepResearchSection({ board }: { board: string }) {
     }
   };
 
-  useEffect(() => { load(); }, [board]);
+  useEffect(() => {
+    load();
+    // Keep up with the world: re-run the research every 2 minutes so picks reflect
+    // live odds, lineup, and injury changes right up until game time.
+    const interval = setInterval(() => load(true), 120000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [board]);
 
   if (loading) {
     return (
@@ -894,98 +932,85 @@ function DeepResearchSection({ board }: { board: string }) {
   }
 
   const hasPicks = data.grandSlam || data.pressurePack.length > 0 || data.vip4Pack.length > 0 || data.parlayPlan.length > 0;
+  const flatPicks = [data.grandSlam, ...data.pressurePack, ...data.vip4Pack, ...data.parlayPlan].filter((p): p is DeepPick => Boolean(p));
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-6">
+      {/* Live-update notice */}
+      <div className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.04] px-3 py-2">
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+        <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-300/80 leading-snug">
+          Live — picks update through the day and can change up to ~15 min before game time.
+        </p>
+      </div>
       {/* Meta bar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="text-[10px] font-black uppercase tracking-widest text-white/30">
-          {data.totalGamesScanned} games scanned · {data.boardDate} · {new Date(data.generatedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+          Updated {new Date(data.generatedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}{refreshing ? ' · refreshing…' : ''}
         </div>
-        <button
-          type="button"
-          onClick={() => load(true)}
-          disabled={refreshing}
-          className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-white/30 hover:text-white/60 transition-colors disabled:opacity-40"
-        >
-          <RefreshCw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} /> Rescan
+        <button type="button" onClick={() => load(true)} disabled={refreshing}
+          className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-white/30 hover:text-white/60 transition-colors disabled:opacity-40">
+          <RefreshCw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} /> Refresh
         </button>
       </div>
 
-      {!hasPicks && (
-        <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-8 text-center text-white/30 text-sm font-semibold">
-          No qualifying picks found for today's slate. Check back once more games are scheduled.
+      {/* Main board → category tiles (click in to see that category's picks). */}
+      {board === 'north-american' ? (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <CategoryTile href="/grand-slam" icon={Crown} title="HIMOTHY 1-Pick Grand Slam" count={data.grandSlam ? 1 : 0} unit="pick" restingLabel="Resting today" />
+          <CategoryTile href="/pressure-pack" icon={Flame} title="HIMOTHY 2-Pick Pressure Pack" count={data.pressurePack.length} unit="pick" />
+          <CategoryTile href="/vip-picks" icon={ShieldCheck} title="HIMOTHY VIP 4-Pack" count={data.vip4Pack.length} unit="pick" />
+          <CategoryTile href="/parlay-plan" icon={DollarSign} title="$10 Parlay Plan" count={data.parlayPlan.length} unit="leg" />
+          <CategoryTile href="/big-games" icon={Trophy} title="Tonight's Big Games" count={data.marquee?.length ?? 0} unit="game" restingLabel="No big game today" />
+          <CategoryTile href="/nrfi" icon={Radio} title="NRFI — No Runs 1st" count={data.nrfi?.length ?? 0} unit="game" />
+          <CategoryTile href="/value" icon={Target} title="Value Plays — real edge" count={data.valuePlays?.length ?? 0} unit="edge" restingLabel="No value today — sit out" />
+          <CategoryTile href="/edges" icon={TrendingUp} title="Tonight's Edges — top signals" count={(data.valuePlays?.length ?? 0) + (data.grandSlam ? 1 : 0) + data.pressurePack.length + data.vip4Pack.length + data.parlayPlan.length} unit="signal" />
+          <CategoryTile href="/trends" icon={Flame} title="Hot Tendencies — ATS & O/U" count={(data.grandSlam ? 1 : 0) + data.pressurePack.length + data.vip4Pack.length + data.parlayPlan.length + (data.marquee?.length ?? 0)} unit="game" restingLabel="Pulling recent results" />
+          <CategoryTile href="/asleep" icon={Flame} title="Asleep Picks — quiet markets" count={data.asleepPicks?.length ?? 0} unit="play" restingLabel="No quiet edges right now" />
         </div>
-      )}
-
-      {/* Grand Slam */}
-      {data.grandSlam && (
+      ) : hasPicks ? (
+        /* Soccer / Tennis / Overseas — flat "Picks We Like" (no product tiers) */
         <section>
           <div className="mb-4 flex items-center gap-3">
-            <Crown className="h-5 w-5 text-amber-400" />
-            <div>
-              <h2 className="text-sm font-black uppercase tracking-widest text-amber-400">HIMOTHY Grand Slam</h2>
-              <p className="text-[10px] text-white/30 font-semibold mt-0.5">The strongest play of the day — only drops when we really feel it</p>
-            </div>
-          </div>
-          <DeepPickCard pick={data.grandSlam} variant="grand-slam" />
-        </section>
-      )}
-
-      {/* Pressure Pack */}
-      {data.pressurePack.length > 0 && (
-        <section>
-          <div className="mb-4 flex items-center gap-3">
-            <Flame className="h-5 w-5 text-purple-400" />
-            <div>
-              <h2 className="text-sm font-black uppercase tracking-widest text-purple-400">HIMOTHY 2-Pick Pressure Pack</h2>
-              <p className="text-[10px] text-white/30 font-semibold mt-0.5">Our 2 strongest plays — when it's time to apply pressure, it's here</p>
-            </div>
-          </div>
-          <div className="space-y-4">
-            {data.pressurePack.map((pick) => (
-              <DeepPickCard key={pick.gameId} pick={pick} variant="pressure" />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* VIP 4-Pack */}
-      {data.vip4Pack.length > 0 && (
-        <section>
-          <div className="mb-4 flex items-center gap-3">
-            <ShieldCheck className="h-5 w-5 text-emerald-400" />
-            <div>
-              <h2 className="text-sm font-black uppercase tracking-widest text-emerald-400">HIMOTHY VIP 4-Pack</h2>
-              <p className="text-[10px] text-white/30 font-semibold mt-0.5">Your daily foundation — clean action, consistent value</p>
-            </div>
+            <Target className="h-5 w-5 text-primary" />
+            <h2 className="text-sm font-black uppercase tracking-widest text-primary">Picks We Like</h2>
           </div>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            {data.vip4Pack.map((pick) => (
-              <DeepPickCard key={pick.gameId} pick={pick} variant="vip" />
+            {flatPicks.map((pick) => (
+              <DeepPickCard key={pick.gameId} pick={pick} variant="vip" href={`/pick/${pick.gameId}?board=${board}&from=/picks?board=${board}`} live={computeLiveState(pick, liveMap[pick.gameId])} />
             ))}
           </div>
         </section>
-      )}
-
-      {/* $10 Parlay Plan */}
-      {data.parlayPlan.length > 0 && (
-        <section>
-          <div className="mb-4 flex items-center gap-3">
-            <DollarSign className="h-5 w-5 text-orange-400" />
-            <div>
-              <h2 className="text-sm font-black uppercase tracking-widest text-orange-400">$10 Parlay Plan</h2>
-              <p className="text-[10px] text-white/30 font-semibold mt-0.5">Strategic parlays for the flip chasers — not wild guesses, calculated risks</p>
-            </div>
-          </div>
-          <div className="rounded-2xl border border-orange-500/20 bg-orange-500/[0.03] p-5 space-y-2">
-            {data.parlayPlan.map((pick, i) => (
-              <CompactParlayLeg key={pick.gameId} pick={pick} index={i} />
-            ))}
-          </div>
-        </section>
+      ) : (data.outrights && data.outrights.length > 0) ? (
+        /* Individual (golf) / Racing — show outright tournament contenders */
+        <OutrightTournaments tournaments={data.outrights} />
+      ) : (
+        <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-8 text-center text-white/30 text-sm font-semibold">
+          No picks on this board today. Check back once more games are scheduled.
+        </div>
       )}
     </div>
+  );
+}
+
+// Category tile for the Today's board — shows the count and links into that category's
+// page (where the picks live). Keeps the hub from showing every pick wide open, and is
+// the unit that gets locked per-subscription later.
+function CategoryTile({ href, icon: Icon, title, count, unit, restingLabel }: { href: string; icon: any; title: string; count: number; unit: string; restingLabel?: string }) {
+  const has = count > 0;
+  return (
+    <Link href={href} className="group flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-5 transition-all hover:border-primary/50">
+      <div className="flex items-center gap-3 min-w-0">
+        <div className="shrink-0 rounded-xl bg-primary/10 p-2.5 text-primary"><Icon className="h-5 w-5" /></div>
+        <div className="min-w-0">
+          <div className="text-sm font-black uppercase tracking-tight text-white truncate">{title}</div>
+          <div className="text-[11px] font-bold mt-0.5">
+            {has ? <span className="text-emerald-400">{count} {unit}{count > 1 ? 's' : ''} today</span> : <span className="text-white/30">{restingLabel || 'None today'}</span>}
+          </div>
+        </div>
+      </div>
+      <span className="shrink-0 text-lg font-black text-primary/50 group-hover:text-primary transition-colors">→</span>
+    </Link>
   );
 }
 
@@ -1316,29 +1341,34 @@ function PicksHubPageClient() {
 
   const boardOptions = [
     ...(board?.boardOptions || [
-      { key: "north-american", label: "North American" },
+      { key: "north-american", label: "HIMOTHY Board" },
       { key: "soccer", label: "Soccer" },
       { key: "tennis", label: "Tennis" },
-      { key: "overseas", label: "Overseas" },
+      { key: "combat", label: "UFC / Boxing" },
+      { key: "individual", label: "Golf" },
+      { key: "racing", label: "Racing" },
+      { key: "global", label: "Global" },
     ]),
     { key: "power20", label: "⚡ Power 20" },
   ];
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white pb-20">
+    <div className="min-h-screen bg-background text-white pb-20">
       {/* Header */}
-      <header className="sticky top-0 z-50 border-b border-white/5 bg-black/60 backdrop-blur-xl px-4 py-4 md:px-8">
+      <header className="sticky top-0 z-50 border-b border-white/5 bg-background/70 backdrop-blur-xl px-4 py-4 md:px-8">
         <div className="mx-auto max-w-7xl flex items-center justify-between gap-4">
-          <Link href="/" className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-widest text-white/40 hover:text-white transition-colors">
-            <ArrowLeft className="h-4 w-4" /> Home
+          <Link href="/" className="inline-flex items-center gap-2.5 group">
+            <Image src="/logo-badge.png" alt="HIMOTHY PLAYS AND PARLAYS" width={36} height={36} className="rounded-full border border-primary/40" />
+            <span className="hidden sm:block text-sm font-black uppercase tracking-tight leading-none">HIMOTHY <span className="text-primary italic">Plays &amp; Parlays</span></span>
           </Link>
-          <div className="hidden md:flex items-center gap-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400">Live · Refreshes every 30s</span>
+          <div className="flex items-center gap-4 md:gap-6">
+            <Link href="/live-sports-board" className="text-xs font-black uppercase tracking-widest text-white/40 hover:text-white transition-colors">
+              Live Scores
+            </Link>
+            <Link href="/results" className="text-xs font-black uppercase tracking-widest text-white/40 hover:text-white transition-colors">
+              Results
+            </Link>
           </div>
-          <Link href="/results" className="text-xs font-black uppercase tracking-widest text-white/40 hover:text-white transition-colors">
-            Results
-          </Link>
         </div>
       </header>
 
@@ -1395,29 +1425,14 @@ function PicksHubPageClient() {
         {/* Standard board view */}
         {!isPower20 && (
           <>
-        {/* Stats strip */}
-        <div className="mb-8 grid grid-cols-2 gap-3 md:grid-cols-4">
-          {[
-            { label: "Official Picks", val: counts.officialStraightPicks },
-            { label: "Packages", val: counts.officialGroupedProducts },
-            { label: "Parlays", val: counts.parlays },
-            { label: "Total Picks", val: counts.totalUniquePicks },
-          ].map(({ label, val }) => (
-            <div key={label} className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
-              <div className="text-[10px] font-black uppercase tracking-widest text-white/30">{label}</div>
-              <div className="mt-1 text-3xl font-black text-white">{loading ? "—" : val}</div>
-            </div>
-          ))}
-        </div>
-
-        {/* Fallback notice */}
+        {/* Board notice */}
         {!loading && isFallback && (
-          <div className="mb-8 flex items-start gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4">
-            <AlertCircle className="h-5 w-5 shrink-0 text-amber-400 mt-0.5" />
+          <div className="mb-8 flex items-start gap-3 rounded-2xl border border-primary/25 bg-primary/5 p-4">
+            <Zap className="h-5 w-5 shrink-0 text-primary mt-0.5" />
             <div>
-              <div className="text-sm font-black text-amber-300">Today's Live Slate — No Official Picks Published Yet</div>
-              <p className="mt-1 text-xs text-amber-400/70 leading-relaxed">
-                These are today's scheduled games with available odds from ESPN. Official picks will replace this view once the board is published for the day.
+              <div className="text-sm font-black text-primary">Today's HIMOTHY Board</div>
+              <p className="mt-1 text-xs text-white/50 leading-relaxed">
+                Today's plays — the Grand Slam, Pressure Pack, VIP 4-Pack, and $10 Parlay Plan below. Every play comes with the reason we like it.
               </p>
             </div>
           </div>
@@ -1436,65 +1451,42 @@ function PicksHubPageClient() {
         {!loading && (
           <main className="space-y-10">
 
-            {/* 0. Deep Research — tier-based picks */}
-            <section>
-              <div className="mb-6 flex items-center gap-3">
-                <Target className="h-5 w-5 text-primary" />
-                <div>
-                  <h2 className="text-sm font-black uppercase tracking-widest text-white">Today's Research Picks</h2>
-                  <p className="text-[10px] text-white/30 font-semibold mt-0.5">
-                    12-signal deep scan · ATS records · win probability · injury-adjusted
-                  </p>
-                </div>
-              </div>
-              <DeepResearchSection board={selectedBoard} />
-            </section>
-
-            <div className="border-t border-white/5" />
-
-            {/* 1. Main Pick */}
-            {selectedBoard === "north-american" && (
+            {/* 1. Main Pick — always first when it exists */}
+            {selectedBoard === "north-american" && mainPick && (
               <section>
                 <div className="mb-4 flex items-center gap-2">
                   <Crown className="h-5 w-5 text-amber-400" />
-                  <h2 className="text-sm font-black uppercase tracking-widest text-white/60">
-                    {hasOfficialPicks ? "Main Pick" : "Today's Top Game"}
-                  </h2>
+                  <h2 className="text-sm font-black uppercase tracking-widest text-white/60">Main Pick</h2>
                 </div>
-                {mainPick ? (
-                  <MainPickCard pick={mainPick} />
-                ) : corePicks.length > 0 ? (
-                  <MainPickCard pick={corePicks[0]} />
-                ) : (
-                  <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-8 text-center text-white/30 text-sm font-semibold">
-                    No picks available for this board yet.
-                  </div>
-                )}
+                <MainPickCard pick={mainPick} />
               </section>
             )}
 
-            {/* 2. Core Picks / Today's Games */}
+            {/* 2. Core Picks / Research Picks */}
             <section>
               <div className="mb-4 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <ShieldCheck className="h-5 w-5 text-white/50" />
                   <h2 className="text-sm font-black uppercase tracking-widest text-white/60">
-                    {hasOfficialPicks ? "Core Picks" : "Today's Games"}
+                    Today's Picks
                   </h2>
                 </div>
-                <span className="text-xs text-white/30 font-semibold">{corePicks.length} picks</span>
+                {hasOfficialPicks && <span className="text-xs text-white/30 font-semibold">{corePicks.length} picks</span>}
               </div>
 
-              {corePicks.length === 0 ? (
-                <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-8 text-center text-white/30 text-sm font-semibold">
-                  No core picks for this board today.
-                </div>
+              {hasOfficialPicks ? (
+                corePicks.length === 0 ? (
+                  <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-8 text-center text-white/30 text-sm font-semibold">
+                    No additional picks for this board today.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                    {corePicks.map((pick) => <PickCard key={pick.id} pick={pick} />)}
+                  </div>
+                )
               ) : (
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                  {(selectedBoard === "north-american" && !isFallback ? corePicks : corePicks).map((pick) => (
-                    <PickCard key={pick.id} pick={pick} />
-                  ))}
-                </div>
+                /* No official picks yet — show the AI research scan */
+                <DeepResearchSection board={selectedBoard} />
               )}
             </section>
 
@@ -1540,18 +1532,7 @@ function PicksHubPageClient() {
               </section>
             )}
 
-            {/* 5. Live Scores */}
-            <section>
-              <div className="mb-4 flex items-center gap-2">
-                <Activity className="h-5 w-5 text-white/50" />
-                <h2 className="text-sm font-black uppercase tracking-widest text-white/60">Live Scores</h2>
-              </div>
-              <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-4">
-                <LiveScoreBoard />
-              </div>
-            </section>
-
-            {/* 6. History links */}
+            {/* History links */}
             <section>
               <div className="mb-4 flex items-center gap-2">
                 <History className="h-5 w-5 text-white/50" />

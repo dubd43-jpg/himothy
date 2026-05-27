@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getRegistryHistoryDay, gradeRegistryBoard } from '@/services/pickRegistryService';
+import { hasDatabase } from '@/lib/hasDatabase';
 import {
   getOfficialBoardDate,
   getOfficialTrackingLabel,
@@ -12,6 +13,19 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const dateQuery = searchParams.get('date');
     const boardDate = getOfficialBoardDate(dateQuery || undefined);
+
+    // No database yet → clean empty day instead of a 500.
+    if (!hasDatabase()) {
+      return NextResponse.json({
+        success: true,
+        boardDate,
+        stats: { today: { wins: 0, losses: 0, pushes: 0, voids: 0, pending: 0, units: 0, winPercentage: '0.0%', avgEdgeScore: 0, clvBeatRate: '0.0%' } },
+        gradedPicks: [],
+        officialStartDate: OFFICIAL_TRACKING_START_DATE,
+        officialTrackingLabel: getOfficialTrackingLabel(),
+        timezone: OFFICIAL_TRACKING_TIMEZONE,
+      });
+    }
 
     await gradeRegistryBoard(boardDate);
     const history = await getRegistryHistoryDay(boardDate);

@@ -1,12 +1,18 @@
-import { Metadata } from "next";
 import { PicksPageTemplate } from "@/components/PicksPageTemplate";
+import { SportsPicksTodaySeoContent } from "@/components/SportSeoContent";
+import { pageMeta } from "@/lib/seo";
 import { Globe } from "lucide-react";
 
-export const metadata: Metadata = {
-  title: "Sports Picks Today | Expert Betting Picks & Analysis | HIMOTHY",
-  description: "Get expert sports picks for today across all major leagues. NBA, NFL, MLB, NHL, and Global markets analyzed 24/7.",
-  keywords: ["sports picks today", "expert sports picks", "betting analysis", "free sports picks", "sharp sports plays"],
-};
+export const metadata = pageMeta({
+  title: "Sports Picks Today — Free Daily Plays Across Every Sport",
+  description: "Today's full multi-sport board: NBA, NFL, MLB, NHL, WNBA, UFC, tennis, golf, soccer, NCAA, and international. Real plays, tendency math on every pick, capped at -185 single / -450 parlay legs.",
+  path: "/sports-picks-today",
+  keywords: [
+    "sports picks today", "expert sports picks", "free sports picks today",
+    "best picks tonight", "free daily picks", "sharp picks today",
+    "betting picks today", "best bets today", "expert picks daily",
+  ],
+});
 
 export default function SportsPicksTodayPage() {
   const today = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
@@ -20,6 +26,7 @@ export default function SportsPicksTodayPage() {
       backHref="/picks"
       backLabel="All Picks"
       accentNote="🌏 Total Board Coverage: From domestic pro leagues to overseas niche markets."
+      seoContent={<SportsPicksTodaySeoContent />}
     />
   );
 }

@@ -30,7 +30,7 @@ export default function ContactPage() {
               </div>
               <div>
                 <h3 className="text-sm font-black uppercase tracking-widest text-muted-foreground mb-1">Email Support</h3>
-                <p className="text-lg font-bold">support@himothy.com</p>
+                <p className="text-lg font-bold">support@himothypicks.com</p>
               </div>
             </div>
 

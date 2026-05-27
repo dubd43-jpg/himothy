@@ -25,7 +25,7 @@ export default function UserDashboard() {
               Command <span className="text-primary">Center</span>
             </h1>
             <p className="text-muted-foreground mt-2 font-medium">
-              Welcome back. The algorithm has finalized today's global slate.
+              Welcome back. Today's board is set.
             </p>
           </div>
           
@@ -55,7 +55,7 @@ export default function UserDashboard() {
                 <div className="bg-gradient-to-r from-primary/5 to-background border border-primary/40 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
                     <h3 className="font-black text-lg text-foreground uppercase tracking-wide">HIMOTHY GRAND SLAM</h3>
-                    <p className="text-sm text-muted-foreground">The one pick that should never lose.</p>
+                    <p className="text-sm text-muted-foreground">Our single highest-confidence play of the day.</p>
                   </div>
                   <div className="bg-green-500/10 border border-green-500/20 text-green-500 font-bold px-4 py-2 rounded-lg text-sm text-center flex flex-col">
                     <span>ACTIVE</span>
@@ -93,7 +93,7 @@ export default function UserDashboard() {
                    <div className="absolute inset-0 bg-gradient-to-r from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
                    <Zap className="w-8 h-8 text-primary mb-3" />
                    <h3 className="font-bold text-lg mb-1">Today's Slate is LIVE</h3>
-                   <p className="text-sm text-muted-foreground mb-4">The algorithm has released 4 Major picks and 2 Overnight value plays.</p>
+                   <p className="text-sm text-muted-foreground mb-4">Today's board is live — head over to see your picks.</p>
                    <div className="text-primary text-sm font-bold flex items-center gap-1 group-hover:gap-2 transition-all">
                      View Picks <ArrowRight className="w-4 h-4" />
                    </div>
@@ -103,7 +103,7 @@ export default function UserDashboard() {
                    <div className="absolute inset-0 bg-gradient-to-r from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
                    <TrendingUp className="w-8 h-8 text-primary mb-3" />
                    <h3 className="font-bold text-lg mb-1">Yesterday's Recap</h3>
-                   <p className="text-sm text-muted-foreground mb-4">The board hit at a massive 80% clip. Check the public ledger for details.</p>
+                   <p className="text-sm text-muted-foreground mb-4">See the public ledger for our real, verified record — every pick graded honestly, win or lose.</p>
                    <Link href="/results" className="text-primary text-sm font-bold flex items-center gap-1 group-hover:gap-2 transition-all">
                      View Results Ledger <ArrowRight className="w-4 h-4" />
                    </Link>

@@ -1,10 +1,15 @@
 import { NextResponse } from 'next/server';
 import { getRecentCoordinationChanges } from '@/services/agentCoordinationService';
+import { hasDatabase } from '@/lib/hasDatabase';
 
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const limit = Number.isFinite(Number(searchParams.get('limit'))) ? Number(searchParams.get('limit')) : 50;
+
+    if (!hasDatabase()) {
+      return NextResponse.json({ success: true, count: 0, changes: [], timestamp: new Date().toISOString() });
+    }
 
     const changes = await getRecentCoordinationChanges(limit);
 

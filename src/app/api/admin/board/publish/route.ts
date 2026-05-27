@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { isAdminRequest, adminUnauthorized } from '@/lib/adminAuth';
 import { getBoardMainPick, publishRegistryPick } from '@/services/pickRegistryService';
 import { getMarketSnapshotForPick, validateAndTrackGame } from '@/lib/validation';
 import { evaluateEdgeCandidate } from '@/services/edgeDetectionEngine';
@@ -56,6 +57,7 @@ function isNorthAmericaMainPickEligible(sportOrLeague: string) {
 }
 
 export async function POST(req: Request) {
+  if (!isAdminRequest(req)) return adminUnauthorized();
   try {
     const body = await req.json();
     const picks = Array.isArray(body?.picks) ? body.picks : [];

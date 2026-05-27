@@ -12,7 +12,7 @@ export default function OvernightPage() {
     <PicksPageTemplate
       category="OVERNIGHT"
       title="Overnight & Global Action"
-      subtitle="Soccer, Tennis, and early morning markets. The action never sleeps — and neither does our algorithm. These are the global edges you might be sleeping on."
+      subtitle="Soccer, Tennis, and early morning markets. The action never sleeps — and neither do we. These are the global plays you might be sleeping on."
       badge="Global Markets"
       icon={<TrendingUp className="w-9 h-9 text-primary" />}
       backHref="/picks"

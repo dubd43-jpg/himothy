@@ -166,81 +166,103 @@ export function HistoricalResults() {
             </div>
           </div>
 
-          {/* Detailed Pick List */}
-          <div className="bg-card border border-border rounded-3xl overflow-hidden mb-12">
-            <div className="p-6 border-b border-border flex items-center justify-between">
-              <h3 className="text-sm font-black uppercase tracking-widest flex items-center gap-2">
-                <Activity className="w-4 h-4 text-primary" /> Daily Node Execution Log
-              </h3>
-              <div className="text-[10px] font-black text-white/20 uppercase tracking-widest">
-                {data?.picks.length} Events Logged
+          {/* Picks by Category — one section per product, parlay rolled up as ONE ticket */}
+          {(() => {
+            const order = ['GRAND SLAM', 'PRESSURE PACK', 'VIP 4 PACK', 'PARLAY PLAN', 'MARQUEE', 'NRFI'];
+            const labels: Record<string, string> = {
+              'GRAND SLAM': 'HIMOTHY Grand Slam',
+              'PRESSURE PACK': 'HIMOTHY 2-Pick Pressure Pack',
+              'VIP 4 PACK': 'HIMOTHY VIP 4-Pack',
+              'PARLAY PLAN': '$10 Parlay Plan',
+              'MARQUEE': 'Big Games',
+              'NRFI': 'NRFI — No Runs First Inning',
+            };
+            const groups: Record<string, PickResult[]> = {};
+            for (const p of data?.picks || []) {
+              (groups[p.package] = groups[p.package] || []).push(p);
+            }
+            const sections = order.filter((k) => (groups[k]?.length || 0) > 0);
+            if (sections.length === 0) {
+              return (
+                <div className="rounded-3xl border-2 border-dashed border-white/10 bg-white/[0.02] py-16 text-center px-6 mb-12">
+                  <Activity className="mx-auto w-10 h-10 text-white/20 mb-4" />
+                  <span className="text-xs font-black uppercase tracking-widest text-white/30">No picks archived for this date</span>
+                </div>
+              );
+            }
+            return (
+              <div className="space-y-8 mb-12">
+                {sections.map((catKey) => {
+                  const picks = groups[catKey];
+                  if (catKey === 'PARLAY PLAN') {
+                    // Roll up legs into ONE parlay: any LOSS → parlay lost; all WIN → parlay won;
+                    // any PENDING → parlay still live.
+                    const hasLoss = picks.some((p) => p.status === 'LOSS');
+                    const hasPending = picks.some((p) => p.status === 'PENDING');
+                    const allWin = picks.length > 0 && picks.every((p) => p.status === 'WIN');
+                    const parlayStatus: 'WIN' | 'LOSS' | 'PENDING' | 'PUSH' = hasLoss ? 'LOSS' : hasPending ? 'PENDING' : allWin ? 'WIN' : 'PUSH';
+                    const badgeLabel = parlayStatus === 'WIN' ? 'PARLAY HIT' : parlayStatus === 'LOSS' ? 'PARLAY LOST' : parlayStatus === 'PENDING' ? 'PARLAY LIVE' : 'PARLAY PUSH';
+                    const badgeColor =
+                      parlayStatus === 'WIN' ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/5' :
+                      parlayStatus === 'LOSS' ? 'text-red-400 border-red-500/30 bg-red-500/5' :
+                      parlayStatus === 'PENDING' ? 'text-amber-400 border-amber-500/30 bg-amber-500/5' :
+                      'text-white/40 border-white/10 bg-white/[0.03]';
+                    return (
+                      <section key={catKey} className="bg-card border border-border rounded-3xl overflow-hidden">
+                        <div className="px-6 py-4 border-b border-border flex items-center justify-between flex-wrap gap-2">
+                          <h3 className="text-sm font-black uppercase tracking-widest text-white">{labels[catKey]}</h3>
+                          <span className={`rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-widest ${badgeColor}`}>
+                            {picks.length}-leg · {badgeLabel}
+                          </span>
+                        </div>
+                        <div className="p-5 space-y-2">
+                          <p className="text-[11px] font-bold text-white/40 mb-1">All legs must hit. One leg loses = parlay lost.</p>
+                          {picks.map((p, i) => (
+                            <div key={i} className="flex items-center justify-between gap-3 rounded-xl border border-white/8 bg-white/[0.02] p-3">
+                              <div className="flex items-center gap-3 min-w-0">
+                                <span className="shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 text-[10px] font-black text-primary">{i + 1}</span>
+                                <div className="min-w-0">
+                                  <div className="text-sm font-bold text-white truncate">{p.selection}</div>
+                                  <div className="text-[10px] font-bold text-white/30 uppercase tracking-widest mt-0.5">{p.sport} · {p.odds}</div>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <span className={`text-[10px] font-black uppercase tracking-widest ${p.status === 'WIN' ? 'text-emerald-400' : p.status === 'LOSS' ? 'text-red-400' : 'text-white/40'}`}>{p.result}</span>
+                                {p.status === 'WIN' ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : p.status === 'LOSS' ? <XOctagon className="w-4 h-4 text-red-500" /> : <MinusCircle className="w-4 h-4 text-white/20" />}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+                    );
+                  }
+                  // Standard category — each pick is its own bet, listed in its own section
+                  return (
+                    <section key={catKey} className="bg-card border border-border rounded-3xl overflow-hidden">
+                      <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+                        <h3 className="text-sm font-black uppercase tracking-widest text-white">{labels[catKey] ?? catKey}</h3>
+                        <span className="text-[11px] font-black text-white/30 uppercase tracking-widest">{picks.length} pick{picks.length === 1 ? '' : 's'}</span>
+                      </div>
+                      <div className="p-5 space-y-2">
+                        {picks.map((p, i) => (
+                          <div key={i} className="flex items-center justify-between gap-3 rounded-xl border border-white/8 bg-white/[0.02] p-3">
+                            <div className="min-w-0">
+                              <div className="text-sm font-bold text-white truncate">{p.selection}</div>
+                              <div className="text-[10px] font-bold text-white/30 uppercase tracking-widest mt-0.5">{p.sport} · {p.odds}</div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className={`text-[10px] font-black uppercase tracking-widest ${p.status === 'WIN' ? 'text-emerald-400' : p.status === 'LOSS' ? 'text-red-400' : 'text-white/40'}`}>{p.result}</span>
+                              {p.status === 'WIN' ? <CheckCircle2 className="w-5 h-5 text-emerald-500" /> : p.status === 'LOSS' ? <XOctagon className="w-5 h-5 text-red-500" /> : <MinusCircle className="w-5 h-5 text-white/20" />}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  );
+                })}
               </div>
-            </div>
-            
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead className="bg-secondary/30 text-[10px] font-black uppercase tracking-widest text-white/40 border-b border-border">
-                  <tr>
-                    <th className="px-6 py-4">Category</th>
-                    <th className="px-6 py-4">Event / Market</th>
-                    <th className="px-6 py-4">Selection</th>
-                    <th className="px-6 py-4 text-right">Result</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {data?.picks.map((pick, i) => (
-                    <tr key={i} className="group hover:bg-white/[0.02] transition-colors">
-                      <td className="px-6 py-5">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-primary px-2 py-1 bg-primary/5 rounded-md border border-primary/10">
-                          {pick.package}
-                        </span>
-                      </td>
-                      <td className="px-6 py-5">
-                        <div className="flex flex-col gap-1">
-                          <span className="text-[10px] font-bold text-white/20 uppercase tracking-widest">{pick.sport}</span>
-                          <span className="text-sm font-bold text-white group-hover:text-primary transition-colors">{pick.selection}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-5">
-                        <div className="flex flex-col gap-1">
-                           <span className="text-[10px] font-bold text-white/20 uppercase tracking-widest">Pricing</span>
-                           <span className="text-sm font-mono font-bold text-white/60">{pick.odds}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-5 text-right">
-                        <div className="flex items-center justify-end gap-3">
-                           <span className={`text-[10px] font-black uppercase tracking-widest ${
-                             pick.status === 'WIN' ? 'text-emerald-400' : 
-                             pick.status === 'LOSS' ? 'text-red-400' : 
-                             'text-white/40'
-                           }`}>
-                             {pick.result}
-                           </span>
-                           {pick.status === 'WIN' ? (
-                             <CheckCircle2 className="w-5 h-5 text-emerald-500" />
-                           ) : pick.status === 'LOSS' ? (
-                             <XOctagon className="w-5 h-5 text-red-500" />
-                           ) : (
-                             <MinusCircle className="w-5 h-5 text-white/20" />
-                           )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                  {data?.picks.length === 0 && (
-                    <tr>
-                      <td colSpan={4} className="px-6 py-20 text-center">
-                        <div className="flex flex-col items-center gap-2 opacity-20">
-                           <Activity className="w-8 h-8" />
-                           <span className="text-xs font-black uppercase tracking-widest">No node data archived for this date</span>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+            );
+          })()}
 
           {/* Verification Footer */}
           <div className="flex items-center gap-3 p-6 rounded-2xl bg-white/[0.02] border border-white/5">

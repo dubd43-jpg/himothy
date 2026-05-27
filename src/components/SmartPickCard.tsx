@@ -3,6 +3,7 @@ import { Pick } from "@/lib/picksData";
 import { PreGameValidation, LiveGameTracking } from "@/lib/types";
 import { Activity, Clock, CheckCircle2, ShieldAlert, ExternalLink, RefreshCw, CircleDot, CheckSquare, ListChecks, AlertCircle, Globe, Trophy, Cpu, ShieldCheck } from "lucide-react";
 import { MouseEvent } from "react";
+import { buildHardRockUrl } from "@/lib/hardRock";
 
 interface SmartPickCardProps {
   pick: Pick;
@@ -259,7 +260,7 @@ function PreGameCard({ pick, validation, isSelected, onToggleSelect }: { pick: P
 
         <div className="flex flex-col lg:flex-row items-center justify-between gap-12">
            <div className="flex flex-col gap-3">
-              <span className="text-[12px] font-black text-white/20 uppercase tracking-[0.4em]">HIMOTHY CORE v4.2 Deployment Ready</span>
+              <span className="text-[12px] font-black text-white/20 uppercase tracking-[0.4em]">HIMOTHY PLAYS AND PARLAYS</span>
               <div className="flex items-center gap-3 text-emerald-400 font-bold text-base uppercase tracking-[0.3em]">
                  <ShieldCheck className="w-6 h-6" />
                  Market Node Authenticated
@@ -267,14 +268,14 @@ function PreGameCard({ pick, validation, isSelected, onToggleSelect }: { pick: P
            </div>
            
            {validation.lifecycle_state !== "removed" ? (
-             <a 
-               href="https://hardrock.bet"
-               target="_blank" 
+             <a
+               href={buildHardRockUrl({ league: pick.sport, selection: pick.selection, homeTeam: pick.game?.split(/\s+(?:vs?|@|at)\s+/i)[1], awayTeam: pick.game?.split(/\s+(?:vs?|@|at)\s+/i)[0] })}
+               target="_blank"
                rel="noopener noreferrer"
                onClick={handleOutboundClick}
                className="w-full lg:w-auto px-8 py-4 bg-primary hover:bg-white text-black text-sm font-black rounded-xl transition-all flex items-center justify-center gap-3 shadow-lg transform hover:-translate-y-1 active:scale-95"
              >
-               EXECUTE STRATEGY <ExternalLink className="w-4 h-4" />
+               BET ON HARD ROCK <ExternalLink className="w-4 h-4" />
              </a>
            ) : (
                <div className="w-full lg:w-auto px-16 py-8 border border-white/10 text-white/20 text-sm font-black rounded-[2rem] uppercase tracking-[0.6em] text-center">

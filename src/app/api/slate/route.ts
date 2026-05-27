@@ -3,7 +3,10 @@ import { Pick } from '@/lib/picksData';
 import { validateAndTrackGame } from '@/lib/validation';
 import { getRegistryBoardPicks } from '@/services/pickRegistryService';
 import { refreshLiveOpsSnapshot } from '@/services/liveOpsService';
+import { hasDatabase } from '@/lib/hasDatabase';
 import { inferBoardTypeFromContext, parseBoardType } from '@/lib/boardSegmentation';
+
+export const maxDuration = 60;
 
 const FALLBACK_CATEGORIES = [
   'GRAND_SLAM',
@@ -173,6 +176,22 @@ export async function POST(req: Request) {
       }));
 
       return NextResponse.json({ success: true, source: 'candidate-validation', results });
+    }
+
+    // No database yet → serve the live research candidates directly (no Prisma).
+    if (!hasDatabase()) {
+      const snapshot = await refreshLiveOpsSnapshot({ reason: 'api-slate-nodb', maxStaleSeconds: 120 });
+      return NextResponse.json({
+        success: true,
+        source: 'research-fallback',
+        results: buildResearchFallbackResults({
+          category,
+          sport,
+          boardDate,
+          board,
+          candidates: snapshot.topCandidates || [],
+        }),
+      });
     }
 
     const boardRows = await getRegistryBoardPicks({ boardDate, category, sport });

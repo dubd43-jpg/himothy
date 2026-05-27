@@ -7,6 +7,7 @@ import {
   getOfficialBoardDate,
   OFFICIAL_TRACKING_START_DATE,
 } from '@/lib/officialTracking';
+import { logPickEvent } from '@/services/pickAuditLog';
 
 export type RegistryStatus = 'draft' | 'validated' | 'published' | 'locked' | 'graded' | 'archived';
 export type RegistryResult = 'pending' | 'win' | 'loss' | 'push' | 'void';
@@ -39,6 +40,25 @@ export interface RegistryPickInput {
   mainPickReason?: string | null;
   status?: RegistryStatus;
   isPublic?: boolean;
+  // Capture-at-publish (Tier 1 — irreplaceable after the game starts):
+  bestOddsAtPublish?: number | null;
+  bestBookAtPublish?: string | null;
+  fairProbAtPublish?: number | null;
+  valueEdgeAtPublish?: number | null;
+  bookCount?: number | null;
+  sharpPct?: number | null;
+  publicPct?: number | null;
+  restDiffDays?: number | null;
+  weatherJson?: Record<string, unknown> | null;
+  starterHome?: string | null;
+  starterAway?: string | null;
+  oddsBucket?: string | null;
+  // Parlay ticket grouping:
+  parlayTicketId?: string | null;
+  parlayLegPosition?: number | null;
+  parlayLegCount?: number | null;
+  parlayEstimatedOdds?: string | null;
+  sgpTheme?: string | null;
 }
 
 export interface RegistryPickRow {
@@ -234,6 +254,54 @@ async function ensureRegistrySchema() {
   await prisma.$executeRawUnsafe(`ALTER TABLE himothy_pick_registry ADD COLUMN IF NOT EXISTS result_changed_at TIMESTAMPTZ;`);
   await prisma.$executeRawUnsafe(`ALTER TABLE himothy_pick_registry ADD COLUMN IF NOT EXISTS counted_in_daily_totals BOOLEAN NOT NULL DEFAULT FALSE;`);
   await prisma.$executeRawUnsafe(`ALTER TABLE himothy_pick_registry ADD COLUMN IF NOT EXISTS counted_in_lifetime_totals BOOLEAN NOT NULL DEFAULT FALSE;`);
+
+  // Capture-at-publish columns — data we can never recover after the game starts.
+  // Powers CLV analysis, line-shopping proof, value edge measurement, and context mining.
+  await prisma.$executeRawUnsafe(`ALTER TABLE himothy_pick_registry ADD COLUMN IF NOT EXISTS best_odds_at_publish NUMERIC;`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE himothy_pick_registry ADD COLUMN IF NOT EXISTS best_book_at_publish TEXT;`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE himothy_pick_registry ADD COLUMN IF NOT EXISTS fair_prob_at_publish NUMERIC;`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE himothy_pick_registry ADD COLUMN IF NOT EXISTS value_edge_at_publish NUMERIC;`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE himothy_pick_registry ADD COLUMN IF NOT EXISTS book_count INTEGER;`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE himothy_pick_registry ADD COLUMN IF NOT EXISTS sharp_pct NUMERIC;`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE himothy_pick_registry ADD COLUMN IF NOT EXISTS public_pct NUMERIC;`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE himothy_pick_registry ADD COLUMN IF NOT EXISTS rest_diff_days NUMERIC;`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE himothy_pick_registry ADD COLUMN IF NOT EXISTS weather_json JSONB;`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE himothy_pick_registry ADD COLUMN IF NOT EXISTS starter_home TEXT;`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE himothy_pick_registry ADD COLUMN IF NOT EXISTS starter_away TEXT;`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE himothy_pick_registry ADD COLUMN IF NOT EXISTS odds_bucket TEXT;`);
+  // Compute-at-grade columns — diagnostics from the real final score.
+  await prisma.$executeRawUnsafe(`ALTER TABLE himothy_pick_registry ADD COLUMN IF NOT EXISTS cover_margin NUMERIC;`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE himothy_pick_registry ADD COLUMN IF NOT EXISTS final_home_score INTEGER;`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE himothy_pick_registry ADD COLUMN IF NOT EXISTS final_away_score INTEGER;`);
+  // Parlay ticket grouping — so legs can be rolled up by ticket id + leg position.
+  await prisma.$executeRawUnsafe(`ALTER TABLE himothy_pick_registry ADD COLUMN IF NOT EXISTS parlay_ticket_id TEXT;`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE himothy_pick_registry ADD COLUMN IF NOT EXISTS parlay_leg_position INTEGER;`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE himothy_pick_registry ADD COLUMN IF NOT EXISTS parlay_leg_count INTEGER;`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE himothy_pick_registry ADD COLUMN IF NOT EXISTS parlay_estimated_odds TEXT;`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE himothy_pick_registry ADD COLUMN IF NOT EXISTS sgp_theme TEXT;`);
+
+  // ONE-TIME REPAIR (idempotent): the old recorder used a non-word-boundary substring
+  // check for "over"/"under" in the selection text. Teams like "Thunder" contain the
+  // substring "under" and got misclassified as totals — leading to bogus grades.
+  // This UPDATE re-flags misclassified rows as spreads, extracts the signed line from
+  // the selection, and resets them to pending so the corrected grader can settle them.
+  await prisma.$executeRawUnsafe(`
+    UPDATE himothy_pick_registry
+    SET market_type = 'spread',
+        line = COALESCE(substring(selection FROM '([+-]\\d+(?:\\.\\d+)?)\\s*$'), line),
+        result = 'pending',
+        status = 'published',
+        graded_at = NULL,
+        is_locked = FALSE,
+        counted_in_daily_totals = FALSE,
+        counted_in_lifetime_totals = FALSE,
+        lock_time = NULL,
+        updated_at = NOW()
+    WHERE market_type = 'total'
+      AND selection !~* '\\yover\\y'
+      AND selection !~* '\\yunder\\y'
+      AND selection ~ '[+-]\\d+(?:\\.\\d+)?\\s*$';
+  `);
 
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS himothy_daily_board_records (
@@ -577,6 +645,50 @@ export async function publishRegistryPick(input: RegistryPickInput) {
     now
   );
 
+  // Populate the Tier-1 capture-at-publish columns via a follow-up UPDATE — keeps the
+  // main INSERT signature stable while we capture everything that matters at pick time.
+  await prisma.$executeRawUnsafe(
+    `
+      UPDATE himothy_pick_registry SET
+        best_odds_at_publish = $2,
+        best_book_at_publish = $3,
+        fair_prob_at_publish = $4,
+        value_edge_at_publish = $5,
+        book_count = $6,
+        sharp_pct = $7,
+        public_pct = $8,
+        rest_diff_days = $9,
+        weather_json = $10::jsonb,
+        starter_home = $11,
+        starter_away = $12,
+        odds_bucket = $13,
+        parlay_ticket_id = $14,
+        parlay_leg_position = $15,
+        parlay_leg_count = $16,
+        parlay_estimated_odds = $17,
+        sgp_theme = $18
+      WHERE id = $1
+    `,
+    id,
+    input.bestOddsAtPublish == null ? null : Number(input.bestOddsAtPublish),
+    input.bestBookAtPublish || null,
+    input.fairProbAtPublish == null ? null : Number(input.fairProbAtPublish),
+    input.valueEdgeAtPublish == null ? null : Number(input.valueEdgeAtPublish),
+    input.bookCount == null ? null : Number(input.bookCount),
+    input.sharpPct == null ? null : Number(input.sharpPct),
+    input.publicPct == null ? null : Number(input.publicPct),
+    input.restDiffDays == null ? null : Number(input.restDiffDays),
+    JSON.stringify(input.weatherJson ?? null),
+    input.starterHome || null,
+    input.starterAway || null,
+    input.oddsBucket || null,
+    input.parlayTicketId || null,
+    input.parlayLegPosition == null ? null : Number(input.parlayLegPosition),
+    input.parlayLegCount == null ? null : Number(input.parlayLegCount),
+    input.parlayEstimatedOdds || null,
+    input.sgpTheme || null
+  );
+
   const rows = await prisma.$queryRawUnsafe<any[]>(
     `SELECT * FROM himothy_pick_registry WHERE id = $1 LIMIT 1`,
     id
@@ -674,19 +786,40 @@ export async function archiveClosedBoards(currentBoardDate?: string) {
   await ensureRegistrySchema();
   const date = getOfficialBoardDate(currentBoardDate);
 
+  // Only archive picks that have a real settled result. A pending pick getting archived
+  // would freeze it as "pending" forever in the registry — that hides ungraded games and
+  // skews lifetime counts. Leave pending picks in their current status so the grader (or a
+  // human via /audit) can settle them later. We DO still mark the row locked so it can't be
+  // edited in the meantime.
   await prisma.$executeRawUnsafe(
     `
       UPDATE himothy_pick_registry
-      SET status = CASE
-            WHEN status IN ('graded', 'locked', 'published') THEN 'archived'
-            ELSE status
-          END,
+      SET status = 'archived',
           is_locked = TRUE,
           lock_time = COALESCE(lock_time, NOW()),
           updated_at = NOW()
       WHERE board_date < $1::date
         AND board_date >= $2::date
         AND status IN ('published','locked','graded')
+        AND result <> 'pending'
+    `,
+    date,
+    OFFICIAL_TRACKING_START_DATE
+  );
+
+  // Lock (but do NOT archive) any pending picks from prior boards, so they remain visible
+  // for grading/investigation but can't be silently mutated.
+  await prisma.$executeRawUnsafe(
+    `
+      UPDATE himothy_pick_registry
+      SET is_locked = TRUE,
+          lock_time = COALESCE(lock_time, NOW()),
+          updated_at = NOW()
+      WHERE board_date < $1::date
+        AND board_date >= $2::date
+        AND status IN ('published','locked','graded')
+        AND result = 'pending'
+        AND is_locked = FALSE
     `,
     date,
     OFFICIAL_TRACKING_START_DATE
@@ -751,14 +884,16 @@ function gradeResultFromEvent(pick: RegistryPickRow, event: any): RegistryResult
     return 'loss';
   }
 
-  if (market.includes('over') || market.includes('under') || market.includes('total')) {
+  // Totals: market type set explicitly OR selection contains the WORD over/under
+  // (word-boundary so "Thunder" doesn't accidentally match "under").
+  if (market.includes('total') || market === 'over' || market === 'under' || /\b(over|under)\b/i.test(pick.selection)) {
     if (!Number.isFinite(line)) return 'void';
-    if (sel.includes('over')) {
+    if (/\bover\b/i.test(pick.selection)) {
       if (total > line) return 'win';
       if (total < line) return 'loss';
       return 'push';
     }
-    if (sel.includes('under')) {
+    if (/\bunder\b/i.test(pick.selection)) {
       if (total < line) return 'win';
       if (total > line) return 'loss';
       return 'push';
@@ -814,12 +949,16 @@ export async function gradeRegistryBoard(boardDate?: string) {
   await ensureRegistrySchema();
   const date = getOfficialBoardDate(boardDate);
 
+  // Grade EVERY pending pick from the official start date up to and including `date`
+  // (today) — not just one board date. The old single-date filter meant that once the
+  // day rolled over, the prior day's finished games stayed "pending" forever and never
+  // showed up as wins or losses. That's why the record looked empty after game day.
   const rows = await prisma.$queryRawUnsafe<any[]>(
     `
       SELECT * FROM himothy_pick_registry
-      WHERE board_date = $1::date
-        AND board_date >= $2::date
-        AND status IN ('published','locked','graded')
+      WHERE board_date >= $2::date
+        AND board_date <= $1::date
+        AND status IN ('published','locked','graded','archived')
         AND result = 'pending'
       ORDER BY created_at ASC
     `,
@@ -829,15 +968,75 @@ export async function gradeRegistryBoard(boardDate?: string) {
 
   const picks = rows.map(formatRow);
   let gradedCount = 0;
+  const affectedBoards = new Set<string>([date]);
 
-  for (const pick of picks) {
+  for (let i = 0; i < picks.length; i++) {
+    const pick = picks[i];
+    const bdForAudit = (() => {
+      const bd = rows[i]?.board_date;
+      if (!bd) return date;
+      return typeof bd === 'string' ? bd.slice(0, 10) : new Date(bd).toISOString().slice(0, 10);
+    })();
+    const pickKey = `${pick.eventId || pick.id}|${pick.selection || ''}`;
+
     const event = await fetchEventForPick(pick);
-    if (!event) continue;
+    if (!event) {
+      await logPickEvent({
+        event: 'ERROR',
+        boardDate: bdForAudit,
+        pickKey,
+        gameId: pick.eventId || undefined,
+        category: pick.category,
+        selection: pick.selection,
+        odds: pick.odds ?? undefined,
+        status: pick.status,
+        notes: 'grading skipped: could not resolve ESPN event for this pick (still pending)',
+      });
+      continue;
+    }
 
     const result = gradeResultFromEvent(pick, event);
-    if (result === 'pending') continue;
+    if (result === 'pending') {
+      await logPickEvent({
+        event: 'ERROR',
+        boardDate: bdForAudit,
+        pickKey,
+        gameId: pick.eventId || undefined,
+        category: pick.category,
+        selection: pick.selection,
+        odds: pick.odds ?? undefined,
+        status: pick.status,
+        notes: 'grading skipped: game not yet final or result not determinable',
+      });
+      continue;
+    }
     const closingOdds = extractClosingOdds(event);
     const clvDelta = calculateClvDelta(pick.odds, closingOdds);
+
+    // Extract final scores + cover margin (positive = covered by N, negative = missed by N).
+    // This is the diagnostic that tells us "won by exactly 1" vs "covered by 5" — critical
+    // for understanding WHY a pick won or lost vs just W/L.
+    const comp = event.competitions?.[0];
+    const homeRaw = comp?.competitors?.find((c: any) => c.homeAway === 'home');
+    const awayRaw = comp?.competitors?.find((c: any) => c.homeAway === 'away');
+    const finalHome = Number.parseInt(homeRaw?.score || '0', 10);
+    const finalAway = Number.parseInt(awayRaw?.score || '0', 10);
+    const market = (pick.marketType || '').toLowerCase();
+    const sel = (pick.selection || '').toLowerCase();
+    const line = parseNumeric(pick.line);
+    let coverMargin: number | null = null;
+    const isHomeSel = sel.includes((pick.homeTeam || '').toLowerCase()) || sel.includes('home');
+    const isTotalBet = market.includes('total') || /\b(over|under)\b/i.test(pick.selection);
+    if (market.includes('moneyline') || / ml\b/i.test(pick.selection)) {
+      coverMargin = (isHomeSel ? finalHome : finalAway) - (isHomeSel ? finalAway : finalHome);
+    } else if (isTotalBet && Number.isFinite(line)) {
+      const total = finalHome + finalAway;
+      coverMargin = /\bunder\b/i.test(pick.selection) ? line - total : total - line;
+    } else if ((market.includes('spread') || market.includes('handicap') || market.includes('run line')) && Number.isFinite(line)) {
+      const teamScore = isHomeSel ? finalHome : finalAway;
+      const oppScore = isHomeSel ? finalAway : finalHome;
+      coverMargin = teamScore + line - oppScore;
+    }
 
     await prisma.$executeRawUnsafe(
       `
@@ -848,6 +1047,9 @@ export async function gradeRegistryBoard(boardDate?: string) {
           result_changed_at = NOW(),
             closing_odds = $3,
             clv_delta = $4,
+            cover_margin = $5,
+            final_home_score = $6,
+            final_away_score = $7,
             is_locked = TRUE,
           counted_in_daily_totals = TRUE,
           counted_in_lifetime_totals = TRUE,
@@ -858,12 +1060,32 @@ export async function gradeRegistryBoard(boardDate?: string) {
       pick.id,
       result,
       closingOdds,
-      clvDelta
+      clvDelta,
+      coverMargin == null ? null : Math.round(coverMargin * 10) / 10,
+      finalHome,
+      finalAway
     );
+    const bd = rows[i]?.board_date;
+    if (bd) affectedBoards.add(typeof bd === 'string' ? bd.slice(0, 10) : new Date(bd).toISOString().slice(0, 10));
     gradedCount += 1;
+
+    await logPickEvent({
+      event: 'GRADED',
+      boardDate: bdForAudit,
+      pickKey,
+      gameId: pick.eventId || undefined,
+      category: pick.category,
+      selection: pick.selection,
+      line: pick.line ?? undefined,
+      odds: pick.odds ?? undefined,
+      result,
+      status: 'graded',
+      notes: `final ${finalAway}-${finalHome}${coverMargin != null ? `, cover margin ${coverMargin}` : ''}${clvDelta != null ? `, CLV ${clvDelta > 0 ? '+' : ''}${clvDelta}` : ''}`,
+      details: { closingOdds, finalHome, finalAway, coverMargin, clvDelta },
+    });
   }
 
-  await syncBoardRecord(date);
+  for (const b of Array.from(affectedBoards)) await syncBoardRecord(b);
   await syncLifetimeTotals();
 
   return { gradedCount };
@@ -1255,4 +1477,111 @@ export async function getOfficialTrackingSnapshot(boardDate?: string) {
     dailyRecord: today,
     lifetimeRecord: lifetime,
   };
+}
+
+// Aggregates every parlay ticket in the registry — grouping legs by parlay_ticket_id
+// and computing per-ticket result (any leg lost = ticket lost), then rolling up by leg
+// count and SGP theme so we can see which parlay structures actually hit.
+export async function getParlayStats(): Promise<{
+  byTicket: Array<{ ticketId: string; legCount: number; estimatedOdds: string | null; sgpTheme: string | null; result: 'win' | 'loss' | 'pending' | 'push'; boardDate: string; legs: Array<{ selection: string; result: string; position: number | null; odds: string | null }> }>;
+  byLegCount: Record<string, { tickets: number; wins: number; losses: number; pending: number; winRate: string }>;
+  bySgpTheme: Record<string, { wins: number; losses: number; total: number; winRate: string }>;
+  overall: { tickets: number; wins: number; losses: number; pending: number; winRate: string };
+}> {
+  await ensureRegistrySchema();
+  const rows = await prisma.$queryRawUnsafe<any[]>(
+    `
+      SELECT parlay_ticket_id, parlay_leg_count, parlay_leg_position, parlay_estimated_odds,
+             sgp_theme, selection, result, odds, board_date
+      FROM himothy_pick_registry
+      WHERE parlay_ticket_id IS NOT NULL
+      ORDER BY board_date DESC, parlay_ticket_id, parlay_leg_position
+    `
+  );
+  const tickets: Record<string, any> = {};
+  for (const r of rows) {
+    const id = String(r.parlay_ticket_id);
+    if (!tickets[id]) {
+      tickets[id] = {
+        ticketId: id,
+        legCount: Number(r.parlay_leg_count) || 0,
+        estimatedOdds: r.parlay_estimated_odds || null,
+        sgpTheme: r.sgp_theme || null,
+        boardDate: typeof r.board_date === 'string' ? r.board_date.slice(0, 10) : new Date(r.board_date).toISOString().slice(0, 10),
+        legs: [],
+      };
+    }
+    tickets[id].legs.push({ selection: r.selection, result: r.result, position: r.parlay_leg_position, odds: r.odds });
+  }
+  const byTicket = Object.values(tickets).map((t: any) => {
+    const hasLoss = t.legs.some((l: any) => l.result === 'loss');
+    const hasPending = t.legs.some((l: any) => l.result === 'pending');
+    const allWin = t.legs.length > 0 && t.legs.every((l: any) => l.result === 'win');
+    const result: 'win' | 'loss' | 'pending' | 'push' = hasLoss ? 'loss' : hasPending ? 'pending' : allWin ? 'win' : 'push';
+    return { ...t, result };
+  });
+  const byLegCount: Record<string, { tickets: number; wins: number; losses: number; pending: number; winRate: string }> = {};
+  const bySgpTheme: Record<string, { wins: number; losses: number; total: number; winRate: string }> = {};
+  let overall = { tickets: 0, wins: 0, losses: 0, pending: 0 };
+  for (const t of byTicket) {
+    const lcKey = `${t.legCount}-leg`;
+    byLegCount[lcKey] = byLegCount[lcKey] || { tickets: 0, wins: 0, losses: 0, pending: 0, winRate: '0.0%' };
+    byLegCount[lcKey].tickets++;
+    if (t.result === 'win') byLegCount[lcKey].wins++;
+    else if (t.result === 'loss') byLegCount[lcKey].losses++;
+    else if (t.result === 'pending') byLegCount[lcKey].pending++;
+    if (t.sgpTheme) {
+      bySgpTheme[t.sgpTheme] = bySgpTheme[t.sgpTheme] || { wins: 0, losses: 0, total: 0, winRate: '0.0%' };
+      if (t.result === 'win') bySgpTheme[t.sgpTheme].wins++;
+      else if (t.result === 'loss') bySgpTheme[t.sgpTheme].losses++;
+    }
+    overall.tickets++;
+    if (t.result === 'win') overall.wins++;
+    else if (t.result === 'loss') overall.losses++;
+    else if (t.result === 'pending') overall.pending++;
+  }
+  for (const k of Object.keys(byLegCount)) {
+    const v = byLegCount[k];
+    const tot = v.wins + v.losses;
+    v.winRate = tot > 0 ? `${((v.wins / tot) * 100).toFixed(1)}%` : '0.0%';
+  }
+  for (const k of Object.keys(bySgpTheme)) {
+    const v = bySgpTheme[k];
+    v.total = v.wins + v.losses;
+    v.winRate = v.total > 0 ? `${((v.wins / v.total) * 100).toFixed(1)}%` : '0.0%';
+  }
+  const oTot = overall.wins + overall.losses;
+  return { byTicket, byLegCount, bySgpTheme, overall: { ...overall, winRate: oTot > 0 ? `${((overall.wins / oTot) * 100).toFixed(1)}%` : '0.0%' } };
+}
+
+// Aggregate every settled pick in the registry by its odds price band — so we can
+// surface "picks priced -130 to -149 are 8-2 lately" on each new pick. Built entirely
+// from our OWN verified record, no fake history.
+export async function getOddsBucketStats(): Promise<Record<string, { wins: number; losses: number; pushes: number; total: number; winRate: string }>> {
+  await ensureRegistrySchema();
+  const rows = await prisma.$queryRawUnsafe<any[]>(
+    `
+      SELECT odds, result
+      FROM himothy_pick_registry
+      WHERE board_date >= $1::date
+        AND result IN ('win','loss','push')
+    `,
+    OFFICIAL_TRACKING_START_DATE
+  );
+  const { oddsBucket } = await import('@/lib/oddsBucket');
+  const stats: Record<string, { wins: number; losses: number; pushes: number }> = {};
+  for (const r of rows) {
+    const bucket = oddsBucket(r.odds);
+    if (!bucket) continue;
+    stats[bucket] = stats[bucket] || { wins: 0, losses: 0, pushes: 0 };
+    if (r.result === 'win') stats[bucket].wins++;
+    else if (r.result === 'loss') stats[bucket].losses++;
+    else if (r.result === 'push') stats[bucket].pushes++;
+  }
+  const out: Record<string, { wins: number; losses: number; pushes: number; total: number; winRate: string }> = {};
+  for (const [k, v] of Object.entries(stats)) {
+    const total = v.wins + v.losses;
+    out[k] = { ...v, total, winRate: total > 0 ? `${((v.wins / total) * 100).toFixed(0)}%` : '0%' };
+  }
+  return out;
 }

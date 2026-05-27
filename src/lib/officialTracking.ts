@@ -1,4 +1,7 @@
-export const OFFICIAL_TRACKING_START_DATE = '2026-04-20';
+// Verified record begins the day real auto-tracking went live. Every pick from this date
+// forward is recorded before its game and graded against the real final — 100% honest,
+// with no backfilled or fabricated history.
+export const OFFICIAL_TRACKING_START_DATE = '2026-05-22';
 export const OFFICIAL_TRACKING_TIMEZONE = 'America/New_York';
 
 function toParts(date: Date) {

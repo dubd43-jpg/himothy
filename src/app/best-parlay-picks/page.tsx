@@ -1,12 +1,18 @@
-import { Metadata } from "next";
 import { PicksPageTemplate } from "@/components/PicksPageTemplate";
+import { ParlaySeoContent } from "@/components/SportSeoContent";
+import { pageMeta } from "@/lib/seo";
 import { BarChart3 } from "lucide-react";
 
-export const metadata: Metadata = {
-  title: "Best Parlay Picks | Daily High-Value Parlays | HIMOTHY",
-  description: "Find the best parlay picks today. Strategic multi-leg tickets built on cumulative edge advantage and bankroll management.",
-  keywords: ["best parlay picks", "daily parlay", "high value parlays", "parlay predictions", "sports parlay picks"],
-};
+export const metadata = pageMeta({
+  title: "Best Parlay Picks Today — $10 Parlay Plan, Power 20 & SGP",
+  description: "Today's strategic parlay picks built on real math. The $10 Parlay Plan, Power 20 heavy-chalk parlay, and Same Game Parlay legs. Every leg capped at -450 so payouts stay real.",
+  path: "/best-parlay-picks",
+  keywords: [
+    "best parlay picks", "best parlays today", "daily parlay picks", "$10 parlay",
+    "parlay of the day", "sgp picks", "same game parlay", "power 20 parlay",
+    "parlay strategy", "free parlay picks today",
+  ],
+});
 
 export default function BestParlayPicksPage() {
   const today = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
@@ -21,6 +27,7 @@ export default function BestParlayPicksPage() {
       backHref="/picks"
       backLabel="All Picks"
       accentNote="📈 Parlay Logic: We only combine plays where the correlated edge exceeds the market price."
+      seoContent={<ParlaySeoContent />}
     />
   );
 }

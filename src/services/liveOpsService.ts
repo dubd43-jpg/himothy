@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { hasDatabase } from '@/lib/hasDatabase';
 import { fetchLiveSlate, LiveSlateGame } from '@/lib/liveSlate';
 import { EdgeScanCandidate, scanAllResearchLanes } from '@/services/edgeDetectionEngine';
 
@@ -216,7 +217,7 @@ export async function refreshLiveOpsSnapshot(options?: {
     ? Number(options?.maxStaleSeconds)
     : DEFAULT_STALE_SECONDS;
 
-  if (!process.env.DATABASE_URL) {
+  if (!hasDatabase()) {
     return runRefreshNoDB(reason);
   }
 

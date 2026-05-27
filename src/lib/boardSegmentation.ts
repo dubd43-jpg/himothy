@@ -1,10 +1,22 @@
-export type BoardType = 'north-american' | 'soccer' | 'tennis' | 'overseas';
+export type BoardType =
+  | 'north-american'
+  | 'soccer'
+  | 'tennis'
+  | 'combat'
+  | 'individual'
+  | 'racing'
+  | 'global'
+  | 'overseas';
 
+// Customer-facing labels. Expanded to cover every Hard Rock-style market category.
 export const BOARD_OPTIONS: Array<{ key: BoardType; label: string }> = [
-  { key: 'north-american', label: 'North American' },
+  { key: 'north-american', label: 'HIMOTHY Board' },
   { key: 'soccer', label: 'Soccer' },
   { key: 'tennis', label: 'Tennis' },
-  { key: 'overseas', label: 'Overseas' },
+  { key: 'combat', label: 'UFC / Boxing' },
+  { key: 'individual', label: 'Golf' },
+  { key: 'racing', label: 'Racing' },
+  { key: 'global', label: 'Global' },
 ];
 
 const SOCCER_KEYWORDS = ['soccer', 'epl', 'mls', 'la liga', 'serie a', 'bundesliga', 'ligue 1', 'champions league'];
@@ -54,13 +66,21 @@ export function parseBoardType(raw: string | null | undefined): BoardType {
   if (value === 'north-america' || value === 'north_american' || value === 'northamerican') return 'north-american';
   if (value === 'soccer') return 'soccer';
   if (value === 'tennis') return 'tennis';
+  if (value === 'combat') return 'combat';
+  if (value === 'individual') return 'individual';
+  if (value === 'racing') return 'racing';
+  if (value === 'global') return 'global';
   if (value === 'overseas') return 'overseas';
   return 'north-american';
 }
 
 export function boardDisplayName(board: BoardType) {
-  if (board === 'north-american') return 'North American';
+  if (board === 'north-american') return 'HIMOTHY Board';
   if (board === 'soccer') return 'Soccer';
   if (board === 'tennis') return 'Tennis';
+  if (board === 'combat') return 'UFC / Boxing';
+  if (board === 'individual') return 'Golf';
+  if (board === 'racing') return 'Racing';
+  if (board === 'global') return 'Global';
   return 'Overseas';
 }

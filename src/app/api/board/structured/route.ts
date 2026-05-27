@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { fetchLiveSlate } from '@/lib/liveSlate';
+import { hasDatabase } from '@/lib/hasDatabase';
 import { getRegistryBoardPicks, getBoardMainPick, type RegistryPickRow } from '@/services/pickRegistryService';
 import { refreshLiveOpsSnapshot } from '@/services/liveOpsService';
 import {
@@ -131,6 +132,14 @@ function dedupeById(rows: StructuredPick[]) {
     out.push(row);
   }
   return out;
+}
+
+// Identifies the underlying GAME (not the pick row) so the same game never shows
+// up in two sections — e.g. the top pick can't also appear in the parlays.
+function gameKey(p: StructuredPick) {
+  const matchup = (p.eventName || `${p.awayTeam} @ ${p.homeTeam}`).toLowerCase().replace(/\s+/g, ' ').trim();
+  const day = (p.startTime || '').slice(0, 10);
+  return `${p.boardType}|${matchup}|${day}`;
 }
 
 function toStructured(row: RegistryPickRow): StructuredPick {
@@ -278,16 +287,10 @@ export async function GET(req: Request) {
     const boardDate = url.searchParams.get('boardDate') || undefined;
     const board = parseBoardType(url.searchParams.get('board'));
 
-    if (!process.env.DATABASE_URL) {
-      const games = await fetchLiveSlate({ maxGames: 40 });
-      const core = games
-        .filter((g) => {
-          const bt = inferBoardTypeFromContext({ sport: g.sport, league: g.league });
-          return bt === board;
-        })
-        .slice(0, 10)
-        .map((g, i) => toFallbackCorePick(g, i));
-
+    if (!hasDatabase()) {
+      // No admin-published board yet → the AI research engine is the live product.
+      // Return an empty official board so the picks page renders the research tiers
+      // (Grand Slam / Pressure Pack / VIP 4-Pack / Parlay Plan) cleanly.
       return NextResponse.json({
         success: true,
         source: 'live-slate-no-db',
@@ -297,15 +300,15 @@ export async function GET(req: Request) {
         boardDate: boardDate || new Date().toISOString().slice(0, 10),
         sections: {
           mainPick: null,
-          corePicks: core,
+          corePicks: [],
           groupedProducts: [],
           parlayProducts: [],
         },
         counts: {
-          officialStraightPicks: core.length,
+          officialStraightPicks: 0,
           officialGroupedProducts: 0,
           parlays: 0,
-          totalUniquePicks: core.length,
+          totalUniquePicks: 0,
         },
       });
     }
@@ -352,12 +355,25 @@ export async function GET(req: Request) {
     const parlayRows = remaining.filter((p) => p.isParlay);
     const nonParlayRows = remaining.filter((p) => !p.isParlay);
 
+    // Reserve each game to a single section. The top pick goes first, so its game
+    // can never reappear in the grouped packages, core picks, or the parlays.
+    const usedGameKeys = new Set<string>();
+    if (mainPick) usedGameKeys.add(gameKey(mainPick));
+
     const groupedTypes = new Set<ProductType>(board === 'north-american' ? ['VIP_4_PACK', 'PRESSURE_PACK'] : []);
     const groupedPool = nonParlayRows.filter((p) => groupedTypes.has(p.productType));
 
     const groupedProducts: GroupedProduct[] = [];
     for (const type of ['VIP_4_PACK', 'PRESSURE_PACK'] as ProductType[]) {
-      let picks = groupedPool.filter((p) => p.productType === type).sort((a, b) => b.displayPriority - a.displayPriority);
+      let picks = groupedPool
+        .filter((p) => p.productType === type)
+        .sort((a, b) => b.displayPriority - a.displayPriority)
+        .filter((p) => {
+          const k = gameKey(p);
+          if (usedGameKeys.has(k)) return false;
+          usedGameKeys.add(k);
+          return true;
+        });
       if (type === 'VIP_4_PACK') picks = picks.slice(0, 4);
       if (picks.length === 0) continue;
 
@@ -375,11 +391,27 @@ export async function GET(req: Request) {
 
     const corePicks = nonParlayRows
       .filter((p) => !groupedIds.has(p.id))
+      .filter((p) => {
+        const k = gameKey(p);
+        if (usedGameKeys.has(k)) return false;
+        usedGameKeys.add(k);
+        return true;
+      })
       .map((p) => ({ ...p, sectionType: 'core' as SectionType }));
 
+    // Parlays use DIFFERENT games than the straight picks above — legs whose game
+    // is already used by a real pick are dropped, and legs are unique across parlays.
     const parlayProducts: ParlayProduct[] = [];
     for (const type of ['PARLAY', 'HAILMARY'] as ProductType[]) {
-      const legs = parlayRows.filter((p) => p.productType === type).sort((a, b) => b.displayPriority - a.displayPriority);
+      const legs = parlayRows
+        .filter((p) => p.productType === type)
+        .sort((a, b) => b.displayPriority - a.displayPriority)
+        .filter((p) => {
+          const k = gameKey(p);
+          if (usedGameKeys.has(k)) return false;
+          usedGameKeys.add(k);
+          return true;
+        });
       if (legs.length === 0) continue;
       const parlayId = `${type}-${boardDate || legs[0].id}`;
       parlayProducts.push({

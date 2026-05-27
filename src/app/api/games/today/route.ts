@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { refreshLiveOpsSnapshot } from '@/services/liveOpsService';
 import { inferBoardTypeFromContext, parseBoardType } from '@/lib/boardSegmentation';
 
+export const maxDuration = 60;
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
