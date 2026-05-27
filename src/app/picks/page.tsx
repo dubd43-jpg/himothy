@@ -648,6 +648,13 @@ function DeepPickCard({ pick, variant, href, live }: { pick: DeepPick; variant: 
     : 'border-white/10 bg-white/[0.03]';
   const showLive = !!live && live.state !== 'pre';
   const liveClockStr = live ? [live.period, live.clock && live.clock !== '0:00' ? live.clock : null].filter(Boolean).join(' · ') : '';
+  // Fallback when the live-scoreboard feed has no match for this gameId (common on
+  // soccer/tennis/MMA where /api/scores/live only polls the big-4 leagues). If startTime
+  // is in the past and we have no live data, display "In Progress" instead of frozen
+  // text like "3 PM" — that's what users reported as "stuck on old time."
+  const startMs = pick.startTime ? new Date(pick.startTime).getTime() : null;
+  const isPastStart = startMs != null && Date.now() > startMs;
+  const shouldShowInProgress = !showLive && isPastStart;
 
   const inner = (
     <article className={`group relative overflow-hidden rounded-2xl border ${accent} p-5 transition-all ${href ? 'hover:border-primary/50' : ''}`}>
@@ -659,7 +666,9 @@ function DeepPickCard({ pick, variant, href, live }: { pick: DeepPick; variant: 
               ? live!.state === 'live'
                 ? <span className="inline-flex items-center gap-1 text-red-400"><span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" /> Live</span>
                 : <span className="text-white/50">Final</span>
-              : startTime}
+              : shouldShowInProgress
+                ? <span className="text-amber-400/80">In Progress</span>
+                : startTime}
           </span>
         </div>
         <div className="flex items-center justify-between gap-3">

@@ -26,19 +26,28 @@ export interface LiveSlateGame {
   freshnessMinutes: number;
 }
 
+// Must include every league the picks engine can produce a pick on. If a league is
+// missing here, the live-scores feed won't carry its games, computeLiveState will return
+// null, and pick cards freeze at "starts at 3 PM" forever. The picks engine pulls from
+// BOARD_LEAGUES in deepResearchService.ts — this list must stay aligned with that.
 const DEFAULT_ACTIVE_LEAGUES = [
-  'NFL',
-  'NHL',
-  'NBA',
-  'WNBA',
-  'MLB',
-  'College Football',
-  'NCAA Basketball',
-  'Soccer - EPL',
-  'Soccer - La Liga',
-  'Soccer - Serie A',
-  'Soccer - Bundesliga',
-  'Soccer - Ligue 1',
+  // North American
+  'NFL', 'NHL', 'NBA', 'WNBA', 'MLB', 'College Football', 'NCAA Basketball', 'NCAA Baseball',
+  // Soccer (every league the engine surfaces)
+  'Soccer - EPL', 'Soccer - La Liga', 'Soccer - Bundesliga', 'Soccer - Serie A',
+  'Soccer - Ligue 1', 'Soccer - Champions League', 'Soccer - Europa', 'Soccer - Conference',
+  'Soccer - MLS', 'Soccer - Liga MX',
+  // Tennis tournaments (ATP / WTA tour stops)
+  'Tennis - ATP', 'Tennis - WTA',
+  // Combat
+  'MMA - UFC', 'MMA - PFL', 'Boxing',
+  // Individual (golf / racing)
+  'Golf - PGA', 'Golf - LIV', 'Golf - LPGA', 'Golf - European',
+  'F1', 'NASCAR', 'IndyCar',
+  // Global team sports
+  'Cricket - IPL', 'Cricket', 'Rugby - NRL', 'Rugby - Top 14', 'Rugby - Premiership',
+  'AFL', 'Soccer - Brazil Serie A', 'Soccer - Argentina',
+  'Denmark Superliga', 'Romania Liga 1', 'Netherlands Eredivisie',
 ];
 
 function toLeagueDate(date: Date) {

@@ -9,15 +9,16 @@ let cache: { data: any; generatedAt: number } | null = null;
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 function buildExclusionSet(boardPicks: any[]): Set<string> {
-  // Per user: the two parlays must NEVER share a game with any of our exclusive picks
-  // (Grand Slam, Pressure Pack, VIP 4-Pack, Parlay Plan). Parlays are built from
-  // separate games entirely — heavy-favorite MLs, props, run lines from a different
-  // pool. So we exclude by gameId, not by gameId|selection. This is stricter than the
-  // old "same game, different angle is fine" rule and matches the new product intent.
+  // Exclude exact pick selections (gameId|selection) so the parlay can't reuse the same
+  // pick that's on Pressure Pack / VIP / Parlay Plan. Same game, different angle is OK
+  // (Yankees -1.5 on the regular card; Yankees ML in the parlay is allowed). Reverted
+  // from gameId-level exclusion (2026-05-27) — that was too strict and wiped 18+ games
+  // from the parlay pool on normal slates, leaving Power of Parlays / Power 10 empty.
   const out = new Set<string>();
   for (const p of boardPicks) {
-    if (!p?.gameId) continue;
-    out.add(`game:${p.gameId}`);
+    if (!p?.gameId || !p?.selection) continue;
+    const norm = String(p.selection).toLowerCase().replace(/\s+/g, ' ').trim();
+    out.add(`${p.gameId}|${norm}`);
   }
   return out;
 }

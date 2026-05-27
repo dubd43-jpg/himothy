@@ -25,7 +25,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ success: true, cached: true, ...cached.data });
     }
 
-    if (forceRefresh) invalidateBoardCache(board);
+    if (forceRefresh) await invalidateBoardCache(board);
     const result = await getOrComputeBoard(board);
     return NextResponse.json({ success: true, cached: false, ...result });
   } catch (error) {
