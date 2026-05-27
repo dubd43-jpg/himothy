@@ -1484,24 +1484,16 @@ function PicksHubPageClient() {
                 {hasOfficialPicks && <span className="text-xs text-white/30 font-semibold">{corePicks.length} picks</span>}
               </div>
 
-              {hasOfficialPicks ? (
-                corePicks.length === 0 ? (
-                  <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-8 text-center text-white/30 text-sm font-semibold">
-                    No additional picks for this board today.
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                    {corePicks.map((pick) => <PickCard key={pick.id} pick={pick} />)}
-                  </div>
-                )
-              ) : (
-                /* No official picks yet — show the AI research scan */
-                <DeepResearchSection board={selectedBoard} />
-              )}
+              {/* Always use the live-engine view — it's the frozen-slate-for-the-day
+                  source of truth. The registry-backed view fell out of sync because the
+                  morning cron recorded picks BEFORE the engine fixes shipped today. */}
+              <DeepResearchSection board={selectedBoard} />
             </section>
 
-            {/* 3. Grouped Products (VIP / Pressure) */}
-            {groupedProducts.length > 0 && (
+            {/* 3. Grouped Products (VIP / Pressure) — only show if the registry has more
+                detailed groupings than what DeepResearchSection already renders. Disabled
+                for now so we don't double-render or show stale registry counts. */}
+            {false && groupedProducts.length > 0 && (
               <section>
                 <div className="mb-4 flex items-center gap-2">
                   <Layers className="h-5 w-5 text-white/50" />
@@ -1528,7 +1520,7 @@ function PicksHubPageClient() {
             )}
 
             {/* 4. Parlays */}
-            {parlayProducts.length > 0 && (
+            {false && parlayProducts.length > 0 && (
               <section>
                 <div className="mb-4 flex items-center gap-2">
                   <ListChecks className="h-5 w-5 text-white/50" />
