@@ -746,6 +746,37 @@ interface TrendBucket { wins: number; losses: number }
 // ATS / O/U over a window. `sample` is the number of games in the window that had a
 // known line so the percentage stays honest (e.g., "12-8 ATS over 20 priced games").
 interface LineBucket { wins: number; losses: number; pushes: number; sample: number }
+
+// Recency-weighted ATS coverPct. Replaces the old "use season-overall ATS" approach.
+// Weight blend: 40% last-5 + 40% last-10 + 20% season. Pushes don't count for/against.
+// Each bucket is gated by minimum sample so a 1-0 ATS over 1 game doesn't masquerade as
+// 100%. Returns null if no usable bucket exists.
+//
+// The user's strategy memory is explicit: "tendency-driven, not moneyline-driven, with a
+// rolling-window weighting." This function makes that real inside scoreGame().
+function weightedAtsCoverPct(
+  ats5?: LineBucket,
+  ats10?: LineBucket,
+  atsSeason?: LineBucket,
+): number | null {
+  const pctFromBucket = (b?: LineBucket, minSample = 3): number | null => {
+    if (!b || b.sample < minSample) return null;
+    const decisive = b.wins + b.losses;
+    if (decisive === 0) return null;
+    return (b.wins / decisive) * 100;
+  };
+  const p5 = pctFromBucket(ats5, 3);
+  const p10 = pctFromBucket(ats10, 6);
+  const pSeason = pctFromBucket(atsSeason, 10);
+  const parts: Array<[number, number]> = [];
+  if (p5 != null) parts.push([0.4, p5]);
+  if (p10 != null) parts.push([0.4, p10]);
+  if (pSeason != null) parts.push([0.2, pSeason]);
+  if (parts.length === 0) return null;
+  const totalWeight = parts.reduce((s, [w]) => s + w, 0);
+  const weightedSum = parts.reduce((s, [w, v]) => s + w * v, 0);
+  return weightedSum / totalWeight;
+}
 interface TeamForm {
   streak: number;
   record: { wins: number; losses: number };       // last 5 — kept for back-compat
@@ -1500,6 +1531,15 @@ async function processGame(
   const pickedAts = pickedSideForSignals === 'home' ? homeAtsData.overall : awayAtsData.overall;
   const pickedAtsHA = pickedSideForSignals === 'home' ? homeAtsData.homeAway : awayAtsData.homeAway;
   const oppAts = pickedSideForSignals === 'home' ? awayAtsData.overall : homeAtsData.overall;
+
+  // Recency-weighted ATS for the picked side and the opponent. We use the rolling
+  // last-5 / last-10 / season blend (40/40/20) computed from completed games so a recent
+  // collapse or hot streak actually moves the confidence number — not buried under a
+  // season-long average that's still 50-40.
+  const pickedFormBuckets = pickedSideForSignals === 'home' ? homeForm : awayForm;
+  const oppFormBuckets = pickedSideForSignals === 'home' ? awayForm : homeForm;
+  const weightedPickedAts = weightedAtsCoverPct(pickedFormBuckets?.ats5, pickedFormBuckets?.ats10, pickedFormBuckets?.atsSeason);
+  const weightedOppAts = weightedAtsCoverPct(oppFormBuckets?.ats5, oppFormBuckets?.ats10, oppFormBuckets?.atsSeason);
   const pickedInj = pickedSideForSignals === 'home' ? homeInj : awayInj;
   const oppInj = pickedSideForSignals === 'home' ? awayInj : homeInj;
   const pickedStreak = pickedSideForSignals === 'home' ? homeStreak : awayStreak;
@@ -1547,8 +1587,11 @@ async function processGame(
   const signalsPartial: Omit<GameSignals, 'confirmingSignals'> = {
     oddsAvailable: hasOdds,
     winProbabilityGap: winProbGap,
-    atsCoverPct: pickedAts?.coverPct ?? null,
-    atsCoverPctOpp: oppAts?.coverPct ?? null,
+    // Prefer the recency-weighted ATS (rolling-window blend). Falls back to ESPN's
+    // pickcenter season-overall ATS only when we have no rolling history (cold start,
+    // small-sample team, individual sports).
+    atsCoverPct: weightedPickedAts ?? pickedAts?.coverPct ?? null,
+    atsCoverPctOpp: weightedOppAts ?? oppAts?.coverPct ?? null,
     atsHomeAwayCoverPct: pickedAtsHA?.coverPct ?? null,
     lineValueGap,
     signalConflict,
@@ -1588,7 +1631,14 @@ async function processGame(
   const rawScore = Math.round(baseScore * asleepBoost);
   // CHANGE THE PICK on breaking news: if a star on our side is OUT, cap the score so
   // this play drops out of the headline tiers (the board will surface a different game).
-  const confidenceScore = starOutPickSide ? Math.min(rawScore, 42) : rawScore;
+  let confidenceScore = starOutPickSide ? Math.min(rawScore, 42) : rawScore;
+  // RE-APPLY data quality cap AFTER the asleep boost. Without this, a low-DQ tennis or
+  // KBO pick (DQ ~45 → capped at 63 inside scoreGame) could be multiplied by a 1.15
+  // asleep boost up to 72 — high enough to crack tiers it didn't earn. The user
+  // specifically asked: don't let confidence inflate when the underlying data is thin.
+  if (dq < 30) confidenceScore = Math.min(confidenceScore, 52);
+  else if (dq < 50) confidenceScore = Math.min(confidenceScore, 63);
+  else if (dq < 65) confidenceScore = Math.min(confidenceScore, 75);
   const isAsleepPick = asleepBoost > 1.05;
   const confirmingSignals = countConfirmingSignals(pickedSideForSignals, signalsPartial);
   const signals: GameSignals = { ...signalsPartial, confirmingSignals };
@@ -1815,11 +1865,11 @@ export async function runDailyDeepResearch(board: BoardType = 'north-american'):
         // Tennis tournaments list every match across 2 weeks of play; combat cards bundle
         // all fights as one event. Filter individual matches to today's ET date only so
         // we never show tomorrow's first-round draw or next week's UFC card on today's
-        // board. Completed matches also dropped — we only score upcoming/live.
+        // board. Per frozen-slate rule, completed matches stay visible — tennis especially,
+        // because Roland Garros / Wimbledon matches play overnight Europe time and are all
+        // `post` by US evening. Filtering only by date below.
         const todayKeyMatch = dateStr(0);
         for (const compRaw of allComps) {
-          const state = compRaw?.status?.type?.state;
-          if (state === 'post' || compRaw?.status?.type?.completed) continue;
           // Match's date must resolve to today in ET.
           const matchIso = compRaw?.date;
           if (matchIso) {
@@ -1905,31 +1955,23 @@ export async function runDailyDeepResearch(board: BoardType = 'north-american'):
   const vip4Pack: DeepPickResult[] = [];
   const parlayPlan: DeepPickResult[] = [];
 
-  // GRAND SLAM = the rare near-lock. It is NOT handed out daily. A pick only qualifies
-  // when we genuinely expect to win: a clear, well-supported favorite with full signal
-  // confluence, clean injuries, and high data quality. Most days this is empty — and
-  // that's the point. We only drop it when we really feel it.
-  const qualifiesAsGrandSlam = (p: DeepPickResult): boolean => {
-    const s = p.signals;
-    const pickedWin = p.selectionSide === 'home' ? p.homeTeam.winProbability : p.awayTeam.winProbability;
-    return (
-      s.winProbabilityGap >= 24 &&        // clear favorite, never a coin-flip
-      (pickedWin ?? 0) >= 66 &&           // we genuinely expect them to win outright
-      s.confirmingSignals >= 8 &&         // near-complete signal confluence
-      s.dataQuality >= 70 &&
-      !s.keyInjuryOnPickSide &&           // (star-out guard already caps these)
-      !s.signalConflict &&
-      p.confidenceScore >= 85
-    );
+  // GRAND SLAM = the single highest-confidence pick of the day. The confidence score
+  // already weighs win-prob, ATS tendency, recent form, sharp money, injuries, signal
+  // confluence, and data quality — so if a pick rises to the top, the system already
+  // believes in it. We only add two hard guards on top of the score: no key injury on
+  // our side (breaking news would invalidate the score itself) and no signal conflict
+  // (a contradicting signal makes the score unreliable). Floor is 88: if the day's best
+  // pick can't clear 88, we don't drop a Grand Slam at all — better to leave it empty
+  // than label a mediocre top pick as "our best of the day."
+  const GRAND_SLAM_FLOOR = 88;
+  const isGrandSlamEligible = (p: DeepPickResult): boolean => {
+    if (p.confidenceScore < GRAND_SLAM_FLOOR) return false;
+    if (p.signals.keyInjuryOnPickSide) return false;
+    if (p.signals.signalConflict) return false;
+    return true;
   };
-  const grandSlam: DeepPickResult | null =
-    picks
-      .filter(qualifiesAsGrandSlam)
-      .sort((a, b) => {
-        const aw = (a.selectionSide === 'home' ? a.homeTeam.winProbability : a.awayTeam.winProbability) ?? 0;
-        const bw = (b.selectionSide === 'home' ? b.homeTeam.winProbability : b.awayTeam.winProbability) ?? 0;
-        return bw - aw || b.confidenceScore - a.confidenceScore;
-      })[0] || null;
+  // `picks` is already sorted by confidenceScore desc — take the first eligible one.
+  const grandSlam: DeepPickResult | null = picks.find(isGrandSlamEligible) || null;
   if (grandSlam) usedGames.add(grandSlam.gameId);
 
   // Reserve EVERY asleep-flagged pick so none of them crowd the main board. The asleep
@@ -2139,8 +2181,10 @@ async function flattenTournamentEvents(events: any[], league: string): Promise<a
       for (const c of comps) allComps.push(c);
     }
     for (const comp of allComps) {
-      const state = comp?.status?.type?.state;
-      if (state === 'post' || comp?.status?.type?.completed) continue;
+      // Per frozen-slate rule: finals stay visible on today's slate. Tennis especially —
+      // French Open / Wimbledon matches play overnight Europe time, so by US evening every
+      // match is `state=post`. Dropping them here would empty the tennis board every day
+      // after ~11am ET. Date filter below keeps us scoped to today's matches only.
       const matchIso = comp?.date;
       if (matchIso) {
         try {
