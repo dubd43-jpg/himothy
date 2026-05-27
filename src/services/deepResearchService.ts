@@ -2113,6 +2113,87 @@ function estimateParlayOdds(legs: Power20Pick[]): { odds: string; decimal: numbe
   return { decimal: Math.round(decimal * 100) / 100, odds: decimalToAmerican(decimal) };
 }
 
+// Flatten tennis tournaments and combat fight cards into per-match fight-shaped events.
+// Tennis nests matches under `groupings[].competitions[]`; combat events have them under
+// `competitions[]`. We rewrite each match into the `competitions[0].competitors[]` shape
+// that processGame / processGameForPower20 expect, so the rest of the pipeline can score
+// individual matches without league-specific branching.
+async function flattenTournamentEvents(events: any[], league: string): Promise<any[]> {
+  const isCombat = league.startsWith('MMA') || league === 'Boxing';
+  const isTennis = league.startsWith('Tennis');
+  if (!isCombat && !isTennis) return events;
+
+  const { getOddsInsightForPick } = await import('@/services/oddsApiService');
+  const todayKeyMatch = dateStr(0);
+  const fightEvents: any[] = [];
+
+  for (const card of events) {
+    const allComps: any[] = [];
+    if (isTennis && Array.isArray(card?.groupings)) {
+      for (const g of card.groupings) {
+        const gc = Array.isArray(g?.competitions) ? g.competitions : [];
+        for (const c of gc) allComps.push(c);
+      }
+    } else {
+      const comps = Array.isArray(card?.competitions) ? card.competitions : [];
+      for (const c of comps) allComps.push(c);
+    }
+    for (const comp of allComps) {
+      const state = comp?.status?.type?.state;
+      if (state === 'post' || comp?.status?.type?.completed) continue;
+      const matchIso = comp?.date;
+      if (matchIso) {
+        try {
+          const parts = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
+          }).formatToParts(new Date(matchIso));
+          const matchKey = `${parts.find((p) => p.type === 'year')?.value}${parts.find((p) => p.type === 'month')?.value}${parts.find((p) => p.type === 'day')?.value}`;
+          if (matchKey !== todayKeyMatch) continue;
+        } catch { continue; }
+      }
+      const cs: any[] = Array.isArray(comp?.competitors) ? comp.competitors : [];
+      if (cs.length < 2) continue;
+      const f1Name = cs[0]?.athlete?.displayName || 'Fighter 1';
+      const f2Name = cs[1]?.athlete?.displayName || 'Fighter 2';
+      let homeML: number | null = null;
+      let awayML: number | null = null;
+      try {
+        const homeInsight = await getOddsInsightForPick(league, f2Name, f1Name, 'home');
+        const awayInsight = await getOddsInsightForPick(league, f2Name, f1Name, 'away');
+        homeML = homeInsight?.bestOdds ?? null;
+        awayML = awayInsight?.bestOdds ?? null;
+      } catch { /* no odds — match falls through with limited data */ }
+
+      const adapted = cs.map((c: any, i: number) => {
+        const ath = c.athlete || {};
+        return {
+          ...c,
+          homeAway: i === 0 ? 'home' : 'away',
+          team: { id: c.id, displayName: ath.displayName || `Fighter ${i + 1}`, abbreviation: (ath.shortName || `F${i + 1}`).slice(0, 4) },
+        };
+      });
+      fightEvents.push({
+        id: String(comp.id || `${card.id}-${comp.id}`),
+        name: `${f1Name} vs ${f2Name}`,
+        shortName: `${cs[0]?.athlete?.shortName || ''} vs ${cs[1]?.athlete?.shortName || ''}`,
+        date: comp.date || card.date,
+        status: comp.status || card.status,
+        competitions: [{
+          ...comp,
+          competitors: adapted,
+          odds: [{
+            spread: null,
+            overUnder: null,
+            homeTeamOdds: { moneyLine: homeML },
+            awayTeamOdds: { moneyLine: awayML },
+          }],
+        }],
+      });
+    }
+  }
+  return fightEvents;
+}
+
 async function processGameForPower20(
   event: any,
   league: string,
@@ -2245,7 +2326,10 @@ export async function runPower20Research(excludedKeys: Set<string> = new Set()):
   for (const settled of leagueResults) {
     if (settled.status !== 'fulfilled' || !settled.value.result) continue;
     const { league, result } = settled.value;
-    const { events } = result;
+    // Tennis / combat events arrive as tournaments with many matches nested inside; flatten
+    // them to per-match events so processGameForPower20 can score individual matchups.
+    // Cross-sport parlays mix tennis legs with NBA/MLB/NHL legs only because of this step.
+    const events = await flattenTournamentEvents(result.events, league);
     totalScanned += events.length;
     for (const event of events) {
       allGamePromises.push(processGameForPower20(event, league));
