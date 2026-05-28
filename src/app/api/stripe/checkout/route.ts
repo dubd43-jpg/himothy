@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createCheckoutSession, hasStripe } from '@/services/stripeService';
-import { findProduct, type ProductKey } from '@/lib/products';
+import { findProduct, type ProductKey, type PriceInterval } from '@/lib/products';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -34,17 +34,17 @@ export async function POST(req: Request) {
   const product = findProduct(productKey);
   if (!product) return NextResponse.json({ error: `Unknown product: ${productKey}` }, { status: 404 });
   const price = product.prices.find((p) => p.interval === interval);
-  if (!price || !price.stripePriceId) {
-    return NextResponse.json(
-      { error: `Price not configured for ${productKey} @ ${interval}. Set STRIPE_PRICE_* env vars.` },
-      { status: 503 },
-    );
+  if (!price) {
+    return NextResponse.json({ error: `Interval ${interval} not configured for ${productKey}` }, { status: 404 });
   }
 
   try {
+    // Inline-priced checkout — no env STRIPE_PRICE_* vars required. Amount + recurring
+    // config come from the products.ts catalog.
     const result = await createCheckoutSession({
       userId, userEmail: email,
-      stripePriceId: price.stripePriceId,
+      productKey,
+      interval: interval as PriceInterval,
       successPath: `/account?checkout=success&product=${productKey}`,
       cancelPath: `/pricing?checkout=cancel&product=${productKey}`,
     });

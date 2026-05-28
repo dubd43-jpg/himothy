@@ -7,8 +7,16 @@
 
 import Stripe from 'stripe';
 import { prisma } from '@/lib/prisma';
-import { findPriceByStripeId, TRIAL_DAYS, type ProductKey } from '@/lib/products';
+import { findPriceByStripeId, findProduct, TRIAL_DAYS, type ProductKey, type PriceInterval } from '@/lib/products';
 import { SITE_URL } from '@/lib/seo';
+
+// Map our internal interval keys to Stripe's recurring intervals. Stripe only accepts
+// 'day' | 'week' | 'month' | 'year' — and only for subscription mode. Non-recurring
+// (one-time) intervals don't pass this anywhere.
+const STRIPE_INTERVAL: Record<string, 'day' | 'week' | 'month' | 'year'> = {
+  one_month: 'month',
+  one_year: 'year',
+};
 
 const stripeSecret = process.env.STRIPE_SECRET_KEY || '';
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || '';
@@ -119,10 +127,17 @@ async function isEligibleForTrial(stripe: Stripe, customerId: string, userId: st
 
 // Create a Checkout Session — handles both recurring (subscription) and one-time (day/week pass)
 // in the same flow by reading `isRecurring` from our internal product config.
+// Inline-priced checkout. Instead of pre-creating 20 Stripe Price objects (one per
+// product × interval), we pass the amount + product name + recurring config directly
+// in `price_data`. That means: zero env vars for prices, zero dashboard setup, the
+// canonical price/name comes from src/lib/products.ts. Stripe auto-creates a Price
+// record on its side for each checkout — slightly less tidy in the Stripe dashboard
+// but functionally identical at checkout time.
 export async function createCheckoutSession(args: {
   userId: string;
   userEmail: string;
-  stripePriceId: string;
+  productKey: ProductKey;
+  interval: PriceInterval;
   successPath?: string;
   cancelPath?: string;
 }): Promise<{ url: string | null } | null> {
@@ -131,43 +146,53 @@ export async function createCheckoutSession(args: {
   const customerId = await getOrCreateStripeCustomer(args.userId, args.userEmail);
   if (!customerId) return null;
 
-  // Look up our internal product/price metadata so we know whether to bill recurring
-  const matched = findPriceByStripeId(args.stripePriceId);
-  if (!matched) {
-    throw new Error(`Stripe Price ${args.stripePriceId} not found in product catalog`);
-  }
-  const mode: 'subscription' | 'payment' = matched.price.isRecurring ? 'subscription' : 'payment';
+  const product = findProduct(args.productKey);
+  if (!product) throw new Error(`Product ${args.productKey} not found in catalog`);
+  const price = product.prices.find((p) => p.interval === args.interval);
+  if (!price) throw new Error(`Interval ${args.interval} not configured for ${args.productKey}`);
 
-  // Trial only offered on recurring subs AND only if user hasn't trialed before
+  const mode: 'subscription' | 'payment' = price.isRecurring ? 'subscription' : 'payment';
   const trialOk = mode === 'subscription' ? await isEligibleForTrial(stripe, customerId, args.userId) : false;
+
+  // Build the line item's price_data inline. Stripe accepts amount/currency/product_data
+  // for both one-time and recurring (with `recurring.interval` set on subscriptions).
+  const intervalLabel = price.interval === 'one_day' ? 'Day Pass'
+    : price.interval === 'one_week' ? 'Week Pass'
+    : price.interval === 'one_month' ? 'Monthly'
+    : 'Yearly';
+  const stripeInterval = STRIPE_INTERVAL[price.interval];
 
   const session = await stripe.checkout.sessions.create({
     mode,
     customer: customerId,
-    line_items: [{ price: args.stripePriceId, quantity: 1 }],
+    line_items: [{
+      quantity: 1,
+      price_data: {
+        currency: 'usd',
+        unit_amount: price.amountCents,
+        product_data: {
+          name: `${product.name} · ${intervalLabel}`,
+          metadata: { productKey: product.key, interval: price.interval },
+        },
+        ...(price.isRecurring && stripeInterval ? { recurring: { interval: stripeInterval } } : {}),
+      },
+    }],
     success_url: `${SITE_URL}${args.successPath || '/account?checkout=success'}`,
     cancel_url: `${SITE_URL}${args.cancelPath || '/pricing?checkout=cancel'}`,
     allow_promotion_codes: true,
-    automatic_tax: { enabled: false }, // Flip to true later once Stripe Tax is set up
+    automatic_tax: { enabled: false },
     metadata: {
       userId: args.userId,
-      productKey: matched.product.key,
-      interval: matched.price.interval,
+      productKey: product.key,
+      interval: price.interval,
     },
-    // For one-time charges, we need accessDays in metadata so the webhook knows how long
-    // to grant access. Subscriptions get accessUntil from currentPeriodEnd instead.
-    ...(matched.price.isRecurring
+    ...(price.isRecurring
       ? {
           subscription_data: {
-            // 14-day free trial — only for users who haven't trialed before. Stripe
-            // requires a card up front and sends an automatic reminder email 7 days
-            // before the first charge (reduces chargeback rate). Card fingerprint is
-            // also blocked via Stripe Radar rules (set up in dashboard) so the same
-            // physical card can't trial twice across different accounts.
             ...(trialOk ? { trial_period_days: TRIAL_DAYS } : {}),
             metadata: {
               userId: args.userId,
-              productKey: matched.product.key,
+              productKey: product.key,
               wasTrial: trialOk ? 'true' : 'false',
             },
           },
@@ -176,12 +201,11 @@ export async function createCheckoutSession(args: {
           payment_intent_data: {
             metadata: {
               userId: args.userId,
-              productKey: matched.product.key,
-              accessDays: String(matched.price.accessDays || 1),
+              productKey: product.key,
+              accessDays: String(price.accessDays || 1),
             },
           },
-        }
-    ),
+        }),
   });
 
   return { url: session.url };
