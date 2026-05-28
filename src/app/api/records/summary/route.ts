@@ -123,6 +123,7 @@ export async function GET() {
             avgEdgeScore: value.avgEdgeScore || 0,
             clvBeatRate: value.clvBeatRate || '0.0%',
             clvTracked: value.clvTracked || 0,
+            streak: value.streak || { type: null, count: 0 },
           },
         ])
       ),
