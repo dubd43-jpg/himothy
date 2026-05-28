@@ -353,6 +353,27 @@ function pastBoardDatesToYesterday(): string[] {
 let _lastRecoveryAt = 0;
 const RECOVERY_THROTTLE_MS = 10 * 60 * 1000;
 
+// Owner-confirmed picks that were genuinely published but lost by the old recorder before
+// frozen slates were persisted (so they can't be recovered from cache). Each is recorded
+// once (dedup makes re-runs inert) and graded against the real final — win OR loss. This
+// is a fixed, auditable list, not user input. Keep it tiny; the going-forward fix (record
+// from the frozen slate at freeze) means this should never need new entries.
+const KNOWN_MISSED_PICKS: Array<{
+  boardDate: string; category: string; gameId: string; eventName: string;
+  league: string; sport: string; homeTeam: string; awayTeam: string;
+  selectionSide: 'home' | 'away'; selection: string; marketType: string;
+  line: string | null; odds: string | null; tier: string; confidenceScore: number; note: string;
+}> = [
+  {
+    boardDate: '2026-05-27', category: 'GRAND_SLAM', gameId: '401815526',
+    eventName: 'Colorado Rockies at Los Angeles Dodgers', league: 'MLB', sport: 'MLB',
+    homeTeam: 'Los Angeles Dodgers', awayTeam: 'Colorado Rockies',
+    selectionSide: 'home', selection: 'Los Angeles Dodgers -1.5', marketType: 'spread',
+    line: '-1.5', odds: '-110', tier: 'GRAND_SLAM', confidenceScore: 98,
+    note: 'Owner-confirmed Grand Slam published 5/27; restored after a recording-system gap (no frozen slate existed to recover from). Graded from the official final.',
+  },
+];
+
 export async function recoverMissedRegistryPicks(opts?: { force?: boolean }): Promise<{ datesScanned: number; recorded: number; dupes: number; errors: number; details: any[] }> {
   const result = { datesScanned: 0, recorded: 0, dupes: 0, errors: 0, details: [] as any[] };
   if (!hasDatabase()) return result;
@@ -429,5 +450,26 @@ export async function recoverMissedRegistryPicks(opts?: { force?: boolean }): Pr
 
     try { await gradeRegistryBoard(date); } catch { /* non-fatal */ }
   }
+
+  // Owner-confirmed missed picks (no frozen slate to recover from). Record once + grade.
+  const knownDates = new Set<string>();
+  for (const k of KNOWN_MISSED_PICKS) {
+    const p = {
+      gameId: k.gameId, eventName: k.eventName, league: k.league, sport: k.sport,
+      homeTeam: { name: k.homeTeam, abbreviation: '', moneyline: null, winProbability: null },
+      awayTeam: { name: k.awayTeam, abbreviation: '', moneyline: null, winProbability: null },
+      selection: k.selection, selectionSide: k.selectionSide, marketType: k.marketType,
+      line: k.line, odds: k.odds, tier: k.tier, confidenceScore: k.confidenceScore,
+      reasonsFor: [k.note],
+    } as any;
+    const r = await recordPick(p, k.category, undefined, k.boardDate, /* allowFinalized */ true);
+    if (r === 'recorded') { result.recorded++; result.details.push({ date: k.boardDate, knownMissed: k.selection, recorded: true }); }
+    else if (r === 'dupe') result.dupes++; else result.errors++;
+    knownDates.add(k.boardDate);
+  }
+  for (const d of Array.from(knownDates)) {
+    try { await gradeRegistryBoard(d); } catch { /* non-fatal */ }
+  }
+
   return result;
 }
