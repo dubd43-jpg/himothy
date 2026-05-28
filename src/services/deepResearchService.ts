@@ -2021,10 +2021,12 @@ async function buildParlayPlanExtraLegs(
   fillEvents: Array<{ gameId: string; league: string; event: any }>,
   scoredByGameId: Map<string, DeepPickResult>,
   usedGames: Set<string>,
+  parlayGameIds: Set<string>,
   needed: number,
 ): Promise<ParlayExtraLeg[]> {
   const out: ParlayExtraLeg[] = [];
   if (needed <= 0) return out;
+  const fillGameIds = new Set<string>();   // games already used as a fill leg this pass
 
   // 1) TOTALS from unused already-scored games (no extra fetch). The game's own projection
   //    decides Over/Under; only include when it clears the line by a real margin.
@@ -2041,6 +2043,7 @@ async function buildParlayPlanExtraLegs(
       detail: `Projected ${predicted.toFixed(1)} vs line ${total}`,
     });
     usedGames.add(gid);
+    fillGameIds.add(gid);
   }
 
   // 2) PROPS from unused games — real-value, edge-scored, no heavy chalk.
@@ -2075,9 +2078,33 @@ async function buildParlayPlanExtraLegs(
           detail: `proj ${best.projection.toFixed(1)}${best.marketLine != null ? ` vs line ${best.marketLine}` : ''}`,
         });
         usedGames.add(fe.gameId);
+        fillGameIds.add(fe.gameId);
       }
     } catch { /* props service unavailable — return whatever totals we found */ }
   }
+
+  // 3) THIN-SLATE TOP-UP (owner opt-in): when there are no separate leftover games, fill
+  //    with the game TOTAL of a game we already have a STRAIGHT side on. This is a DIFFERENT
+  //    bet (total vs the straight's side) — never the straight pick — and we still never put
+  //    two parlay legs on the same game. Guarantees the $10 Parlay reaches its target on
+  //    thin nights. (Per owner: "always aim for 4".)
+  if (out.length < needed) {
+    for (const [gid, p] of Array.from(scoredByGameId.entries())) {
+      if (out.length >= needed) break;
+      if (parlayGameIds.has(gid) || fillGameIds.has(gid)) continue;  // not a game already in the parlay/fill
+      const total = p.total;
+      const predicted = p.tendencyResolution?.predictedTotal ?? null;
+      if (total == null || predicted == null) continue;
+      const side = predicted >= total ? 'Over' : 'Under';
+      out.push({
+        type: 'total', league: p.league, gameId: gid, eventName: p.eventName,
+        selection: `${side} ${total}`, odds: '-110', startTime: p.startTime || null,
+        detail: `Projected ${predicted.toFixed(1)} vs line ${total}`,
+      });
+      fillGameIds.add(gid);
+    }
+  }
+
   return out;
 }
 
@@ -2348,9 +2375,10 @@ export async function runDailyDeepResearch(board: BoardType = 'north-american'):
   let parlayExtraLegs: ParlayExtraLeg[] = [];
   if (board === 'north-american' && parlayPlan.length < PARLAY_TARGET_LEGS) {
     const scoredByGameId = new Map(allScoredRaw.map((p) => [p.gameId, p]));
+    const parlayGameIds = new Set(parlayPlan.map((p) => p.gameId));
     try {
       parlayExtraLegs = await buildParlayPlanExtraLegs(
-        fillEvents, scoredByGameId, usedGames, PARLAY_TARGET_LEGS - parlayPlan.length,
+        fillEvents, scoredByGameId, usedGames, parlayGameIds, PARLAY_TARGET_LEGS - parlayPlan.length,
       );
     } catch { parlayExtraLegs = []; }
   }
