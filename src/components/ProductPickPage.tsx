@@ -140,26 +140,23 @@ export function ProductPickPage({
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1">
                 <div className="text-[10px] font-black uppercase tracking-[0.3em] text-white/40">Lifetime Record — {title || meta.label}</div>
-                {record && (record.wins + record.losses) > 0 ? (
-                  <div className="mt-2 flex items-baseline flex-wrap gap-x-5 gap-y-1">
-                    <span className="text-5xl md:text-6xl font-black tabular-nums leading-none">
-                      {record.wins}<span className="text-white/30">-</span>{record.losses}{record.pushes ? <><span className="text-white/30">-</span>{record.pushes}</> : null}
+                {/* Always show the real numbers, even when they're 0-0. The earlier
+                    "Tracking starts now" placeholder felt like an excuse — user wants the
+                    actual lifetime line, blank or full. */}
+                <div className="mt-2 flex items-baseline flex-wrap gap-x-5 gap-y-1">
+                  <span className="text-5xl md:text-6xl font-black tabular-nums leading-none">
+                    {record?.wins ?? 0}<span className="text-white/30">-</span>{record?.losses ?? 0}{record?.pushes ? <><span className="text-white/30">-</span>{record.pushes}</> : null}
+                  </span>
+                  <span className="text-2xl md:text-3xl font-black text-emerald-400 tabular-nums leading-none">{record?.winPercentage || '0.0%'}</span>
+                  <span className={`text-xl md:text-2xl font-black tabular-nums leading-none ${(record?.units ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {(record?.units ?? 0) >= 0 ? '+' : ''}{(record?.units ?? 0).toFixed(1)}u
+                  </span>
+                  {record?.streak && record.streak.type && record.streak.count >= 2 && (
+                    <span className={`text-xl md:text-2xl font-black tabular-nums leading-none inline-flex items-center gap-1 ${record.streak.type === 'W' ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {record.streak.type === 'W' ? '🔥' : '🥶'} {record.streak.count}{record.streak.type}
                     </span>
-                    <span className="text-2xl md:text-3xl font-black text-emerald-400 tabular-nums leading-none">{record.winPercentage}</span>
-                    {typeof record.units === 'number' && (
-                      <span className={`text-xl md:text-2xl font-black tabular-nums leading-none ${record.units >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                        {record.units >= 0 ? '+' : ''}{record.units.toFixed(1)}u
-                      </span>
-                    )}
-                    {record.streak && record.streak.type && record.streak.count >= 2 && (
-                      <span className={`text-xl md:text-2xl font-black tabular-nums leading-none inline-flex items-center gap-1 ${record.streak.type === 'W' ? 'text-emerald-400' : 'text-red-400'}`}>
-                        {record.streak.type === 'W' ? '🔥' : '🥶'} {record.streak.count}{record.streak.type}
-                      </span>
-                    )}
-                  </div>
-                ) : (
-                  <div className="mt-2 text-2xl font-black text-white/30">Tracking starts now — kept 100% real</div>
-                )}
+                  )}
+                </div>
               </div>
               <button type="button" onClick={() => load(true)} disabled={refreshing}
                 className="shrink-0 inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-white/30 hover:text-white/60 transition-colors disabled:opacity-40 pt-1">
@@ -188,13 +185,54 @@ export function ProductPickPage({
             <h3 className="text-2xl font-black uppercase tracking-tight">{meta.emptyTitle}</h3>
             <p className="mx-auto mt-3 max-w-md text-white/40 leading-relaxed">{meta.emptyBody}</p>
           </div>
-        ) : (
-          <div className="space-y-5">
-            {product === "parlayPlan" && picks.length > 1 && (
-              <div className="rounded-2xl border border-primary/20 bg-primary/[0.04] p-4 text-sm text-white/60">
-                <span className="font-black text-primary">{picks.length}-leg parlay</span> — each leg is a different game. Combine all legs into one $10 ticket{combined ? ` for ${combined}` : ""}.
+        ) : product === "parlayPlan" && picks.length > 1 ? (() => {
+          // Parlay aggregate: any single leg losing kills the whole parlay. Show BIG
+          // WIN / LOSS / PUSH watermark on the parlay container so customers see the
+          // ticket's fate at a glance — no hunting through individual legs.
+          let anyLost = false; let anyPending = false; let allWon = true;
+          for (const p of picks) {
+            const ls = computeLiveState(p, liveMap[p.gameId]);
+            if (!ls || ls.state !== 'final') { anyPending = true; allWon = false; continue; }
+            if (ls.result === 'lost') { anyLost = true; allWon = false; }
+            else if (ls.result !== 'won') { allWon = false; }
+          }
+          const parlayResult: 'won' | 'lost' | 'pending' | 'push' = anyLost ? 'lost' : anyPending ? 'pending' : allWon ? 'won' : 'push';
+          const containerAccent =
+            parlayResult === 'won' ? 'border-emerald-400/70 bg-gradient-to-br from-emerald-500/[0.18] to-emerald-500/[0.04] shadow-[0_0_40px_-8px_rgba(16,185,129,0.5)]' :
+            parlayResult === 'lost' ? 'border-red-500/80 bg-gradient-to-br from-red-500/[0.22] to-red-500/[0.04] shadow-[0_0_40px_-8px_rgba(239,68,68,0.5)]' :
+            parlayResult === 'push' ? 'border-white/25 bg-white/[0.05]' :
+            'border-primary/30 bg-primary/[0.04]';
+          return (
+            <div className={`relative overflow-hidden rounded-3xl border-2 p-5 md:p-6 space-y-4 ${containerAccent}`}>
+              {parlayResult !== 'pending' && (
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center select-none">
+                  <div className={`text-8xl md:text-9xl font-black uppercase tracking-tighter ${
+                    parlayResult === 'won' ? 'text-emerald-400/12' :
+                    parlayResult === 'lost' ? 'text-red-500/15' :
+                    'text-white/10'
+                  }`}>
+                    {parlayResult === 'won' ? 'WIN' : parlayResult === 'lost' ? 'LOSS' : 'PUSH'}
+                  </div>
+                </div>
+              )}
+              <div className="relative text-sm text-white/60">
+                <span className="font-black text-primary">{picks.length}-leg parlay</span> — each leg is a different game. All legs must hit. One leg losing = the whole parlay loses{combined ? `. Estimated payout: ${combined}` : ""}.
               </div>
-            )}
+              <div className="relative space-y-5">
+                {picks.map((pick, i) => (
+                  <PickSummaryCard
+                    key={pick.gameId}
+                    pick={pick}
+                    index={i}
+                    href={`/pick/${pick.gameId}?board=${board}&from=${PRODUCT_PATH[product]}`}
+                    live={computeLiveState(pick, liveMap[pick.gameId])}
+                  />
+                ))}
+              </div>
+            </div>
+          );
+        })() : (
+          <div className="space-y-5">
             {picks.map((pick, i) => (
               <PickSummaryCard
                 key={pick.gameId}
