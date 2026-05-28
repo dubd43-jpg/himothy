@@ -2028,13 +2028,22 @@ async function buildParlayPlanExtraLegs(
   if (needed <= 0) return out;
   const fillGameIds = new Set<string>();   // games already used as a fill leg this pass
 
+  // Projected game total from each team's last-10 scoring average. Works for ANY scored
+  // game (the side picks don't carry a total projection, so we derive it here).
+  const projTotal = (p: any): number | null => {
+    const ht = p?.homeTeam?.trends?.avgTotal10 ?? null;
+    const at = p?.awayTeam?.trends?.avgTotal10 ?? null;
+    if (ht == null && at == null) return null;
+    return ht != null && at != null ? (ht + at) / 2 : (ht ?? at);
+  };
+
   // 1) TOTALS from unused already-scored games (no extra fetch). The game's own projection
   //    decides Over/Under; only include when it clears the line by a real margin.
   for (const [gid, p] of Array.from(scoredByGameId.entries())) {
     if (out.length >= needed) break;
     if (usedGames.has(gid)) continue;
     const total = p.total;
-    const predicted = p.tendencyResolution?.predictedTotal ?? null;
+    const predicted = projTotal(p);
     if (total == null || predicted == null || Math.abs(predicted - total) < 0.4) continue;
     const side = predicted >= total ? 'Over' : 'Under';
     out.push({
@@ -2093,7 +2102,7 @@ async function buildParlayPlanExtraLegs(
       if (out.length >= needed) break;
       if (parlayGameIds.has(gid) || fillGameIds.has(gid)) continue;  // not a game already in the parlay/fill
       const total = p.total;
-      const predicted = p.tendencyResolution?.predictedTotal ?? null;
+      const predicted = projTotal(p);
       if (total == null || predicted == null) continue;
       const side = predicted >= total ? 'Over' : 'Under';
       out.push({
