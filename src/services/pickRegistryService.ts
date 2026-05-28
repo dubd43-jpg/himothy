@@ -61,6 +61,10 @@ export interface RegistryPickInput {
   parlayLegCount?: number | null;
   parlayEstimatedOdds?: string | null;
   sgpTheme?: string | null;
+  // Recovery-only: allow recording into a board that's already finalized. Used when we
+  // recover a genuinely-published pick from the immutable frozen slate that never made it
+  // into the registry (the daily board was finalized before the missing pick was added).
+  allowFinalized?: boolean;
 }
 
 export interface RegistryPickRow {
@@ -756,7 +760,7 @@ export async function publishRegistryPick(input: RegistryPickInput) {
     `SELECT finalized FROM himothy_daily_board_records WHERE board_date = $1::date LIMIT 1`,
     boardDate
   );
-  if (dailyRows[0]?.finalized === true) {
+  if (dailyRows[0]?.finalized === true && !input.allowFinalized) {
     throw new Error(`Publish blocked: board ${boardDate} is finalized and immutable.`);
   }
 

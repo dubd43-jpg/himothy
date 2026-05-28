@@ -14,8 +14,10 @@ import {
   OFFICIAL_TRACKING_TIMEZONE,
 } from '@/lib/officialTracking';
 import { hasDatabase } from '@/lib/hasDatabase';
+import { recoverMissedRegistryPicks } from '@/services/recordBoardService';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 function dateKey(date: Date) {
   return getEtDateKey(date);
@@ -78,6 +80,10 @@ export async function GET() {
     return NextResponse.json(emptyRecordPayload());
   }
   try {
+    // Recover any genuinely-published picks that slipped the live recorder, from the
+    // frozen slates (throttled internally so this is a no-op on most requests). This is
+    // how the late-night Dodgers Grand Slam gets restored without a cron/secret.
+    await recoverMissedRegistryPicks();
     // Grade BEFORE archiving so finished games settle to W/L while still active —
     // otherwise they'd be archived as "pending" and never counted.
     await gradeRegistryBoard();

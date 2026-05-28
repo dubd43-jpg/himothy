@@ -6,11 +6,13 @@
 // Only spread / total / moneyline are recorded — those are what the grader can settle
 // cleanly. NRFI / props are tracked separately (they need first-inning data to grade).
 
-import { runDailyDeepResearch, type BoardType } from '@/services/deepResearchService';
-import { publishRegistryPick } from '@/services/pickRegistryService';
+import { type BoardType } from '@/services/deepResearchService';
+import { publishRegistryPick, gradeRegistryBoard, getRegistryBoardPicks } from '@/services/pickRegistryService';
+import { getOrComputeBoard, getPersistedBoardForDate } from '@/services/dailyBoardCache';
 import { hasDatabase } from '@/lib/hasDatabase';
 import { getOddsInsightForPick } from '@/services/oddsApiService';
 import { oddsBucket } from '@/lib/oddsBucket';
+import { OFFICIAL_TRACKING_START_DATE } from '@/lib/officialTracking';
 
 function americanToDecimal(american: number): number {
   return american > 0 ? 1 + american / 100 : 1 + 100 / Math.abs(american);
@@ -78,7 +80,9 @@ function marketAndLine(p: any): { marketType: string; line: string | null } {
 async function recordPick(
   p: any,
   category: string,
-  ticketCtx?: { ticketId: string; legPosition: number; legCount: number; estimatedOdds: string | null }
+  ticketCtx?: { ticketId: string; legPosition: number; legCount: number; estimatedOdds: string | null },
+  boardDate?: string,
+  allowFinalized = false,
 ): Promise<'recorded' | 'dupe' | 'error'> {
   const { marketType, line } = marketAndLine(p);
   const bucket = oddsBucket(p.odds);
@@ -90,7 +94,9 @@ async function recordPick(
   let fairProbAtPublish: number | null = null;
   let valueEdgeAtPublish: number | null = null;
   try {
-    if (p.homeTeam?.name && p.awayTeam?.name && p.selectionSide) {
+    // Skip the live odds-insight fetch on recovery — the game is already over, so
+    // capture-at-publish CLV is meaningless and we don't want dozens of stale Odds API calls.
+    if (!allowFinalized && p.homeTeam?.name && p.awayTeam?.name && p.selectionSide) {
       const oi = await getOddsInsightForPick(p.league, p.awayTeam.name, p.homeTeam.name, p.selectionSide);
       if (oi) {
         bestOddsAtPublish = oi.bestOdds;
@@ -118,6 +124,8 @@ async function recordPick(
   try {
     await publishRegistryPick({
       category,
+      boardDate,
+      allowFinalized,
       productLine: PRODUCT_LINE[category] || 'HIMOTHY CORE',
       sport: p.sport || 'Unknown',
       league: p.league || 'Unknown',
@@ -164,7 +172,12 @@ export async function recordTodaysBoard(): Promise<{ recorded: number; skipped: 
   for (const board of boards) {
     let res: any;
     try {
-      res = await runDailyDeepResearch(board);
+      // Record from the FROZEN slate (what customers actually saw), not a fresh research
+      // run. A fresh run late in the day can differ from the morning board AND trips the
+      // pregame guard on games that have since started — which is how the late-night
+      // Dodgers Grand Slam slipped through. getOrComputeBoard returns the cached frozen
+      // board (already in memory when called from the inline post-generation hook).
+      res = await getOrComputeBoard(board);
     } catch {
       continue;
     }
@@ -248,7 +261,7 @@ export async function recordTodaysBoard(): Promise<{ recorded: number; skipped: 
 
         legPos++;
         const ctx = ticketCtx ? { ticketId: ticketCtx.ticketId, legPosition: legPos, legCount: ticketCtx.legCount, estimatedOdds: ticketCtx.estimatedOdds } : undefined;
-        const r = await recordPick(p, category, ctx);
+        const r = await recordPick(p, category, ctx, etBoardDate);
         if (r === 'recorded') out.recorded++;
         else if (r === 'dupe') out.dupes++;
         else out.errors++;
@@ -290,7 +303,8 @@ export async function recordTodaysBoard(): Promise<{ recorded: number; skipped: 
         tier: 'NRFI',
         reasoningShort: n.reason || 'Both starters have strong 1st-inning ERAs',
       } as any;
-      const r = await recordPick(nrfiPick, 'NRFI');
+      const nrfiBoardDate = n.startTime ? etDate(new Date(n.startTime)) : etDate(new Date());
+      const r = await recordPick(nrfiPick, 'NRFI', undefined, nrfiBoardDate);
       if (r === 'recorded') out.recorded++;
       else if (r === 'dupe') out.dupes++;
       else out.errors++;
@@ -298,7 +312,7 @@ export async function recordTodaysBoard(): Promise<{ recorded: number; skipped: 
         const { logPickEvent } = await import('@/services/pickAuditLog');
         await logPickEvent({
           event: r === 'error' ? 'ERROR' : 'RECORDED',
-          boardDate: new Date(n.startTime).toISOString().slice(0, 10),
+          boardDate: nrfiBoardDate,
           pickKey: `${n.gameId}|NRFI`,
           gameId: String(n.gameId),
           category: 'NRFI',
@@ -313,4 +327,93 @@ export async function recordTodaysBoard(): Promise<{ recorded: number; skipped: 
     }
   }
   return out;
+}
+
+// ─── Frozen-slate recovery ─────────────────────────────────────────────────────
+// Walk every past ET day from the official start to yesterday, read the FROZEN slate that
+// was published that day (immutable evidence of what we showed), and record any pick that
+// never made it into the registry — then grade it. This is how a genuinely-published pick
+// that slipped the live recorder (e.g., a late-night game that had started by the time the
+// recorder ran) gets restored. It is NOT backfilling guesses: we only record picks that
+// the frozen slate proves we published, win or lose, and dedup skips anything already in.
+
+function pastBoardDatesToYesterday(): string[] {
+  const out: string[] = [];
+  const today = etDate(new Date());
+  let d = new Date(`${OFFICIAL_TRACKING_START_DATE}T12:00:00Z`);
+  for (let i = 0; i < 400; i++) {
+    const key = etDate(d);
+    if (key >= today) break; // today records live; only recover closed days
+    out.push(key);
+    d = new Date(d.getTime() + 24 * 60 * 60 * 1000);
+  }
+  return out;
+}
+
+let _lastRecoveryAt = 0;
+const RECOVERY_THROTTLE_MS = 10 * 60 * 1000;
+
+export async function recoverMissedRegistryPicks(opts?: { force?: boolean }): Promise<{ datesScanned: number; recorded: number; dupes: number; errors: number }> {
+  const result = { datesScanned: 0, recorded: 0, dupes: 0, errors: 0 };
+  if (!hasDatabase()) return result;
+  if (!opts?.force && Date.now() - _lastRecoveryAt < RECOVERY_THROTTLE_MS) return result;
+  _lastRecoveryAt = Date.now();
+
+  for (const date of pastBoardDatesToYesterday()) {
+    const board = await getPersistedBoardForDate(date, 'north-american');
+    if (!board) continue;
+    result.datesScanned++;
+
+    // Purely additive: only recover GAMES that have no registry entry for this date yet.
+    // This avoids double-recording a game that was already logged under a different
+    // selection (older days recorded from fresh research, which could differ from the
+    // frozen slate). We restore the genuinely-missing picks, nothing more.
+    let existingGameIds = new Set<string>();
+    try {
+      const existing = await getRegistryBoardPicks({ boardDate: date, includePrivate: true });
+      existingGameIds = new Set(existing.map((r: any) => String(r.eventId || '')).filter(Boolean));
+    } catch { /* if this fails, dedup-by-selection still prevents exact dupes */ }
+
+    const groups: Array<[string, any[]]> = [
+      ['GRAND_SLAM', board.grandSlam ? [board.grandSlam] : []],
+      ['PRESSURE_PACK', board.pressurePack || []],
+      ['VIP_4_PACK', board.vip4Pack || []],
+      ['PARLAY_PLAN', board.parlayPlan || []],
+      ['MARQUEE', board.marquee || []],
+    ];
+    for (const [category, picks] of groups) {
+      const valid = (picks || []).filter((p: any) => p?.selection && p?.gameId && !existingGameIds.has(String(p.gameId)));
+      const isParlay = category === 'PARLAY_PLAN';
+      const ticketCtx = isParlay && valid.length > 1
+        ? { ticketId: newTicketId('parlay'), legCount: valid.length, estimatedOdds: combineParlayOdds(valid) }
+        : null;
+      let legPos = 0;
+      for (const p of valid) {
+        legPos++;
+        const bDate = p?.startTime ? etDate(new Date(p.startTime)) : date;
+        const ctx = ticketCtx ? { ticketId: ticketCtx.ticketId, legPosition: legPos, legCount: ticketCtx.legCount, estimatedOdds: ticketCtx.estimatedOdds } : undefined;
+        const r = await recordPick(p, category, ctx, bDate, /* allowFinalized */ true);
+        if (r === 'recorded') result.recorded++; else if (r === 'dupe') result.dupes++; else result.errors++;
+      }
+    }
+
+    for (const n of (board.nrfi || [])) {
+      if (!n?.gameId || existingGameIds.has(String(n.gameId))) continue;
+      const nrfiPick = {
+        gameId: n.gameId, eventName: n.eventName, league: n.league || 'MLB', sport: 'MLB',
+        startTime: n.startTime,
+        homeTeam: { name: n.homeTeam, abbreviation: '', moneyline: null, winProbability: null },
+        awayTeam: { name: n.awayTeam, abbreviation: '', moneyline: null, winProbability: null },
+        selection: 'NRFI — No Runs First Inning', selectionSide: 'home' as const,
+        marketType: 'special', line: null, odds: n.odds || null,
+        confidenceScore: n.nrfiScore || 0, tier: 'NRFI',
+      } as any;
+      const bDate = n.startTime ? etDate(new Date(n.startTime)) : date;
+      const r = await recordPick(nrfiPick, 'NRFI', undefined, bDate, true);
+      if (r === 'recorded') result.recorded++; else if (r === 'dupe') result.dupes++; else result.errors++;
+    }
+
+    try { await gradeRegistryBoard(date); } catch { /* non-fatal */ }
+  }
+  return result;
 }

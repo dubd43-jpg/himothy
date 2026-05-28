@@ -1865,7 +1865,7 @@ async function buildParlayPlanExtraLegs(
 
   // 1) TOTALS from unused already-scored games (no extra fetch). The game's own projection
   //    decides Over/Under; only include when it clears the line by a real margin.
-  for (const [gid, p] of scoredByGameId) {
+  for (const [gid, p] of Array.from(scoredByGameId.entries())) {
     if (out.length >= needed) break;
     if (usedGames.has(gid)) continue;
     const total = p.total;

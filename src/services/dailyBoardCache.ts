@@ -165,6 +165,24 @@ export function getCachedBoard(board: string) {
   return boardCache.get(slateVersionKey(board));
 }
 
+// Read the frozen slate persisted for a SPECIFIC past ET date (any rules version) — used
+// by the registry recovery to record/grade picks from boards that were published but never
+// made it into the registry. Returns the stored BoardPicksResult or null.
+export async function getPersistedBoardForDate(etDate: string, board: string): Promise<any | null> {
+  if (!hasDatabase()) return null;
+  await ensureSlateCacheSchema();
+  try {
+    const rows = await prisma.$queryRawUnsafe<Array<{ data: any }>>(
+      `SELECT "data" FROM "DailySlateCache" WHERE "etDate" = $1 AND "board" = $2 ORDER BY "generatedAt" DESC LIMIT 1`,
+      etDate, board,
+    );
+    if (!rows[0]?.data) return null;
+    return typeof rows[0].data === 'string' ? JSON.parse(rows[0].data) : rows[0].data;
+  } catch {
+    return null;
+  }
+}
+
 export async function getOrComputeBoard(board: BoardType): Promise<any> {
   const etDate = todayEtKey();
   const key = `${SLATE_RULES_VERSION}|${etDate}|${board}`;
