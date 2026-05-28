@@ -905,7 +905,38 @@ function DeepResearchSection({ board }: { board: string }) {
       if (force) params.set('refresh', 'true');
       const res = await fetch(`/api/research/daily-picks?${params.toString()}`, { cache: 'no-store' });
       const json = await res.json();
-      if (json.success) setData(json);
+      if (!json.success) return;
+      // Cross-board asleep: on the main board, the Asleep Picks section should pull from
+      // EVERY board's asleep-flagged picks too (tennis, MMA, cricket, AFL, MLS, Liga MX
+      // etc.) — per user, "asleep is stuff people aren't even thinking about." Fetch the
+      // other boards in parallel and merge their picks into asleepPicks for the main view.
+      if (board === 'north-american') {
+        const otherBoards = ['soccer', 'tennis', 'combat', 'global'];
+        const otherResults = await Promise.allSettled(
+          otherBoards.map((b) => fetch(`/api/research/daily-picks?board=${b}`, { cache: 'no-store' }).then((r) => r.json()))
+        );
+        const crossBoardAsleep: any[] = [];
+        for (const r of otherResults) {
+          if (r.status !== 'fulfilled' || !r.value?.success) continue;
+          // Pull EVERY non-NA pick into asleep — these whole boards ARE asleep markets.
+          // Tennis, MMA, cricket, AFL, second-tier soccer — the user's "nobody's thinking
+          // about it" stuff.
+          const picks = [r.value.grandSlam, ...(r.value.pressurePack || []), ...(r.value.vip4Pack || []), ...(r.value.parlayPlan || []), ...(r.value.asleepPicks || [])]
+            .filter(Boolean);
+          crossBoardAsleep.push(...picks);
+        }
+        // Merge with the NA board's own asleep picks, dedupe by gameId, cap at 12.
+        const existing = new Set((json.asleepPicks || []).map((p: any) => p?.gameId));
+        for (const p of crossBoardAsleep) {
+          if (!p?.gameId || existing.has(p.gameId)) continue;
+          existing.add(p.gameId);
+          (json.asleepPicks ||= []).push(p);
+        }
+        json.asleepPicks = (json.asleepPicks || [])
+          .sort((a: any, b: any) => (b?.confidenceScore || 0) - (a?.confidenceScore || 0))
+          .slice(0, 12);
+      }
+      setData(json);
     } catch (e) {
       console.error('Deep research fetch failed', e);
     } finally {

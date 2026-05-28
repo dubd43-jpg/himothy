@@ -165,8 +165,13 @@ export async function getPersonalPick(forceRefresh = false): Promise<PersonalPic
   }
 
   allEdges.sort((a, b) => b.edgeScore - a.edgeScore);
-  const topPick = allEdges[0] || null;
-  const runnerUps = allEdges.slice(1, 6); // next 5 for context / fallback display
+  // Personal Pick floor: per user, "must be an 89 or better, or I don't have a Personal
+  // Pick." This is the standalone product — it doesn't ship every day. Better to be
+  // empty than to label a 73-edge play as "my personal pick."
+  const PERSONAL_PICK_FLOOR = 89;
+  const candidate = allEdges[0] || null;
+  const topPick = candidate && candidate.edgeScore >= PERSONAL_PICK_FLOOR ? candidate : null;
+  const runnerUps = allEdges.slice(topPick ? 1 : 0, 6); // shown as "also strong today"
 
   const result: PersonalPickResult = {
     generatedAt: new Date().toISOString(),
@@ -177,7 +182,8 @@ export async function getPersonalPick(forceRefresh = false): Promise<PersonalPic
     totalPropsEvaluated: totalProps,
     emptyReason: topPick ? undefined : (
       totalGames === 0 ? 'No games found across scanned leagues for today.' :
-      totalProps === 0 ? 'No qualifying player-prop projections produced today (likely Odds API quota exhausted or low-sample players).' :
+      totalProps === 0 ? 'No qualifying player-prop projections produced today (Odds API quota or sparse player data).' :
+      candidate ? `Resting today — best prop today scored ${candidate.edgeScore}, below the ${PERSONAL_PICK_FLOOR}-edge floor for a Personal Pick.` :
       undefined
     ),
   };
