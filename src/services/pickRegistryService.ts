@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { LEAGUE_URLS } from '@/lib/validation';
+import { hasDatabase } from '@/lib/hasDatabase';
 import {
   clampToOfficialStartDate,
   getEtDateKey,
@@ -141,6 +142,61 @@ function americanToDecimal(odds?: string | null): number | null {
   if (!Number.isFinite(n) || n === 0) return null;
   if (n > 0) return 1 + n / 100;
   return 1 + 100 / Math.abs(n);
+}
+
+// LINE-UPDATE FREEZE — PER LEAGUE. User's rule: lines on a given league can update up
+// to 15 min BEFORE the first game of THAT LEAGUE starts. Once the first NBA game tips
+// off, no more NBA line changes for the day — but NHL can still update until its first
+// faceoff. Only applies to North American leagues; international markets (soccer,
+// tennis, cricket, etc.) follow their own slate-freeze rules and aren't covered here.
+const LINE_LOCK_BEFORE_FIRST_GAME_MS = 15 * 60 * 1000;
+const NORTH_AMERICAN_LEAGUES = new Set([
+  'NFL', 'NBA', 'NHL', 'MLB', 'WNBA',
+  'College Football', 'NCAA Football', 'NCAA Basketball', 'NCAA Baseball', 'NCAAB', 'NCAAF',
+]);
+
+async function getLineUpdateCutoff(boardDate: string, league?: string): Promise<Date | null> {
+  if (!hasDatabase()) return null;
+  // Non-NA leagues aren't covered by this rule.
+  if (league && !NORTH_AMERICAN_LEAGUES.has(league)) return null;
+  try {
+    const rows = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT "data" FROM "DailySlateCache" WHERE "etDate" = $1 AND "board" = 'north-american' LIMIT 1`,
+      boardDate.replace(/-/g, ''),
+    );
+    const slate = rows[0]?.data;
+    if (!slate) return null;
+    const allPicks: any[] = [];
+    if (slate.grandSlam) allPicks.push(slate.grandSlam);
+    for (const k of ['pressurePack', 'vip4Pack', 'parlayPlan', 'marquee', 'asleepPicks', 'nrfi']) {
+      for (const p of slate[k] || []) allPicks.push(p);
+    }
+    // Find earliest startTime among picks in the SAME league. If no league passed,
+    // bail (caller didn't ask league-specific) — fall back to a per-league answer the
+    // caller must request explicitly.
+    if (!league) return null;
+    let earliest: number | null = null;
+    for (const p of allPicks) {
+      if (p?.league !== league) continue;
+      if (!p?.startTime) continue;
+      const t = new Date(p.startTime).getTime();
+      if (!Number.isFinite(t)) continue;
+      if (earliest == null || t < earliest) earliest = t;
+    }
+    if (earliest == null) return null;
+    return new Date(earliest - LINE_LOCK_BEFORE_FIRST_GAME_MS);
+  } catch (err) {
+    console.error('[pickRegistry] getLineUpdateCutoff failed', err);
+    return null;
+  }
+}
+
+// Convenience export so the UI can show "lines lock at X" notice per league.
+export async function getLineLockInfo(league: string): Promise<{ cutoff: Date | null; locked: boolean }> {
+  const date = getOfficialBoardDate();
+  const cutoff = await getLineUpdateCutoff(date, league);
+  if (!cutoff) return { cutoff: null, locked: false };
+  return { cutoff, locked: Date.now() > cutoff.getTime() };
 }
 
 function clampStatus(status?: string): RegistryStatus {
@@ -705,7 +761,12 @@ export async function publishRegistryPick(input: RegistryPickInput) {
     const oldDecimal = americanToDecimal(existing.odds);
     const newDecimal = americanToDecimal(input.odds);
     const improvedEnough = oldDecimal != null && newDecimal != null && newDecimal > oldDecimal * 1.01;
-    if (improvedEnough) {
+    // Per-league line lock: once the first game of THIS league starts, no more updates
+    // for that league. NBA picks freeze when first NBA game tips, NFL freezes when first
+    // NFL game starts, etc. Non-NA leagues (soccer, tennis, etc.) skip this check.
+    const lockCutoff = await getLineUpdateCutoff(boardDate, input.league);
+    const linesLocked = lockCutoff != null && Date.now() > lockCutoff.getTime();
+    if (improvedEnough && !linesLocked) {
       await prisma.$executeRawUnsafe(
         `UPDATE himothy_pick_registry
             SET odds = $1, sportsbook = COALESCE($2, sportsbook), line = COALESCE($3, line),

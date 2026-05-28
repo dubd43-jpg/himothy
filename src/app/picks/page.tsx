@@ -1154,11 +1154,13 @@ function DeepResearchSection({ board }: { board: string }) {
 
   return (
     <div className="space-y-6">
-      {/* Live-update notice */}
-      <div className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.04] px-3 py-2">
-        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-        <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-300/80 leading-snug">
-          Live — picks update through the day and can change up to ~15 min before game time.
+      {/* Per-league line-update window. House rule: each league's lines can move up
+          to 15 min before THAT league's first game. NFL locks when first NFL game
+          starts, NBA locks when first NBA game tips, etc. — independent per sport. */}
+      <div className="flex items-center gap-2 rounded-xl border border-amber-500/25 bg-amber-500/[0.05] px-3 py-2">
+        <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
+        <p className="text-[10px] font-bold uppercase tracking-wider text-amber-300/90 leading-snug">
+          Lines update up to 15 min before each league's first game (per-sport). NFL locks at first NFL game, NBA at first NBA game, etc.
         </p>
       </div>
       {/* Meta bar */}
