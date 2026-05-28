@@ -7,10 +7,18 @@ import { ArrowLeft, Crown, Flame, ShieldCheck, DollarSign, Lock, RefreshCw, Trop
 import { PickSummaryCard, type DeepPick } from "@/components/PickBreakdown";
 import { useLiveScores } from "@/components/useLiveScores";
 import { computeLiveState } from "@/lib/livePickStatus";
+import { formatGameDateTimeET } from "@/lib/datetime";
+
+interface ParlayExtraLeg {
+  type: "prop" | "total";
+  league: string; gameId: string; eventName: string;
+  selection: string; odds: string | null; startTime: string | null; detail: string;
+}
 
 interface DailyPicksData {
   success: boolean; boardDate: string; generatedAt: string;
   grandSlam: DeepPick | null; pressurePack: DeepPick[]; vip4Pack: DeepPick[]; parlayPlan: DeepPick[];
+  parlayExtraLegs?: ParlayExtraLeg[];
   totalGamesScanned: number;
 }
 
@@ -51,11 +59,33 @@ function parseAmerican(odds?: string | null) {
   return m ? Number.parseInt(m[0], 10) : NaN;
 }
 function toDecimal(a: number) { return a > 0 ? 1 + a / 100 : 1 + 100 / Math.abs(a); }
-function parlayOdds(picks: DeepPick[]) {
-  const decs = picks.map((p) => toDecimal(parseAmerican(p.odds))).filter((d) => Number.isFinite(d));
+function parlayOddsFromList(oddsList: (string | null | undefined)[]) {
+  const decs = oddsList.map((o) => toDecimal(parseAmerican(o ?? undefined))).filter((d) => Number.isFinite(d));
   if (decs.length === 0) return null;
   const total = decs.reduce((a, d) => a * d, 1);
   return total >= 2 ? `+${Math.round((total - 1) * 100)}` : `-${Math.round(100 / (total - 1))}`;
+}
+
+// Compact card for a prop/total fill leg on the $10 Parlay. Not clickable — there's no
+// per-game breakdown for a player prop — but it shows the selection, price, game, and time.
+function ExtraLegCard({ leg, index }: { leg: ParlayExtraLeg; index: number }) {
+  const when = formatGameDateTimeET(leg.startTime);
+  return (
+    <article className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+      <div className="flex items-center justify-between gap-2 text-[10px] font-black uppercase tracking-widest text-white/30">
+        <span className="truncate">
+          <span className="text-primary">#{index + 1} · </span>
+          <span className="text-sky-400/70">{leg.type === "prop" ? "PROP" : "TOTAL"}</span> · {leg.league} · {leg.eventName}
+        </span>
+        {when && <span className="shrink-0">{when}</span>}
+      </div>
+      <div className="mt-2 flex items-center justify-between gap-3">
+        <div className="text-2xl font-black text-white leading-tight md:text-3xl">{leg.selection}</div>
+        {leg.odds && <div className="shrink-0 rounded-xl border border-primary/25 bg-primary/10 px-4 py-2 text-xl font-black tabular-nums text-primary">{leg.odds}</div>}
+      </div>
+      {leg.detail && <div className="mt-2 text-xs text-white/45">{leg.detail}</div>}
+    </article>
+  );
 }
 // ─── The page ─────────────────────────────────────────────────────────────────
 
@@ -104,7 +134,11 @@ export function ProductPickPage({
   }, [data, product]);
 
   const Icon = meta.icon;
-  const combined = product === "parlayPlan" && picks.length > 1 ? parlayOdds(picks) : null;
+  // $10 Parlay can carry prop/total fill legs on top of the game legs (thin slates).
+  const extraLegs: ParlayExtraLeg[] = product === "parlayPlan" ? (data?.parlayExtraLegs || []) : [];
+  const parlayLegCount = picks.length + extraLegs.length;
+  const allParlayOdds = [...picks.map((p) => p.odds), ...extraLegs.map((l) => l.odds)];
+  const combined = product === "parlayPlan" && parlayLegCount > 1 ? parlayOddsFromList(allParlayOdds) : null;
 
   return (
     <div className="min-h-screen bg-background text-white pb-32">
@@ -180,13 +214,13 @@ export function ProductPickPage({
             <div className="h-8 w-8 rounded-full border-2 border-white/20 border-t-primary animate-spin" />
             <span className="text-sm font-semibold text-white/40">Running deep research...</span>
           </div>
-        ) : picks.length === 0 ? (
+        ) : (picks.length === 0 && parlayLegCount === 0) ? (
           <div className="rounded-3xl border-2 border-dashed border-white/10 bg-white/[0.02] py-20 text-center px-6">
             <Trophy className="mx-auto h-14 w-14 text-white/15 mb-5" />
             <h3 className="text-2xl font-black uppercase tracking-tight">{meta.emptyTitle}</h3>
             <p className="mx-auto mt-3 max-w-md text-white/40 leading-relaxed">{meta.emptyBody}</p>
           </div>
-        ) : product === "parlayPlan" && picks.length > 1 ? (() => {
+        ) : product === "parlayPlan" && parlayLegCount > 1 ? (() => {
           // Parlay aggregate: any single leg losing kills the whole parlay. Show BIG
           // WIN / LOSS / PUSH watermark on the parlay container so customers see the
           // ticket's fate at a glance — no hunting through individual legs.
@@ -197,6 +231,9 @@ export function ProductPickPage({
             if (ls.result === 'lost') { anyLost = true; allWon = false; }
             else if (ls.result !== 'won') { allWon = false; }
           }
+          // Prop/total fill legs aren't live-graded — if any exist and no game leg has lost
+          // yet, the ticket stays pending (we can't call a win until props settle).
+          if (extraLegs.length > 0 && !anyLost) { anyPending = true; allWon = false; }
           const parlayResult: 'won' | 'lost' | 'pending' | 'push' = anyLost ? 'lost' : anyPending ? 'pending' : allWon ? 'won' : 'push';
           const containerAccent =
             parlayResult === 'won' ? 'border-emerald-400/70 bg-gradient-to-br from-emerald-500/[0.18] to-emerald-500/[0.04] shadow-[0_0_40px_-8px_rgba(16,185,129,0.5)]' :
@@ -217,7 +254,8 @@ export function ProductPickPage({
                 </div>
               )}
               <div className="relative text-sm text-white/60">
-                <span className="font-black text-primary">{picks.length}-leg parlay</span> — each leg is a different game. All legs must hit. One leg losing = the whole parlay loses{combined ? `. Estimated payout: ${combined}` : ""}.
+                <span className="font-black text-primary">{parlayLegCount}-leg parlay</span> — all legs must hit. One leg losing = the whole parlay loses{combined ? `. Estimated payout: ${combined}` : ""}.
+                {extraLegs.length > 0 && <span className="block mt-1 text-xs text-white/40">Game legs plus {extraLegs.length} prop/total {extraLegs.length === 1 ? "leg" : "legs"} for extra value on a light slate.</span>}
               </div>
               <div className="relative space-y-5">
                 {picks.map((pick, i) => (
@@ -228,6 +266,9 @@ export function ProductPickPage({
                     href={`/pick/${pick.gameId}?board=${board}&from=${PRODUCT_PATH[product]}`}
                     live={computeLiveState(pick, liveMap[pick.gameId])}
                   />
+                ))}
+                {extraLegs.map((leg, i) => (
+                  <ExtraLegCard key={`${leg.gameId}-${leg.selection}-${i}`} leg={leg} index={picks.length + i} />
                 ))}
               </div>
             </div>

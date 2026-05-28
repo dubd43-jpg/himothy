@@ -229,6 +229,21 @@ function detectBigGame(event: any, comp: any): string | null {
   return null;
 }
 
+// Lightweight extra legs for the $10 Parlay Plan. On thin slates the straight products
+// consume the few quality games, leaving the parlay short. Rather than pad with heavy
+// chalk or repeat a straight, we fill the parlay with real-value PROP and game TOTAL legs
+// from games we aren't already using.
+export interface ParlayExtraLeg {
+  type: 'prop' | 'total';
+  league: string;
+  gameId: string;
+  eventName: string;
+  selection: string;
+  odds: string | null;
+  startTime: string | null;
+  detail: string;
+}
+
 export interface BoardPicksResult {
   generatedAt: string;
   boardDate: string;
@@ -237,6 +252,7 @@ export interface BoardPicksResult {
   pressurePack: DeepPickResult[];
   vip4Pack: DeepPickResult[];
   parlayPlan: DeepPickResult[];
+  parlayExtraLegs?: ParlayExtraLeg[];   // prop/total legs that top up a thin $10 Parlay
   marquee: DeepPickResult[];        // tonight's headline NBA/NHL/NFL games we cover regardless of tier
   asleepPicks: DeepPickResult[];    // lesser-watched-league plays where edges are bigger — surfaced regardless of tier
   outrights?: any[];                // active tournament futures: golf majors, tennis slams, F1 championships
@@ -1830,6 +1846,78 @@ async function enrichWithAI(pick: DeepPickResult): Promise<DeepPickResult> {
 
 // ─── Main Export ─────────────────────────────────────────────────────────────
 
+// The $10 Parlay aims for this many legs total (game legs + prop/total fill). On a full
+// slate the game legs alone get there; on thin nights the fill tops it up.
+const PARLAY_TARGET_LEGS = 4;
+
+// Build prop/total fill legs for a short $10 Parlay. Pulls from games NOT already used by
+// the straights or the parlay's game legs — never repeats a pick, never uses heavy chalk
+// (skips prop prices worse than the parlay floor). Totals come free from already-scored
+// games; props are fetched for unused games (the workhorse on thin slates).
+async function buildParlayPlanExtraLegs(
+  fillEvents: Array<{ gameId: string; league: string; event: any }>,
+  scoredByGameId: Map<string, DeepPickResult>,
+  usedGames: Set<string>,
+  needed: number,
+): Promise<ParlayExtraLeg[]> {
+  const out: ParlayExtraLeg[] = [];
+  if (needed <= 0) return out;
+
+  // 1) TOTALS from unused already-scored games (no extra fetch). The game's own projection
+  //    decides Over/Under; only include when it clears the line by a real margin.
+  for (const [gid, p] of scoredByGameId) {
+    if (out.length >= needed) break;
+    if (usedGames.has(gid)) continue;
+    const total = p.total;
+    const predicted = p.tendencyResolution?.predictedTotal ?? null;
+    if (total == null || predicted == null || Math.abs(predicted - total) < 0.75) continue;
+    const side = predicted >= total ? 'Over' : 'Under';
+    out.push({
+      type: 'total', league: p.league, gameId: gid, eventName: p.eventName,
+      selection: `${side} ${total}`, odds: '-110', startTime: p.startTime || null,
+      detail: `Projected ${predicted.toFixed(1)} vs line ${total}`,
+    });
+    usedGames.add(gid);
+  }
+
+  // 2) PROPS from unused games — real-value, edge-scored, no heavy chalk.
+  if (out.length < needed) {
+    try {
+      const { buildPreGameProps } = await import('@/services/preGamePropsService');
+      for (const fe of fillEvents) {
+        if (out.length >= needed) break;
+        if (usedGames.has(fe.gameId)) continue;
+        const comp = fe.event?.competitions?.[0];
+        if (!comp) continue;
+        let props: any;
+        try { props = await buildPreGameProps(fe.gameId, fe.event?.name || '', fe.league, comp); }
+        catch { continue; }
+        const best = (props?.propEdges || [])
+          .filter((e: any) => e.edgeScore >= 62 && e.recommended)
+          .sort((a: any, b: any) => b.edgeScore - a.edgeScore)[0];
+        if (!best) continue;
+        const sideTxt = best.recommended === 'over' ? 'Over' : 'Under';
+        const odds = best.recommended === 'under'
+          ? (best.marketUnderPrice != null ? `${best.marketUnderPrice > 0 ? '+' : ''}${best.marketUnderPrice}` : '-110')
+          : (best.marketOverPrice != null ? `${best.marketOverPrice > 0 ? '+' : ''}${best.marketOverPrice}` : '-110');
+        // No heavy chalk: skip props priced worse than the parlay floor.
+        const ml = parseAmericanOdds(odds);
+        if (ml != null && ml < 0 && ml < PARLAY_PLAN_ML_FLOOR) continue;
+        const marketLabel = String(best.market).replace(/^(player_|batter_|pitcher_)/, '').replace(/_/g, ' ');
+        const line = best.marketLine ?? best.projection;
+        out.push({
+          type: 'prop', league: fe.league, gameId: fe.gameId, eventName: fe.event?.name || '',
+          selection: `${best.playerName} ${sideTxt} ${typeof line === 'number' ? line.toFixed(1) : line} ${marketLabel}`.trim(),
+          odds, startTime: fe.event?.date || null,
+          detail: `proj ${best.projection.toFixed(1)}${best.marketLine != null ? ` vs line ${best.marketLine}` : ''}`,
+        });
+        usedGames.add(fe.gameId);
+      }
+    } catch { /* props service unavailable — return whatever totals we found */ }
+  }
+  return out;
+}
+
 export async function runDailyDeepResearch(board: BoardType = 'north-american'): Promise<BoardPicksResult> {
   const now = new Date();
   const leagues = BOARD_LEAGUES[board];
@@ -1842,6 +1930,9 @@ export async function runDailyDeepResearch(board: BoardType = 'north-american'):
   const allGamePromises: Promise<DeepPickResult | null>[] = [];
   let totalScanned = 0;
   const mlbEvents: any[] = [];
+  // Standard (non-combat/tennis) events kept around so the $10 Parlay can pull prop/total
+  // fill legs from games the straights didn't use — without re-fetching scoreboards.
+  const fillEvents: Array<{ gameId: string; league: string; event: any }> = [];
 
   for (const settled of leagueResults) {
     if (settled.status !== 'fulfilled' || !settled.value.result) continue;
@@ -1949,6 +2040,7 @@ export async function runDailyDeepResearch(board: BoardType = 'north-american'):
 
     totalScanned += events.length;
     for (const event of events) {
+      fillEvents.push({ gameId: String(event.id), league, event });
       allGamePromises.push(processGame(event, league, baseUrl, board));
     }
   }
@@ -2075,10 +2167,24 @@ export async function runDailyDeepResearch(board: BoardType = 'north-american'):
     promote(parlayPlan, 6, 'PARLAY_PLAN', chalkPool);
   }
 
-  // A parlay needs at least 2 legs — otherwise it's just a straight bet.
-  if (parlayPlan.length < 2) {
+  // THIN-SLATE PARLAY FILL: when the straights have eaten the few quality games and the
+  // parlay is short, top it up to PARLAY_TARGET_LEGS with real-value PROP / game TOTAL legs
+  // from games we aren't already using — never repeating a straight, never heavy chalk.
+  let parlayExtraLegs: ParlayExtraLeg[] = [];
+  if (board === 'north-american' && parlayPlan.length < PARLAY_TARGET_LEGS) {
+    const scoredByGameId = new Map(allScoredRaw.map((p) => [p.gameId, p]));
+    try {
+      parlayExtraLegs = await buildParlayPlanExtraLegs(
+        fillEvents, scoredByGameId, usedGames, PARLAY_TARGET_LEGS - parlayPlan.length,
+      );
+    } catch { parlayExtraLegs = []; }
+  }
+
+  // A parlay needs at least 2 legs total (game legs + fill) — otherwise it's a straight bet.
+  if (parlayPlan.length + parlayExtraLegs.length < 2) {
     for (const p of parlayPlan) usedGames.delete(p.gameId);
     parlayPlan.length = 0;
+    parlayExtraLegs = [];
   }
 
   // Tonight's big games — headline NBA/NHL/NFL/WNBA matchups we always cover, even if
@@ -2167,6 +2273,7 @@ export async function runDailyDeepResearch(board: BoardType = 'north-american'):
     pressurePack: pressurePack.map((p) => enrichedMap.get(p.gameId) || p),
     vip4Pack,
     parlayPlan,
+    parlayExtraLegs,
     marquee,
     asleepPicks,
     outrights,
