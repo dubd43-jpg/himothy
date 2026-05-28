@@ -1376,24 +1376,13 @@ function pickForNA(
     return { selectionSide: pickedSide, marketType: 'total' as const, selection: `${side} ${total}`, odds: '-110', line: `${total}` };
   };
 
-  // LOW-SCORING sports (MLB / NHL): the 1.5 run/puck line is close to a coin flip and was
-  // the single biggest loss driver (run lines went 11-16 / 41% while moneylines went 56%).
-  // We do NOT force the -1.5 line here. Take the moneyline when it's a fair price, otherwise
-  // play the TOTAL (a real -110 market) — never lay a coin-flip 1.5 at a fake price.
-  const l = (league || '').toLowerCase();
-  const isLowScoring = l.includes('mlb') || l.includes('baseball') || l.includes('nhl') || l.includes('hockey') || l.includes('kbo') || l.includes('npb');
-
-  // Value side (pick'em, small favorite, or dog priced ≈ -150 to +160) → the MONEYLINE.
+  // FULL-BOARD selection — we play every market, picking the best version of the play:
+  //  • Value side (pick'em, small favorite, or dog priced ≈ -150 to +160) → the MONEYLINE.
+  //  • Chalky favorite → the SPREAD / RUN LINE (MLB -1.5) at -110 — the value version that
+  //    actually pays, instead of laying heavy juice. Run lines stay (per owner) — the
+  //    Dodgers -1.5 Grand Slam won. Confidence/value scoring decides which spots to feature.
+  //  • No spread available → the TOTAL, then fall back to the moneyline.
   if (ml != null && ml >= -150 && ml <= 160) return moneyline();
-
-  if (isLowScoring) {
-    // Chalky baseball/hockey favorite → the total, NOT the run line. Fall back to the
-    // moneyline only if we can't price a total (it'll get chalk-filtered downstream).
-    return totalPlay() ?? moneyline();
-  }
-
-  // Higher-scoring sports (NBA / NFL / NCAA): the point spread at -110 is a real, fair
-  // market — chalky favorites play the spread, then total, then moneyline.
   return spreadPlay() ?? totalPlay() ?? moneyline();
 }
 
