@@ -577,18 +577,27 @@ function LiveRecordBar() {
   const hasRecord = (at.wins + at.losses) > 0;
   if (!hasRecord) return null;
 
-  // Aggregate singles (everything that isn't a parlay product line) vs parlays.
-  // User: "parlays have their own stats." We show two lines: Singles + Parlays.
+  // Per user: ONLY Grand Slam, Pressure Pack, and VIP 4-Pack count toward the main
+  // "Singles" stat. Everything else (Big Games, Personal Pick, Parlays, NRFI, Asleep,
+  // Value Plays) is shown separately or just lives on its own tile. This keeps the
+  // headline number tied to our flagship core products.
   const lines = stats.productLineStats || {};
+  const isCoreSingle = (k: string) => /^(grand slam|pressure pack|vip 4-pack)$/i.test(k);
   const isParlayLine = (k: string) => /parlay|hailmary/i.test(k);
-  const singles = Object.entries(lines).filter(([k]) => !isParlayLine(k));
+  const isMarqueeLine = (k: string) => /big games|marquee/i.test(k);
+  const isPersonalLine = (k: string) => /personal/i.test(k);
+  const singles = Object.entries(lines).filter(([k]) => isCoreSingle(k));
   const parlays = Object.entries(lines).filter(([k]) => isParlayLine(k));
+  const marquee = Object.entries(lines).filter(([k]) => isMarqueeLine(k));
+  const personal = Object.entries(lines).filter(([k]) => isPersonalLine(k));
   const sum = (rows: Array<[string, ProductLineStats]>) => rows.reduce(
     (acc, [, s]) => ({ wins: acc.wins + s.wins, losses: acc.losses + s.losses, pushes: acc.pushes + s.pushes, units: acc.units + s.units }),
     { wins: 0, losses: 0, pushes: 0, units: 0 },
   );
   const singlesAgg = sum(singles);
   const parlaysAgg = sum(parlays);
+  const marqueeAgg = sum(marquee);
+  const personalAgg = sum(personal);
   const wlPct = (w: number, l: number) => (w + l > 0 ? `${Math.round((w / (w + l)) * 100)}%` : '—');
   const unitStr = (u: number) => `${u >= 0 ? '+' : ''}${u.toFixed(1)}u`;
 
@@ -610,6 +619,20 @@ function LiveRecordBar() {
             <span className="text-emerald-400/70 ml-1">{wlPct(parlaysAgg.wins, parlaysAgg.losses)}</span>
             <span className={`ml-1 ${parlaysAgg.units >= 0 ? 'text-emerald-400/80' : 'text-red-400/80'}`}>{unitStr(parlaysAgg.units)}</span>
           </span>
+          {(marqueeAgg.wins + marqueeAgg.losses) > 0 && (
+            <span className="text-white/50">
+              Big Games <span className="text-white">{marqueeAgg.wins}-{marqueeAgg.losses}{marqueeAgg.pushes > 0 ? `-${marqueeAgg.pushes}` : ''}</span>
+              <span className="text-emerald-400/70 ml-1">{wlPct(marqueeAgg.wins, marqueeAgg.losses)}</span>
+              <span className={`ml-1 ${marqueeAgg.units >= 0 ? 'text-emerald-400/80' : 'text-red-400/80'}`}>{unitStr(marqueeAgg.units)}</span>
+            </span>
+          )}
+          {(personalAgg.wins + personalAgg.losses) > 0 && (
+            <span className="text-white/50">
+              Personal <span className="text-white">{personalAgg.wins}-{personalAgg.losses}{personalAgg.pushes > 0 ? `-${personalAgg.pushes}` : ''}</span>
+              <span className="text-emerald-400/70 ml-1">{wlPct(personalAgg.wins, personalAgg.losses)}</span>
+              <span className={`ml-1 ${personalAgg.units >= 0 ? 'text-emerald-400/80' : 'text-red-400/80'}`}>{unitStr(personalAgg.units)}</span>
+            </span>
+          )}
           <Link href="/results" className="text-white/30 hover:text-emerald-400 transition-colors underline underline-offset-2">
             Full Record →
           </Link>
