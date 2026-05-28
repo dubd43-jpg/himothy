@@ -2033,7 +2033,7 @@ async function buildParlayPlanExtraLegs(
     if (usedGames.has(gid)) continue;
     const total = p.total;
     const predicted = p.tendencyResolution?.predictedTotal ?? null;
-    if (total == null || predicted == null || Math.abs(predicted - total) < 0.75) continue;
+    if (total == null || predicted == null || Math.abs(predicted - total) < 0.4) continue;
     const side = predicted >= total ? 'Over' : 'Under';
     out.push({
       type: 'total', league: p.league, gameId: gid, eventName: p.eventName,
@@ -2056,7 +2056,7 @@ async function buildParlayPlanExtraLegs(
         try { props = await buildPreGameProps(fe.gameId, fe.event?.name || '', fe.league, comp); }
         catch { continue; }
         const best = (props?.propEdges || [])
-          .filter((e: any) => e.edgeScore >= 62 && e.recommended)
+          .filter((e: any) => e.edgeScore >= 55 && e.recommended)
           .sort((a: any, b: any) => b.edgeScore - a.edgeScore)[0];
         if (!best) continue;
         const sideTxt = best.recommended === 'over' ? 'Over' : 'Under';
