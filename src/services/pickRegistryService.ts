@@ -130,6 +130,19 @@ function parseNumeric(input?: string | null) {
   return Number.isFinite(n) ? n : NaN;
 }
 
+// Convert American odds string ("-110", "+125") to decimal odds. Used to compare two
+// offers and decide which is BETTER for the bettor (higher decimal = bigger payout =
+// better). Returns null on parse failure.
+function americanToDecimal(odds?: string | null): number | null {
+  if (!odds) return null;
+  const m = String(odds).match(/[+-]?\d+(?:\.\d+)?/);
+  if (!m) return null;
+  const n = Number.parseFloat(m[0]);
+  if (!Number.isFinite(n) || n === 0) return null;
+  if (n > 0) return 1 + n / 100;
+  return 1 + 100 / Math.abs(n);
+}
+
 function clampStatus(status?: string): RegistryStatus {
   const allowed: RegistryStatus[] = ['draft', 'validated', 'published', 'locked', 'graded', 'archived'];
   return allowed.includes(status as RegistryStatus) ? (status as RegistryStatus) : 'draft';
@@ -670,7 +683,7 @@ export async function publishRegistryPick(input: RegistryPickInput) {
 
   const duplicateRows = await prisma.$queryRawUnsafe<any[]>(
     `
-      SELECT id
+      SELECT id, odds, line, sportsbook
       FROM himothy_pick_registry
       WHERE board_date = $1::date
         AND status IN ('published','locked','graded','archived')
@@ -685,7 +698,49 @@ export async function publishRegistryPick(input: RegistryPickInput) {
     input.selection
   );
   if (duplicateRows[0]?.id) {
-    throw new Error(`Duplicate pick blocked: existing registry id ${duplicateRows[0].id}`);
+    // Pick already exists. Check if the new offer has BETTER odds — if so, update the
+    // row + log a LINE_UPDATED audit event. "Better" = higher decimal-odds value (less
+    // juice on negatives, longer payouts on positives). Same/worse = skip.
+    const existing = duplicateRows[0];
+    const oldDecimal = americanToDecimal(existing.odds);
+    const newDecimal = americanToDecimal(input.odds);
+    const improvedEnough = oldDecimal != null && newDecimal != null && newDecimal > oldDecimal * 1.01;
+    if (improvedEnough) {
+      await prisma.$executeRawUnsafe(
+        `UPDATE himothy_pick_registry
+            SET odds = $1, sportsbook = COALESCE($2, sportsbook), line = COALESCE($3, line),
+                updated_at = NOW()
+          WHERE id = $4`,
+        input.odds || existing.odds,
+        input.sportsbook || existing.sportsbook,
+        input.line || existing.line,
+        existing.id,
+      );
+      try {
+        const { logPickEvent } = await import('@/services/pickAuditLog');
+        await logPickEvent({
+          event: 'LINE_UPDATED',
+          boardDate,
+          pickKey: `${input.eventId || existing.id}|${input.selection}`,
+          gameId: input.eventId || undefined,
+          category: input.category,
+          selection: input.selection,
+          line: input.line || existing.line || undefined,
+          odds: input.odds || existing.odds || undefined,
+          status: 'published',
+          notes: `Line update: ${existing.odds} → ${input.odds}${input.sportsbook && input.sportsbook !== existing.sportsbook ? ` (book ${existing.sportsbook} → ${input.sportsbook})` : ''}`,
+          details: {
+            oldOdds: existing.odds, newOdds: input.odds,
+            oldDecimal, newDecimal,
+            oldBook: existing.sportsbook, newBook: input.sportsbook,
+            registryId: existing.id,
+          },
+        });
+      } catch { /* audit failure must not break the update */ }
+      // Treat as "duplicate" so caller knows we didn't insert — but we DID upgrade.
+      throw new Error(`Duplicate pick blocked: existing registry id ${existing.id} (line updated)`);
+    }
+    throw new Error(`Duplicate pick blocked: existing registry id ${existing.id}`);
   }
 
   await prisma.$executeRawUnsafe(

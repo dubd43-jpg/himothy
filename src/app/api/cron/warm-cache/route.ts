@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getOrComputeBoard } from '@/services/dailyBoardCache';
 import { isAdminRequest } from '@/lib/adminAuth';
+import { recordTodaysBoard } from '@/services/recordBoardService';
+import { gradeRegistryBoard } from '@/services/pickRegistryService';
 
 // Pre-warms the daily-picks board cache and the closing-line cache for every league on
 // the active boards. Runs early (8am ET) so the first real user request is already warm.
@@ -42,10 +44,30 @@ async function handle(req: Request) {
     }
   }));
 
+  // Belt-and-suspenders: also record + grade IN THIS CRON. The separate record-board
+  // cron at 9am ET has failed before (Brewers -1.5 today was lost to a "game already in
+  // progress" skip because no cron ran between 8am slate and 8pm game). Doing it inline
+  // here means warm-cache alone is sufficient — even if every other cron silently fails,
+  // picks still land in the registry within seconds of the slate being computed.
+  let recordResult: any = null;
+  let gradeResult: any = null;
+  try {
+    recordResult = await recordTodaysBoard();
+  } catch (err) {
+    recordResult = { error: String(err) };
+  }
+  try {
+    gradeResult = await gradeRegistryBoard();
+  } catch (err) {
+    gradeResult = { error: String(err) };
+  }
+
   return NextResponse.json({
     success: true,
     totalMs: Date.now() - t0,
     results,
+    recorded: recordResult,
+    graded: gradeResult,
   });
 }
 

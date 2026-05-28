@@ -17,6 +17,7 @@ export type PickAuditEvent =
   | 'LOCKED'           // Pick locked at slate-publish time
   | 'GRADED'           // Result computed from game outcome (WIN/LOSS/PUSH)
   | 'ARCHIVED'         // Day closed, pick frozen into permanent record
+  | 'LINE_UPDATED'     // Existing pick had its odds/line/book updated to a better price
   | 'ERROR';           // Something went wrong (grading failed, etc.)
 
 let _schemaEnsured = false;

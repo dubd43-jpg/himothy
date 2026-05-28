@@ -193,5 +193,23 @@ export async function getOrComputeBoard(board: BoardType): Promise<any> {
   // Persist so the next function instance reads the same slate (otherwise the slate is
   // NOT actually frozen — each cold instance regenerates with possibly different picks).
   await writePersistedSlate(SLATE_RULES_VERSION, etDate, board, result);
+
+  // INLINE RECORD: the moment the north-american slate is first computed for the day,
+  // fire recordTodaysBoard so the registry gets populated immediately. This eliminates
+  // the race window where a daily cron might run after games have already started — at
+  // which point the integrity guard refuses to post-record. Fire-and-forget so the
+  // user's slate response doesn't wait on recording I/O. Already-recorded picks dedupe
+  // safely, so this is idempotent across multiple slate generations.
+  if (board === 'north-american' && hasDatabase()) {
+    void (async () => {
+      try {
+        const { recordTodaysBoard } = await import('@/services/recordBoardService');
+        await recordTodaysBoard();
+      } catch (err) {
+        console.error('[dailyBoardCache] inline record failed', err);
+      }
+    })();
+  }
+
   return result;
 }
