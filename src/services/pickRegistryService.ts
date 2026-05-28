@@ -104,6 +104,14 @@ export interface RegistryPickRow {
   isLocked: boolean;
   version: number;
   replacedById: string | null;
+  // Parlay ticket tracking — null for single bets. Same ticket id across every leg of
+  // one parlay so ticket-level aggregation can find them. parlayEstimatedOdds carries
+  // the combined parlay payout (in American odds string form) so unit calc works for
+  // the whole ticket as one bet.
+  parlayTicketId: string | null;
+  parlayLegPosition: number | null;
+  parlayLegCount: number | null;
+  parlayEstimatedOdds: string | null;
 }
 
 let schemaReady = false;
@@ -176,6 +184,10 @@ function formatRow(row: any): RegistryPickRow {
     isLocked: Boolean(row.is_locked),
     version: Number(row.version || 1),
     replacedById: row.replaced_by_id,
+    parlayTicketId: row.parlay_ticket_id ?? null,
+    parlayLegPosition: row.parlay_leg_position == null ? null : Number(row.parlay_leg_position),
+    parlayLegCount: row.parlay_leg_count == null ? null : Number(row.parlay_leg_count),
+    parlayEstimatedOdds: row.parlay_estimated_odds ?? null,
   };
 }
 
@@ -395,6 +407,82 @@ function isParlayProductLine(productLine: string) {
   return normalized.includes('parlay') || normalized.includes('hailmary');
 }
 
+// Convert a list of registry rows (mix of single bets + parlay legs) into a list of
+// "bet results" where each parlay TICKET counts as ONE bet. A 4-leg parlay where 3
+// legs hit and 1 loses is ONE loss, not 3 wins and 1 loss. Used by every stat
+// aggregation so customers never see leg-level numbers misrepresented as bet counts.
+//
+// Single bets pass through unchanged. Parlay legs are grouped by parlayTicketId (or
+// boardDate+productLine as a fallback when ticket id is missing on legacy rows) and
+// reduced to one result per ticket using the all-or-nothing rule.
+export interface BetResult {
+  result: 'win' | 'loss' | 'push' | 'void' | 'pending';
+  odds: string | null;       // for unit calc — combined parlay odds when applicable
+  boardDate: string;
+  gradedAt: string | null;
+  productLine: string;
+  isParlay: boolean;
+  legCount: number;          // 1 for singles, N for parlay tickets
+}
+
+export function aggregateToBetResults(picks: RegistryPickRow[]): BetResult[] {
+  const singles: BetResult[] = [];
+  const parlayByTicket = new Map<string, RegistryPickRow[]>();
+
+  for (const p of picks) {
+    if (isParlayProductLine(p.productLine)) {
+      const id = p.parlayTicketId || `${p.boardDate}|${p.productLine}`;
+      const arr = parlayByTicket.get(id);
+      if (arr) arr.push(p);
+      else parlayByTicket.set(id, [p]);
+    } else {
+      singles.push({
+        result: p.result,
+        odds: p.odds ?? null,
+        boardDate: String(p.boardDate || ''),
+        gradedAt: p.gradedAt ? String(p.gradedAt) : null,
+        productLine: p.productLine,
+        isParlay: false,
+        legCount: 1,
+      });
+    }
+  }
+
+  const tickets: BetResult[] = [];
+  for (const legs of Array.from(parlayByTicket.values())) {
+    let anyLost = false; let allWon = true; let anyPending = false; let anyVoid = false;
+    for (const l of legs) {
+      if (l.result === 'loss') { anyLost = true; allWon = false; }
+      else if (l.result === 'pending') { anyPending = true; allWon = false; }
+      else if (l.result === 'void') { anyVoid = true; }
+      else if (l.result !== 'win') { allWon = false; }
+    }
+    const result: BetResult['result'] =
+      anyLost ? 'loss'
+      : anyPending ? 'pending'
+      : allWon ? 'win'
+      : anyVoid && legs.every((l) => l.result === 'void') ? 'void'
+      : 'push';
+    // Use the latest gradedAt across legs for time ordering of the ticket.
+    const gradedAt = legs.reduce<string | null>((latest, l) => {
+      if (!l.gradedAt) return latest;
+      if (!latest) return String(l.gradedAt);
+      return new Date(l.gradedAt) > new Date(latest) ? String(l.gradedAt) : latest;
+    }, null);
+    tickets.push({
+      result,
+      odds: legs[0]?.parlayEstimatedOdds ?? null,
+      boardDate: String(legs[0]?.boardDate || ''),
+      gradedAt,
+      productLine: legs[0]?.productLine || 'Parlay',
+      isParlay: true,
+      legCount: legs.length,
+    });
+  }
+
+  return [...singles, ...tickets];
+}
+
 function toDailyAggregate(boardDate: string, rows: RegistryPickRow[]): DailyBoardAggregate {
   const wins = rows.filter((p) => p.result === 'win').length;
   const losses = rows.filter((p) => p.result === 'loss').length;
@@ -405,7 +493,12 @@ function toDailyAggregate(boardDate: string, rows: RegistryPickRow[]): DailyBoar
   const totalSettled = wins + losses + pushes + voids;
   const mainRows = rows.filter((p) => p.isMainPick);
   const coreRows = rows.filter((p) => isCoreProductLine(p.productLine));
-  const parlayRows = rows.filter((p) => isParlayProductLine(p.productLine));
+  // Parlay record at TICKET level: collapse all legs of a ticket into one bet result so
+  // a 4-leg parlay where 3 hit + 1 lost counts as a single TICKET LOSS (not "3W 1L").
+  const parlayBets = aggregateToBetResults(rows.filter((p) => isParlayProductLine(p.productLine)));
+  const parlayTicketWins = parlayBets.filter((b) => b.result === 'win').length;
+  const parlayTicketLosses = parlayBets.filter((b) => b.result === 'loss').length;
+  const parlayTicketPushes = parlayBets.filter((b) => b.result === 'push').length;
 
   const sportBreakdown: Record<string, { wins: number; losses: number; pushes: number; voids: number; pending: number }> = {};
   for (const row of rows) {
@@ -431,7 +524,7 @@ function toDailyAggregate(boardDate: string, rows: RegistryPickRow[]): DailyBoar
     totalSettled,
     mainPickRecord: computeRecord(mainRows),
     coreRecord: computeRecord(coreRows),
-    parlayRecord: computeRecord(parlayRows),
+    parlayRecord: toRecordString(parlayTicketWins, parlayTicketLosses, parlayTicketPushes),
     sportBreakdown,
   };
 }
@@ -1138,23 +1231,40 @@ export async function getRegistrySummary({
 
   const picks = rows.map(formatRow);
 
-  // Current streak helper: walks newest → oldest, counts consecutive same-result picks.
-  // Pushes/voids/pending are skipped — they don't break or extend a streak. Returns
-  // `{ type: 'W' | 'L' | null, count }`. Used so each section can show "on a 3-game
-  // win streak" or "lost 4 in a row" in the UI.
+  // Category-perfect-day streak. Per user: "to have us streak, that whole category has
+  // to be on this streak." A day only counts as a W if EVERY pick in that product line
+  // for that boardDate won. Any losing leg = day is a loss. Pending or push (with no
+  // outright losses) = day is neutral, doesn't break or extend. Streak walks newest →
+  // oldest and counts consecutive same-result days.
+  //
+  // Why this matters: previously a 2-pick Pressure Pack day going 1W+1L counted as
+  // "1 win + 1 loss" toward the streak, which is wrong. From a customer's view, that's
+  // a break-even day, not a streak day.
   const computeStreak = (productPicks: typeof picks): { type: 'W' | 'L' | null; count: number } => {
-    const settled = productPicks
-      .filter((p) => p.result === 'win' || p.result === 'loss')
-      .sort((a, b) => {
-        const ax = (a.gradedAt ? new Date(a.gradedAt).getTime() : new Date(a.boardDate || 0).getTime());
-        const bx = (b.gradedAt ? new Date(b.gradedAt).getTime() : new Date(b.boardDate || 0).getTime());
-        return bx - ax; // newest first
-      });
+    if (productPicks.length === 0) return { type: null, count: 0 };
+    const byDay: Record<string, typeof productPicks> = {};
+    for (const p of productPicks) {
+      const day = String(p.boardDate || '');
+      if (!day) continue;
+      (byDay[day] ||= []).push(p);
+    }
+    const days: Array<{ date: string; result: 'win' | 'loss' | 'neutral' }> = [];
+    for (const [date, legs] of Object.entries(byDay)) {
+      let anyLost = false; let allWon = true;
+      for (const leg of legs) {
+        if (leg.result === 'loss') { anyLost = true; allWon = false; }
+        else if (leg.result !== 'win') { allWon = false; }
+      }
+      days.push({ date, result: anyLost ? 'loss' : allWon ? 'win' : 'neutral' });
+    }
+    const settled = days
+      .filter((d) => d.result !== 'neutral')
+      .sort((a, b) => b.date.localeCompare(a.date));
     if (settled.length === 0) return { type: null, count: 0 };
     const first: 'W' | 'L' = settled[0].result === 'win' ? 'W' : 'L';
     let count = 0;
-    for (const p of settled) {
-      const t = p.result === 'win' ? 'W' : 'L';
+    for (const d of settled) {
+      const t = d.result === 'win' ? 'W' : 'L';
       if (t === first) count++;
       else break;
     }
@@ -1259,6 +1369,72 @@ export async function getRegistrySummary({
   Object.keys(byCategory).forEach((k) => {
     byCategory[k].streak = computeStreak(picksByCategory[k] || []);
   });
+
+  // TICKET-LEVEL aggregation for parlay product lines. By default the bucket counts each
+  // pick row as one win or loss — but parlay legs are NOT independent bets. A 4-leg
+  // ticket where 3 legs won + 1 lost is ONE ticket loss, not 3 leg wins. Customers were
+  // seeing "Parlay Center 10-9-2 · 4W streak" while no parlay ticket had actually hit —
+  // because legs from a losing 6-leg ticket still showed individually as W or L. We fix
+  // it by grouping picks under parlayTicketId, evaluating each ticket as a single
+  // outcome (any leg lost → ticket lost, all legs won → ticket won), then overwriting
+  // the bucket's wins/losses/streak.
+  for (const productLine of Object.keys(byProductLine)) {
+    if (!isParlayProductLine(productLine)) continue;
+    const linePicks = picksByProductLine[productLine] || [];
+    const tickets = new Map<string, typeof linePicks>();
+    for (const p of linePicks) {
+      const ticketId = p.parlayTicketId || `${p.boardDate}-${productLine}`;
+      (tickets.get(ticketId) || tickets.set(ticketId, []).get(ticketId)!).push(p);
+    }
+    const ticketResults: Array<{ result: 'win' | 'loss' | 'push' | 'pending'; units: number; gradedAtMs: number }> = [];
+    for (const legs of Array.from(tickets.values())) {
+      let anyLost = false; let anyPending = false; let allWon = true; let hasPush = false;
+      for (const leg of legs) {
+        if (leg.result === 'loss') { anyLost = true; allWon = false; }
+        else if (leg.result === 'pending') { anyPending = true; allWon = false; }
+        else if (leg.result === 'push') { hasPush = true; allWon = false; }
+      }
+      const result: 'win' | 'loss' | 'push' | 'pending' =
+        anyLost ? 'loss' : anyPending ? 'pending' : allWon ? 'win' : 'push';
+      // Use parlayEstimatedOdds for unit calc (same across all legs of a ticket).
+      const combinedOdds = legs[0]?.parlayEstimatedOdds || null;
+      const units = result === 'win' ? asUnits('win', combinedOdds) : result === 'loss' ? -1 : 0;
+      const gradedAtMs = legs.reduce((max, l) => {
+        const t = l.gradedAt ? new Date(l.gradedAt).getTime() : new Date(l.boardDate || 0).getTime();
+        return t > max ? t : max;
+      }, 0);
+      ticketResults.push({ result, units, gradedAtMs });
+    }
+    const wins = ticketResults.filter((t) => t.result === 'win').length;
+    const losses = ticketResults.filter((t) => t.result === 'loss').length;
+    const pushes = ticketResults.filter((t) => t.result === 'push').length;
+    const pending = ticketResults.filter((t) => t.result === 'pending').length;
+    const totalUnits = ticketResults.reduce((s, t) => s + t.units, 0);
+    const bucket = byProductLine[productLine];
+    bucket.wins = wins;
+    bucket.losses = losses;
+    bucket.pushes = pushes;
+    bucket.pending = pending;
+    bucket.totalPicks = ticketResults.length;
+    bucket.units = totalUnits;
+    bucket.winRate = safePct(wins, losses);
+    // Ticket-level streak
+    const settled = ticketResults
+      .filter((t) => t.result === 'win' || t.result === 'loss')
+      .sort((a, b) => b.gradedAtMs - a.gradedAtMs);
+    if (settled.length === 0) {
+      bucket.streak = { type: null, count: 0 };
+    } else {
+      const first: 'W' | 'L' = settled[0].result === 'win' ? 'W' : 'L';
+      let count = 0;
+      for (const s of settled) {
+        const t = s.result === 'win' ? 'W' : 'L';
+        if (t === first) count++;
+        else break;
+      }
+      bucket.streak = { type: first, count };
+    }
+  }
   Object.keys(bySport).forEach((k) => {
     bySport[k].winRate = safePct(bySport[k].wins, bySport[k].losses);
     bySport[k].avgEdgeScore = bySport[k].totalPicks
@@ -1298,12 +1474,16 @@ export async function getRegistryHistoryDay(date?: string) {
   const boardDate = getOfficialBoardDate(date);
   const picks = await getRegistryBoardPicks({ boardDate, includePrivate: false });
 
-  const wins = picks.filter((p) => p.result === 'win').length;
-  const losses = picks.filter((p) => p.result === 'loss').length;
-  const pushes = picks.filter((p) => p.result === 'push').length;
-  const voids = picks.filter((p) => p.result === 'void').length;
-  const pending = picks.filter((p) => p.result === 'pending').length;
-  const units = picks.reduce((sum, p) => sum + asUnits(p.result, p.odds), 0);
+  // Bet-level (not leg-level) aggregation. Parlay legs collapse into one ticket result,
+  // so a 4-leg parlay where 3 hit + 1 lost shows as ONE LOSS, not 3W + 1L. Same goes
+  // for units — the ticket's combined odds drive the unit calc.
+  const bets = aggregateToBetResults(picks);
+  const wins = bets.filter((b) => b.result === 'win').length;
+  const losses = bets.filter((b) => b.result === 'loss').length;
+  const pushes = bets.filter((b) => b.result === 'push').length;
+  const voids = bets.filter((b) => b.result === 'void').length;
+  const pending = bets.filter((b) => b.result === 'pending').length;
+  const units = bets.reduce((sum, b) => sum + asUnits(b.result, b.odds), 0);
 
   return {
     boardDate,
@@ -1593,9 +1773,13 @@ export async function getParlayStats(): Promise<{
 // from our OWN verified record, no fake history.
 export async function getOddsBucketStats(): Promise<Record<string, { wins: number; losses: number; pushes: number; total: number; winRate: string }>> {
   await ensureRegistrySchema();
+  // EXCLUDE parlay legs from odds-bucket analytics. The bucket represents "how single
+  // bets at this price perform" — a -110 parlay leg is NOT an independent -110 bet; its
+  // outcome is tied to the rest of the ticket. Including them would tell us a -110 bucket
+  // "is 8-2" when those wins came from losing parlay tickets. Singles only.
   const rows = await prisma.$queryRawUnsafe<any[]>(
     `
-      SELECT odds, result
+      SELECT odds, result, product_line
       FROM himothy_pick_registry
       WHERE board_date >= $1::date
         AND result IN ('win','loss','push')
@@ -1605,6 +1789,8 @@ export async function getOddsBucketStats(): Promise<Record<string, { wins: numbe
   const { oddsBucket } = await import('@/lib/oddsBucket');
   const stats: Record<string, { wins: number; losses: number; pushes: number }> = {};
   for (const r of rows) {
+    const pl = String(r.product_line || '');
+    if (isParlayProductLine(pl)) continue; // skip parlay legs
     const bucket = oddsBucket(r.odds);
     if (!bucket) continue;
     stats[bucket] = stats[bucket] || { wins: 0, losses: 0, pushes: 0 };
