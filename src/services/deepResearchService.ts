@@ -782,8 +782,10 @@ function weightedAtsCoverPct(
     if (decisive === 0) return null;
     return (b.wins / decisive) * 100;
   };
-  const p5 = pctFromBucket(ats5, 3);
-  const p10 = pctFromBucket(ats10, 6);
+  // Sample gates raised: a 2-1 ATS over 3 games is NOT a "hot 67%" read. Require enough
+  // decisive games before a window contributes, so thin samples can't inflate confidence.
+  const p5 = pctFromBucket(ats5, 4);
+  const p10 = pctFromBucket(ats10, 8);
   const pSeason = pctFromBucket(atsSeason, 10);
   const parts: Array<[number, number]> = [];
   if (p5 != null) parts.push([0.4, p5]);
@@ -899,7 +901,10 @@ async function fetchTeamForm(league: string, teamId: string): Promise<TeamForm |
         // the absolute value is always the line. Use favAbbr + |spread| to derive our
         // team's signed spread: favorite gets the negative number, dog gets the positive.
         const absSpread = Math.abs(cl.spread);
-        const meWasFav = !!cl.favAbbr && cl.favAbbr === g.meAbbr;
+        // Normalize casing/whitespace so "Lad"/"LAD" don't mismatch and silently flip a
+        // favorite into a dog (which inverts the ATS cover and corrupts confidence).
+        const normAbbr = (s: string | null | undefined) => String(s || '').toUpperCase().trim();
+        const meWasFav = !!cl.favAbbr && normAbbr(cl.favAbbr) === normAbbr(g.meAbbr);
         g.teamSpread = meWasFav ? -absSpread : absSpread;
       }
       g.overUnder = cl.overUnder;
@@ -1371,12 +1376,24 @@ function pickForNA(
     return { selectionSide: pickedSide, marketType: 'total' as const, selection: `${side} ${total}`, odds: '-110', line: `${total}` };
   };
 
-  // FULL-BOARD selection — we play every market, picking the best version of the play:
-  //  • Value side (pick'em, small favorite, or dog priced ≈ -150 to +160) → the MONEYLINE.
-  //  • Chalky favorite → the SPREAD / RUN LINE (MLB -1.5) at -110 — the value version that
-  //    actually pays, instead of laying heavy juice. This is where run lines live.
-  //  • No spread available → the TOTAL, then fall back to the moneyline.
+  // LOW-SCORING sports (MLB / NHL): the 1.5 run/puck line is close to a coin flip and was
+  // the single biggest loss driver (run lines went 11-16 / 41% while moneylines went 56%).
+  // We do NOT force the -1.5 line here. Take the moneyline when it's a fair price, otherwise
+  // play the TOTAL (a real -110 market) — never lay a coin-flip 1.5 at a fake price.
+  const l = (league || '').toLowerCase();
+  const isLowScoring = l.includes('mlb') || l.includes('baseball') || l.includes('nhl') || l.includes('hockey') || l.includes('kbo') || l.includes('npb');
+
+  // Value side (pick'em, small favorite, or dog priced ≈ -150 to +160) → the MONEYLINE.
   if (ml != null && ml >= -150 && ml <= 160) return moneyline();
+
+  if (isLowScoring) {
+    // Chalky baseball/hockey favorite → the total, NOT the run line. Fall back to the
+    // moneyline only if we can't price a total (it'll get chalk-filtered downstream).
+    return totalPlay() ?? moneyline();
+  }
+
+  // Higher-scoring sports (NBA / NFL / NCAA): the point spread at -110 is a real, fair
+  // market — chalky favorites play the spread, then total, then moneyline.
   return spreadPlay() ?? totalPlay() ?? moneyline();
 }
 
@@ -1423,11 +1440,14 @@ function impliedSpreadFromWinPct(winPct: number): number {
 
 // ─── Per-Game Processing ─────────────────────────────────────────────────────
 
-// Estimate win probability from American moneyline (removes juice)
+// Estimate win probability from American moneyline. A single side can't be exactly
+// de-vigged without the other side, so we remove a typical two-way hold (~4.8%) by
+// normalizing against an assumed 1.048 overround — instead of returning the raw implied
+// price (which overstates the favorite by the full vig and inflated confidence).
 function winProbFromML(ml: number): number {
   const raw = ml > 0 ? 100 / (100 + ml) : Math.abs(ml) / (Math.abs(ml) + 100);
-  // Simple devig: normalise against the other side (assume -110/-110 = 52.4% each side)
-  return Math.round(raw * 100 * 10) / 10;
+  const devigged = raw / 1.048;
+  return Math.round(devigged * 100 * 10) / 10;
 }
 
 async function processGame(
@@ -1579,9 +1599,16 @@ async function processGame(
   const starOutPickSide = leaderRuledOut(pickedLeadersList, pickedInj.out);
   const starOutOppSide = leaderRuledOut(oppLeadersList, oppInj.out);
 
-  // Line value gap: compare market spread to implied spread
+  // Line value gap: compare market spread to implied spread. The implied-spread model
+  // (~2.8% win-prob per point) is ONLY valid for high-scoring point-spread sports
+  // (NBA/NFL/CFB/CBB). Applying it to MLB/NHL/soccer/tennis manufactured fake "value gaps"
+  // (a run/goal ≠ 2.8%) that inflated confidence on no-edge games — so we zero it there.
+  const lvgLeague = (league || '').toLowerCase();
+  const spreadModelValid = lvgLeague.includes('nba') || lvgLeague.includes('nfl') ||
+    lvgLeague.includes('college football') || lvgLeague.includes('ncaa basketball') ||
+    lvgLeague.includes('wnba');
   const lineValueGap = (() => {
-    if (mergedSpread === null || homeWinPct === null) return 0;
+    if (!spreadModelValid || mergedSpread === null || homeWinPct === null) return 0;
     const impliedSpread = impliedSpreadFromWinPct(homeWinPct);
     return Math.abs(impliedSpread - mergedSpread);
   })();
@@ -2079,11 +2106,22 @@ export async function runDailyDeepResearch(board: BoardType = 'north-american'):
   // (a contradicting signal makes the score unreliable). Floor is 88: if the day's best
   // pick can't clear 88, we don't drop a Grand Slam at all — better to leave it empty
   // than label a mediocre top pick as "our best of the day."
+  // PREMIUM ML CAP: the user does not want any moneyline steeper than -145 on the Grand
+  // Slam or Pressure Pack. Heavy chalk ML pays too little for the flagship products.
+  // (Spreads/totals at -110 are unaffected — this only blocks heavy-chalk MONEYLINES.)
+  const PREMIUM_ML_FLOOR = -145;
+  const isHeavyMlForPremium = (p: DeepPickResult): boolean => {
+    if (p.marketType !== 'moneyline') return false;
+    const ml = parseAmericanOdds(p.odds);
+    return ml != null && ml < PREMIUM_ML_FLOOR;
+  };
+
   const GRAND_SLAM_FLOOR = 88;
   const isGrandSlamEligible = (p: DeepPickResult): boolean => {
     if (p.confidenceScore < GRAND_SLAM_FLOOR) return false;
     if (p.signals.keyInjuryOnPickSide) return false;
     if (p.signals.signalConflict) return false;
+    if (isHeavyMlForPremium(p)) return false;   // no ML steeper than -145 on Grand Slam
     return true;
   };
   // `picks` is already sorted by confidenceScore desc — take the first eligible one.
@@ -2108,7 +2146,7 @@ export async function runDailyDeepResearch(board: BoardType = 'north-american'):
     if (asleepReserved.has(pick.gameId)) continue;   // asleep games skip the main buckets
     const t = pick.tier;
 
-    if ((t === 'GRAND_SLAM' || t === 'PRESSURE_PACK') && pressurePack.length < 2) {
+    if ((t === 'GRAND_SLAM' || t === 'PRESSURE_PACK') && pressurePack.length < 2 && !isHeavyMlForPremium(pick)) {
       pressurePack.push({ ...pick, tier: 'PRESSURE_PACK' }); usedGames.add(pick.gameId);
     } else if ((t === 'PRESSURE_PACK' || t === 'VIP_4_PACK') && vip4Pack.length < 4) {
       vip4Pack.push({ ...pick, tier: 'VIP_4_PACK' }); usedGames.add(pick.gameId);
@@ -2140,14 +2178,15 @@ export async function runDailyDeepResearch(board: BoardType = 'north-american'):
       usedGames.add(p.gameId);
     }
   };
+  // Pressure Pack backfill excludes heavy-chalk moneylines (steeper than -145) too.
   const t1 = picks.filter((p) => !usedGames.has(p.gameId) && !asleepReserved.has(p.gameId) && p.tier !== 'PASS');
-  promote(pressurePack, 2, 'PRESSURE_PACK', t1);
+  promote(pressurePack, 2, 'PRESSURE_PACK', t1.filter((p) => !isHeavyMlForPremium(p)));
   promote(vip4Pack, 4, 'VIP_4_PACK', t1);
   promote(parlayPlan, 6, 'PARLAY_PLAN', t1);
 
   if (pressurePack.length < 2 || vip4Pack.length < 4 || parlayPlan.length < 4) {
     const t2 = picks.filter((p) => !usedGames.has(p.gameId) && asleepReserved.has(p.gameId) && p.tier !== 'PASS');
-    promote(pressurePack, 2, 'PRESSURE_PACK', t2);
+    promote(pressurePack, 2, 'PRESSURE_PACK', t2.filter((p) => !isHeavyMlForPremium(p)));
     promote(vip4Pack, 4, 'VIP_4_PACK', t2);
     promote(parlayPlan, 6, 'PARLAY_PLAN', t2);
     for (const p of t2) if (usedGames.has(p.gameId)) asleepReserved.delete(p.gameId);
@@ -2155,7 +2194,7 @@ export async function runDailyDeepResearch(board: BoardType = 'north-american'):
 
   if (pressurePack.length < 2 || vip4Pack.length < 4 || parlayPlan.length < 4) {
     const t3 = picks.filter((p) => !usedGames.has(p.gameId));
-    promote(pressurePack, 2, 'PRESSURE_PACK', t3);
+    promote(pressurePack, 2, 'PRESSURE_PACK', t3.filter((p) => !isHeavyMlForPremium(p)));
     promote(vip4Pack, 4, 'VIP_4_PACK', t3);
     promote(parlayPlan, 6, 'PARLAY_PLAN', t3);
   }

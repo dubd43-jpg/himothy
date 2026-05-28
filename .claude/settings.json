@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\({**d.get\\('dependencies',{}\\), **d.get\\('devDependencies',{}\\)}, indent=2\\)\\)\")",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); [print\\(k,v\\) for k,v in {**d.get\\('dependencies',{}\\), **d.get\\('devDependencies',{}\\)}.items\\(\\)]\")",
+      "Bash(node -e \"require\\('@anthropic-ai/sdk'\\); console.log\\('SDK OK'\\)\")",
+      "Bash(npx tsc *)",
+      "Bash(git add *)",
+      "Bash(git push *)",
+      "Bash(git stash *)",
+      "Bash(git fetch *)",
+      "Bash(git update-index *)",
+      "Bash(GIT_HTTP_LOW_SPEED_LIMIT=1 GIT_HTTP_LOW_SPEED_TIME=600 git fetch origin)",
+      "Bash(git -c core.packedGitWindowSize=0 -c core.packedGitLimit=0 fetch origin)",
+      "Bash(git clone *)",
+      "Bash(curl -s \"https://sports.core.api.espn.com/v2/sports/basketball/leagues/nba/athletes/1966/statisticslog\")",
+      "Bash(python3 -c ' *)",
+      "Bash(curl -s \"https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401767750\")",
+      "Bash(curl -s \"https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401869190\")",
+      "Bash(curl -s \"https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/teams/10/schedule?season=2026\")",
+      "Bash(curl -s \"https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401814702\")",
+      "Bash(git -C /tmp/himothy-sync log --oneline -5)",
+      "Bash(git -C /tmp/himothy-sync log --oneline -10)"
+    ]
+  }
+}
