@@ -2524,3 +2524,144 @@ export async function runPower20Research(excludedKeys: Set<string> = new Set()):
     avgWinProbability,
   };
 }
+
+// ─── Per-Sport Parlays ───────────────────────────────────────────────────────
+// One 4-leg parlay per major NA sport, containing ONLY that sport. Per user:
+//   - Always exactly 4 legs.
+//   - Each parlay is single-sport (MLB parlay = only MLB, NBA = only NBA, etc.).
+//   - If a sport can't produce 4 quality legs, skip that sport entirely (no parlay).
+//   - When a sport has few games (e.g. NBA playoffs = 1 game/night), fill the 4 legs
+//     from WITHIN those games using player props + game props — real value only, no
+//     guessing. A single playoff game can yield: favorite ML + game total + 2 player
+//     props = a legit 4-leg correlated parlay.
+
+const SPORT_PARLAY_LEAGUES = ['MLB', 'NBA', 'NFL', 'NHL', 'WNBA', 'NCAA Basketball'];
+
+export interface SportParlayLeg {
+  type: 'game' | 'prop';
+  league: string;
+  gameId: string;
+  eventName: string;
+  selection: string;
+  odds: string | null;
+  edgeScore: number;       // 0-100
+  detail: string;          // human-readable reasoning
+}
+export interface SportParlay {
+  sport: string;
+  legs: SportParlayLeg[];
+  legCount: number;
+  estimatedOdds: string;
+  estimatedDecimal: number;
+  payoutOnDollar: string;
+  singleGame: boolean;     // true when all legs come from one game (props-heavy)
+}
+
+async function buildOneSportParlay(sport: string): Promise<SportParlay | null> {
+  const result = await fetchLeagueScoreboard(sport);
+  if (!result) return null;
+  const events = await flattenTournamentEvents(result.events, sport);
+  if (events.length === 0) return null;
+
+  // 1. GAME-LEVEL legs first (fast). A real favorite = winProbability >= 55.
+  const gameLegs: SportParlayLeg[] = [];
+  for (const event of events) {
+    const gp = await processGameForPower20(event, sport);
+    if (!gp || gp.winProbability < 55) continue;
+    if (isHeavyChalkML(gp, PARLAY_LEG_ML_FLOOR)) continue; // honor -450 leg floor
+    gameLegs.push({
+      type: 'game', league: sport, gameId: gp.gameId, eventName: gp.eventName,
+      selection: gp.selection, odds: gp.odds, edgeScore: Math.round(gp.winProbability),
+      detail: `${gp.winProbability.toFixed(0)}% win probability`,
+    });
+  }
+  gameLegs.sort((a, b) => b.edgeScore - a.edgeScore);
+
+  // 2. If 4+ game legs, take the top 4 — no props needed.
+  if (gameLegs.length >= 4) {
+    return assembleSportParlay(sport, gameLegs.slice(0, 4), false);
+  }
+
+  // 3. Otherwise, fill remaining slots with PROP legs from the sport's games (real value
+  //    only — buildPreGameProps already filters to projection-vs-line edges). This is the
+  //    "NBA playoffs, 1 game, dig deep" path.
+  const propLegs: SportParlayLeg[] = [];
+  try {
+    const { buildPreGameProps } = await import('@/services/preGamePropsService');
+    for (const event of events) {
+      const comp = event?.competitions?.[0];
+      if (!comp) continue;
+      const props = await buildPreGameProps(String(event.id), event.name || '', sport, comp);
+      for (const p of props.propEdges) {
+        if (p.edgeScore < 55) continue; // real-value floor for parlay legs
+        const marketLabel = p.market.replace(/^(player_|batter_|pitcher_)/, '').replace(/_/g, ' ');
+        const side = p.recommended === 'over' ? 'Over' : p.recommended === 'under' ? 'Under' : '';
+        const selection = `${p.playerName} ${side} ${p.marketLine ?? p.projection.toFixed(1)} ${marketLabel}`.trim();
+        const odds = p.recommended === 'under'
+          ? (p.marketUnderPrice != null ? `${p.marketUnderPrice > 0 ? '+' : ''}${p.marketUnderPrice}` : '-110')
+          : (p.marketOverPrice != null ? `${p.marketOverPrice > 0 ? '+' : ''}${p.marketOverPrice}` : '-110');
+        const detail = `proj ${p.projection.toFixed(1)}${p.marketLine != null ? ` vs line ${p.marketLine}` : ''}, L10 ${p.l10Avg ?? '—'}`;
+        propLegs.push({
+          type: 'prop', league: sport, gameId: String(event.id), eventName: event.name || '',
+          selection, odds, edgeScore: p.edgeScore, detail,
+        });
+      }
+    }
+  } catch (err) {
+    console.error(`[sportParlay] prop fetch failed for ${sport}`, err);
+  }
+  propLegs.sort((a, b) => b.edgeScore - a.edgeScore);
+
+  // Combine game legs + prop legs, dedupe by selection + by player (avoid stacking the
+  // same player in 2 legs). Take the top 4 by edge.
+  const combined = [...gameLegs, ...propLegs];
+  const legs: SportParlayLeg[] = [];
+  const seenSelections = new Set<string>();
+  const seenPlayers = new Set<string>();
+  for (const c of combined) {
+    const selKey = c.selection.toLowerCase();
+    if (seenSelections.has(selKey)) continue;
+    // crude player extraction: prop selections lead with the player name
+    const playerKey = c.type === 'prop' ? c.selection.split(/\s+(over|under|\d)/i)[0].toLowerCase().trim() : '';
+    if (playerKey && seenPlayers.has(playerKey)) continue;
+    legs.push(c);
+    seenSelections.add(selKey);
+    if (playerKey) seenPlayers.add(playerKey);
+    if (legs.length >= 4) break;
+  }
+
+  // Hard rule: exactly 4 legs or no parlay for this sport.
+  if (legs.length < 4) return null;
+  const singleGame = new Set(legs.map((l) => l.gameId)).size === 1;
+  return assembleSportParlay(sport, legs, singleGame);
+}
+
+function assembleSportParlay(sport: string, legs: SportParlayLeg[], singleGame: boolean): SportParlay {
+  let decimal = 1;
+  for (const l of legs) {
+    const ml = parseAmericanOdds(l.odds);
+    decimal *= ml != null ? mlToDecimal(ml) : mlToDecimal(-110);
+  }
+  decimal = Math.round(decimal * 100) / 100;
+  return {
+    sport, legs, legCount: legs.length,
+    estimatedOdds: decimalToAmerican(decimal),
+    estimatedDecimal: decimal,
+    payoutOnDollar: decimal >= 10 ? `$1 → $${decimal.toFixed(0)}` : `$1 → $${decimal.toFixed(2)}`,
+    singleGame,
+  };
+}
+
+export async function buildSportParlays(): Promise<SportParlay[]> {
+  const out: SportParlay[] = [];
+  // Sequential per-sport so we don't fan out dozens of prop fetches simultaneously.
+  for (const sport of SPORT_PARLAY_LEAGUES) {
+    try {
+      const parlay = await buildOneSportParlay(sport);
+      if (parlay) out.push(parlay);
+    } catch (err) {
+      console.error(`[sportParlay] build failed for ${sport}`, err);
+    }
+  }
+  return out;
+}

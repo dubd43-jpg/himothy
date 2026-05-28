@@ -1205,6 +1205,7 @@ function DeepResearchSection({ board }: { board: string }) {
               <FooterLink href="/trends" icon={Flame} title="Tendencies" count={(data.grandSlam ? 1 : 0) + data.pressurePack.length + data.vip4Pack.length + data.parlayPlan.length + (data.marquee?.length ?? 0)} />
               <FooterLink href="/asleep" icon={Flame} title="Asleep" count={data.asleepPicks?.length ?? 0} />
               <FooterLink href="/period-plays" icon={Radio} title="Period Plays" count={null} />
+              <FooterLink href="/sport-parlays" icon={Layers} title="Sport Parlays" count={null} />
               <FooterLink href="/stats" icon={Trophy} title="Full Record" count={null} />
             </div>
           </div>
