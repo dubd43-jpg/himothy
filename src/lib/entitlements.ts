@@ -117,24 +117,35 @@ export async function isTrialActive(userId: string): Promise<boolean> {
 // research moat tools (Trends, Edges, Asleep Picks, Hot Tendencies). The pricing page
 // advertises this as the annual upgrade incentive.
 //
-// Detected by checking the row's stripePriceId against the catalog: if any active
-// row's price has interval 'one_year', the user is a yearly member.
+// Detection: checkout uses INLINE price_data, so the stored stripePriceId is a Stripe
+// auto-generated id that never matches the catalog — the old catalog lookup always
+// returned false, so paying annual members never unlocked the tools they bought. Detect
+// yearly by the subscription's PERIOD LENGTH instead: a yearly sub's current period spans
+// ~365 days (post-trial), monthly ~30. >180 days ⇒ yearly. (Keep the catalog check as a
+// fallback in case real Price IDs are ever configured.)
 export async function hasYearlyAccess(userId: string): Promise<boolean> {
   await ensureSubscriptionSchema();
   if (!userId) return false;
-  const rows = await prisma.$queryRawUnsafe<Array<{ stripePriceId: string | null }>>(
-    `SELECT "stripePriceId" FROM "Subscription"
+  const rows = await prisma.$queryRawUnsafe<Array<{ stripePriceId: string | null; currentPeriodEnd: Date | null; createdAt: Date | null }>>(
+    `SELECT "stripePriceId", "currentPeriodEnd", "createdAt" FROM "Subscription"
      WHERE "userId" = $1 AND "accessUntil" > NOW() AND "isOneTime" = false
      LIMIT 50`,
     userId,
   );
   if (rows.length === 0) return false;
-  // Look up each row's price and check the interval — yearly = unlocks moat tools.
   const { findPriceByStripeId } = await import('@/lib/products');
+  const YEAR_THRESHOLD_MS = 180 * 24 * 60 * 60 * 1000;
   for (const r of rows) {
-    if (!r.stripePriceId) continue;
-    const matched = findPriceByStripeId(r.stripePriceId);
-    if (matched?.price.interval === 'one_year') return true;
+    // 1) Period-length heuristic (works with inline pricing).
+    if (r.currentPeriodEnd && r.createdAt) {
+      const span = new Date(r.currentPeriodEnd).getTime() - new Date(r.createdAt).getTime();
+      if (span > YEAR_THRESHOLD_MS) return true;
+    }
+    // 2) Catalog fallback if real Stripe Price IDs are configured.
+    if (r.stripePriceId) {
+      const matched = findPriceByStripeId(r.stripePriceId);
+      if (matched?.price.interval === 'one_year') return true;
+    }
   }
   return false;
 }

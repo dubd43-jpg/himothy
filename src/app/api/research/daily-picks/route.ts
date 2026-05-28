@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { type BoardType } from '@/services/deepResearchService';
 import { CACHE_TTL_MS, getOrComputeBoard, getCachedBoard, invalidateBoardCache } from '@/services/dailyBoardCache';
+import { isAdminRequest } from '@/lib/adminAuth';
 
 // Heavy multi-league research scan + per-pick best-market enrichment (totals/team-totals/
 // halves/F5 fetches). Give it room so the first cold compute of the day doesn't get killed.
@@ -19,7 +20,9 @@ export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     const board = parseBoard(url.searchParams.get('board'));
-    const forceRefresh = url.searchParams.get('refresh') === 'true';
+    // ?refresh=true wipes + regenerates the FROZEN slate — restrict to admins so a random
+    // visitor can't break the frozen-slate guarantee (or change posted picks) on demand.
+    const forceRefresh = url.searchParams.get('refresh') === 'true' && isAdminRequest(req);
 
     const cached = getCachedBoard(board);
     if (!forceRefresh && cached && Date.now() - cached.generatedAt < CACHE_TTL_MS) {

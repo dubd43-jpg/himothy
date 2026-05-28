@@ -1519,10 +1519,11 @@ export async function buildBestMarketSwap(pick: any): Promise<BestMarketSwap | n
   if (f5?.totalLine != null && homeTot != null && awayTot != null) {
     const projF5 = ((homeTot + awayTot) / 2) * (5 / 9);
     const over = projF5 >= f5.totalLine;
-    const price = over ? f5.bestOverPrice : f5.bestUnderPrice;
+    // F5 prices from the feed are best-across-alt-lines (mismatched to the median line),
+    // same issue as team totals — quote the standard -115 main-line price instead.
     candidates.push({
       selection: `F5 ${over ? 'Over' : 'Under'} ${f5.totalLine}`, marketType: 'f5_total',
-      selectionSide: over ? 'home' : 'away', odds: price != null ? `${price > 0 ? '+' : ''}${price}` : '-110',
+      selectionSide: over ? 'home' : 'away', odds: '-115',
       line: `${f5.totalLine}`, confidence: scoreTotalsConfidence(projF5, f5.totalLine, null),
       detail: `Projected first-5 ${projF5.toFixed(1)} vs line ${f5.totalLine}`,
     });

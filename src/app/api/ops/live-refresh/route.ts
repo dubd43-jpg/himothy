@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { refreshLiveOpsSnapshot } from '@/services/liveOpsService';
+import { isAdminRequest } from '@/lib/adminAuth';
 
 export const dynamic = 'force-dynamic';
 
@@ -7,10 +8,19 @@ function asBool(value: string | null) {
   return value === '1' || value === 'true' || value === 'yes';
 }
 
+// The `force` flag bypasses the staleness cache and re-runs a heavy ESPN/DB snapshot —
+// restrict it to authorized callers (cron Bearer CRON_SECRET or admin) so the public can't
+// hammer it for cost/DoS. Unauthorized callers still get the cached read.
+function forceAllowed(req: Request): boolean {
+  const secret = process.env.CRON_SECRET;
+  if (secret && req.headers.get('authorization') === `Bearer ${secret}`) return true;
+  return isAdminRequest(req);
+}
+
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const force = asBool(searchParams.get('force'));
+    const force = asBool(searchParams.get('force')) && forceAllowed(req);
     const maxStaleSeconds = Number.isFinite(Number(searchParams.get('maxStaleSeconds')))
       ? Number(searchParams.get('maxStaleSeconds'))
       : undefined;
@@ -44,7 +54,7 @@ export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
     const snapshot = await refreshLiveOpsSnapshot({
-      force: body?.force === true,
+      force: body?.force === true && forceAllowed(req),
       reason: typeof body?.reason === 'string' ? body.reason : 'api-live-refresh-post',
       maxStaleSeconds: Number.isFinite(Number(body?.maxStaleSeconds)) ? Number(body.maxStaleSeconds) : undefined,
     });

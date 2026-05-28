@@ -137,7 +137,7 @@ export default function StatsDashboardPage() {
                       </div>
                     </div>
                     <div className="space-y-1.5">
-                      {Object.entries(parlayStats.byLegCount as Record<string, LegCountStat>).map(([k, v]) => (
+                      {Object.entries((parlayStats.byLegCount ?? {}) as Record<string, LegCountStat>).map(([k, v]) => (
                         <div key={k} className="flex items-center justify-between gap-2 text-sm">
                           <span className="font-bold text-white/70">{k}</span>
                           <span className="font-bold tabular-nums text-white">{v.wins}-{v.losses}</span>
