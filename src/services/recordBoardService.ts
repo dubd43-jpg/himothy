@@ -353,16 +353,28 @@ function pastBoardDatesToYesterday(): string[] {
 let _lastRecoveryAt = 0;
 const RECOVERY_THROTTLE_MS = 10 * 60 * 1000;
 
-export async function recoverMissedRegistryPicks(opts?: { force?: boolean }): Promise<{ datesScanned: number; recorded: number; dupes: number; errors: number }> {
-  const result = { datesScanned: 0, recorded: 0, dupes: 0, errors: 0 };
+export async function recoverMissedRegistryPicks(opts?: { force?: boolean }): Promise<{ datesScanned: number; recorded: number; dupes: number; errors: number; details: any[] }> {
+  const result = { datesScanned: 0, recorded: 0, dupes: 0, errors: 0, details: [] as any[] };
   if (!hasDatabase()) return result;
   if (!opts?.force && Date.now() - _lastRecoveryAt < RECOVERY_THROTTLE_MS) return result;
   _lastRecoveryAt = Date.now();
 
   for (const date of pastBoardDatesToYesterday()) {
     const board = await getPersistedBoardForDate(date, 'north-american');
-    if (!board) continue;
+    if (!board) { result.details.push({ date, frozenExists: false }); continue; }
     result.datesScanned++;
+    const recoveredHere: string[] = [];
+    result.details.push({
+      date, frozenExists: true,
+      grandSlam: board.grandSlam?.selection || null,
+      groupCounts: {
+        gs: board.grandSlam ? 1 : 0, pp: (board.pressurePack || []).length,
+        vip: (board.vip4Pack || []).length, parlay: (board.parlayPlan || []).length,
+        marquee: (board.marquee || []).length, nrfi: (board.nrfi || []).length,
+      },
+      recovered: recoveredHere,
+    });
+    const detailEntry = result.details[result.details.length - 1];
 
     // Purely additive: only recover GAMES that have no registry entry for this date yet.
     // This avoids double-recording a game that was already logged under a different
@@ -393,7 +405,8 @@ export async function recoverMissedRegistryPicks(opts?: { force?: boolean }): Pr
         const bDate = p?.startTime ? etDate(new Date(p.startTime)) : date;
         const ctx = ticketCtx ? { ticketId: ticketCtx.ticketId, legPosition: legPos, legCount: ticketCtx.legCount, estimatedOdds: ticketCtx.estimatedOdds } : undefined;
         const r = await recordPick(p, category, ctx, bDate, /* allowFinalized */ true);
-        if (r === 'recorded') result.recorded++; else if (r === 'dupe') result.dupes++; else result.errors++;
+        if (r === 'recorded') { result.recorded++; detailEntry.recovered.push(`${category}: ${p.selection}`); }
+        else if (r === 'dupe') result.dupes++; else result.errors++;
       }
     }
 
@@ -410,7 +423,8 @@ export async function recoverMissedRegistryPicks(opts?: { force?: boolean }): Pr
       } as any;
       const bDate = n.startTime ? etDate(new Date(n.startTime)) : date;
       const r = await recordPick(nrfiPick, 'NRFI', undefined, bDate, true);
-      if (r === 'recorded') result.recorded++; else if (r === 'dupe') result.dupes++; else result.errors++;
+      if (r === 'recorded') { result.recorded++; detailEntry.recovered.push(`NRFI: ${n.eventName}`); }
+      else if (r === 'dupe') result.dupes++; else result.errors++;
     }
 
     try { await gradeRegistryBoard(date); } catch { /* non-fatal */ }
