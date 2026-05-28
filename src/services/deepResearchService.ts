@@ -1942,16 +1942,24 @@ export async function runDailyDeepResearch(board: BoardType = 'north-american'):
   }
 
   const rawResults = await Promise.allSettled(allGamePromises);
-  const picks: DeepPickResult[] = rawResults
+  const allScoredRaw: DeepPickResult[] = rawResults
     .filter((r): r is PromiseFulfilledResult<DeepPickResult> => r.status === 'fulfilled' && r.value !== null)
     .map((r) => r.value)
-    // Heavy-chalk filter — single picks must pay enough to be worth the risk. Any ML pick
-    // steeper than the floor is dropped here, before bucketing into pressurePack/asleep/etc.
-    // (Spreads, totals, props are unaffected — they price ~-110 regardless.)
-    .filter((p) => !isHeavyChalkML(p, SINGLE_PICK_ML_FLOOR))
     // Drop picks with no price at all — we don't surface plays we can't actually quote.
     .filter((p) => parseAmericanOdds(p.odds) != null || p.marketType === 'spread' || p.marketType === 'total')
     .sort((a, b) => b.confidenceScore - a.confidenceScore);
+
+  // STRAIGHT-PICK POOL: -185 ML floor. Single picks must pay enough to be worth the risk.
+  // (Spreads, totals, props price ~-110 regardless and pass through.) Grand Slam / Pressure
+  // Pack / VIP 4-Pack all bucket out of this pool.
+  const picks: DeepPickResult[] = allScoredRaw.filter((p) => !isHeavyChalkML(p, SINGLE_PICK_ML_FLOOR));
+
+  // $10 PARLAY-ONLY CHALK: picks excluded from straights for being -185 to -250 chalk are
+  // still legal $10-Parlay legs (cap -250 per user). These never appear as a straight pick;
+  // they only backfill the Parlay Plan. Anything heavier than -250 is dropped entirely.
+  const parlayChalkExtras: DeepPickResult[] = allScoredRaw.filter(
+    (p) => isHeavyChalkML(p, SINGLE_PICK_ML_FLOOR) && !isHeavyChalkML(p, PARLAY_PLAN_ML_FLOOR),
+  );
 
   // Assign tiers with hard caps and no duplicate games
   const usedGames = new Set<string>();
@@ -2046,6 +2054,13 @@ export async function runDailyDeepResearch(board: BoardType = 'north-american'):
     promote(pressurePack, 2, 'PRESSURE_PACK', t3);
     promote(vip4Pack, 4, 'VIP_4_PACK', t3);
     promote(parlayPlan, 6, 'PARLAY_PLAN', t3);
+  }
+
+  // FINAL Parlay-Plan-only backfill: the -185-to-250 chalk that straights can't touch.
+  // These never feed Grand Slam / Pressure / VIP — only the $10 Parlay (cap -250).
+  if (parlayPlan.length < 6 && board === 'north-american') {
+    const chalkPool = parlayChalkExtras.filter((p) => !usedGames.has(p.gameId));
+    promote(parlayPlan, 6, 'PARLAY_PLAN', chalkPool);
   }
 
   // A parlay needs at least 2 legs — otherwise it's just a straight bet.
@@ -2158,7 +2173,8 @@ const ALL_POWER20_LEAGUES = Object.values(BOARD_LEAGUES).flat();
 // Power 20/10 parlay legs: -450 (per user: "the highest leg on a 20 — nothing higher
 // than -450"). Heavier chalk than that drags the parlay payout to nothing.
 const SINGLE_PICK_ML_FLOOR = -185;
-const PARLAY_LEG_ML_FLOOR = -450;
+const PARLAY_PLAN_ML_FLOOR = -250;   // $10 Parlay Plan legs may go up to -250 (heavier than straights, lighter than Power 20/10)
+const PARLAY_LEG_ML_FLOOR = -450;    // Power of Parlays / Power 10 moonshot legs
 
 function parseAmericanOdds(s: string | null | undefined): number | null {
   if (!s) return null;
