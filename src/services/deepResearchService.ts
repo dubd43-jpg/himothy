@@ -2558,10 +2558,11 @@ export interface SportParlayLeg {
   league: string;
   gameId: string;
   eventName: string;
+  startTime: string | null;  // ISO start time so the UI can show when the game begins
   selection: string;
   odds: string | null;
-  edgeScore: number;       // 0-100
-  detail: string;          // human-readable reasoning
+  edgeScore: number;         // 0-100
+  detail: string;            // human-readable reasoning
 }
 export interface SportParlay {
   sport: string;
@@ -2571,13 +2572,20 @@ export interface SportParlay {
   estimatedDecimal: number;
   payoutOnDollar: string;
   singleGame: boolean;     // true when all legs come from one game (props-heavy)
+  earliestStart: string | null; // earliest leg start time — when the parlay "locks"
 }
 
-async function buildOneSportParlay(sport: string): Promise<SportParlay | null> {
+// `excluded` is a set of `gameId|selection` keys (lowercased) from the main board so the
+// sport parlays never repeat a pick already published as Grand Slam / Pressure / VIP /
+// Parlay Plan. Per user: "I don't want my main picks in parlays. Find different picks."
+async function buildOneSportParlay(sport: string, excluded: Set<string>): Promise<SportParlay | null> {
   const result = await fetchLeagueScoreboard(sport);
   if (!result) return null;
   const events = await flattenTournamentEvents(result.events, sport);
   if (events.length === 0) return null;
+
+  const isExcluded = (gameId: string, selection: string) =>
+    excluded.has(`${gameId}|${selection.toLowerCase().replace(/\s+/g, ' ').trim()}`);
 
   // 1. GAME-LEVEL legs first (fast). A real favorite = winProbability >= 55.
   const gameLegs: SportParlayLeg[] = [];
@@ -2587,8 +2595,11 @@ async function buildOneSportParlay(sport: string): Promise<SportParlay | null> {
     // Per user: sport-parlay legs cap at -185 (the single-pick floor), NOT the -450
     // generic parlay-leg floor. No heavy chalk in these single-sport parlays.
     if (isHeavyChalkML(gp, SINGLE_PICK_ML_FLOOR)) continue;
+    // Don't repeat a main-board pick — find different picks for the sport parlay.
+    if (isExcluded(gp.gameId, gp.selection)) continue;
     gameLegs.push({
       type: 'game', league: sport, gameId: gp.gameId, eventName: gp.eventName,
+      startTime: gp.startTime || event.date || null,
       selection: gp.selection, odds: gp.odds, edgeScore: Math.round(gp.winProbability),
       detail: `${gp.winProbability.toFixed(0)}% win probability`,
     });
@@ -2619,8 +2630,10 @@ async function buildOneSportParlay(sport: string): Promise<SportParlay | null> {
           ? (p.marketUnderPrice != null ? `${p.marketUnderPrice > 0 ? '+' : ''}${p.marketUnderPrice}` : '-110')
           : (p.marketOverPrice != null ? `${p.marketOverPrice > 0 ? '+' : ''}${p.marketOverPrice}` : '-110');
         const detail = `proj ${p.projection.toFixed(1)}${p.marketLine != null ? ` vs line ${p.marketLine}` : ''}, L10 ${p.l10Avg ?? '—'}`;
+        if (isExcluded(String(event.id), selection)) continue;
         propLegs.push({
           type: 'prop', league: sport, gameId: String(event.id), eventName: event.name || '',
+          startTime: event.date || null,
           selection, odds, edgeScore: p.edgeScore, detail,
         });
       }
@@ -2661,21 +2674,28 @@ function assembleSportParlay(sport: string, legs: SportParlayLeg[], singleGame: 
     decimal *= ml != null ? mlToDecimal(ml) : mlToDecimal(-110);
   }
   decimal = Math.round(decimal * 100) / 100;
+  const startTimes = legs.map((l) => l.startTime).filter(Boolean) as string[];
+  const earliestStart = startTimes.length
+    ? startTimes.reduce((min, t) => (new Date(t) < new Date(min) ? t : min))
+    : null;
   return {
     sport, legs, legCount: legs.length,
     estimatedOdds: decimalToAmerican(decimal),
     estimatedDecimal: decimal,
     payoutOnDollar: decimal >= 10 ? `$1 → $${decimal.toFixed(0)}` : `$1 → $${decimal.toFixed(2)}`,
     singleGame,
+    earliestStart,
   };
 }
 
-export async function buildSportParlays(): Promise<SportParlay[]> {
+// Pass `excludedKeys` (gameId|selection from the main board) so sport parlays never repeat
+// a published main-board pick. The endpoint builds this from the daily slate.
+export async function buildSportParlays(excludedKeys: Set<string> = new Set()): Promise<SportParlay[]> {
   const out: SportParlay[] = [];
   // Sequential per-sport so we don't fan out dozens of prop fetches simultaneously.
   for (const sport of SPORT_PARLAY_LEAGUES) {
     try {
-      const parlay = await buildOneSportParlay(sport);
+      const parlay = await buildOneSportParlay(sport, excludedKeys);
       if (parlay) out.push(parlay);
     } catch (err) {
       console.error(`[sportParlay] build failed for ${sport}`, err);
