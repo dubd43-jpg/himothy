@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server';
 import { type BoardType } from '@/services/deepResearchService';
 import { CACHE_TTL_MS, getOrComputeBoard, getCachedBoard, invalidateBoardCache } from '@/services/dailyBoardCache';
 
-// Heavy multi-league research scan — give it room so Vercel doesn't kill it at 10s.
-export const maxDuration = 60;
+// Heavy multi-league research scan + per-pick best-market enrichment (totals/team-totals/
+// halves/F5 fetches). Give it room so the first cold compute of the day doesn't get killed.
+export const maxDuration = 120;
 export const dynamic = 'force-dynamic';
 
 const VALID_BOARDS: BoardType[] = ['north-american', 'soccer', 'tennis', 'combat', 'individual', 'racing', 'global', 'overseas'];

@@ -64,6 +64,13 @@ function marketAndLine(p: any): { marketType: string; line: string | null } {
   const sel = String(p.selection || '');
   const low = sel.toLowerCase();
   const mt = String(p.marketType || '').toLowerCase();
+  // Preserve the totals-family market types the engine sets (team total / halves / quarters /
+  // hockey periods / F5) so the grader can route them — these selections contain "Over/Under"
+  // and would otherwise be mislabeled as a plain game total and graded wrong.
+  if (mt === 'team_total' || /^(1h|2h|q[1-4]|p[1-3]|f5)_total$/.test(mt)) {
+    const n = sel.match(/(\d+(?:\.\d+)?)\s*$/)?.[1] ?? (p.line != null ? String(p.line).replace(/[^0-9.]/g, '') : null);
+    return { marketType: mt, line: n };
+  }
   // Trust the engine's marketType when set; otherwise detect — using WORD BOUNDARIES so
   // team names containing "under" (e.g. "Thunder") aren't misclassified as totals.
   if (mt === 'total' || /\b(over|under)\b/i.test(sel)) {

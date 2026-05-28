@@ -1386,6 +1386,150 @@ function pickForNA(
   return spreadPlay() ?? totalPlay() ?? moneyline();
 }
 
+// ─── Best-Market-Per-Game (totals / team totals / halves / quarters / F5) ─────
+// Confidence for a totals-family play, on the same 0-100 scale as scoreGame. Driven by
+// how far our projection beats the posted line (normalized by the line so MLB runs and
+// NBA points are comparable) plus recent over/under tendency confirmation. Capped at 90 —
+// a total is a strong lean, never a near-lock.
+function scoreTotalsConfidence(projection: number, line: number, ouAlignRate: number | null): number {
+  const edge = Math.abs(projection - line);
+  const pct = line > 0 ? edge / line : 0;
+  let conf = 55;
+  if (pct >= 0.14) conf += 26;
+  else if (pct >= 0.10) conf += 20;
+  else if (pct >= 0.07) conf += 14;
+  else if (pct >= 0.05) conf += 9;
+  else if (pct >= 0.03) conf += 4;
+  else conf -= 6;            // negligible edge — the book has it right
+  if (ouAlignRate != null) {
+    if (ouAlignRate >= 0.70) conf += 10;
+    else if (ouAlignRate >= 0.60) conf += 5;
+    else if (ouAlignRate < 0.40) conf -= 8;
+  }
+  return Math.max(0, Math.min(90, Math.round(conf)));
+}
+
+function ouOverRate(b: { wins: number; losses: number } | null | undefined): number | null {
+  if (!b) return null;
+  const decisive = b.wins + b.losses;
+  if (decisive < 5) return null;
+  return b.wins / decisive;
+}
+
+export interface BestMarketSwap {
+  selection: string;
+  marketType: string;            // total | team_total | 1h_total | 2h_total | q1_total..q4_total | p1_total..p3_total | f5_total
+  selectionSide: 'home' | 'away';
+  odds: string | null;
+  line: string | null;
+  confidence: number;
+  detail: string;
+}
+
+// Evaluate the totals-family markets for ONE already-selected pick and return the single
+// strongest one (or null). Used by the board enrichment to swap a featured pick to a
+// total / team total / half / quarter / F5 when it is clearly the better play than the
+// side/run line. Fetches alt lines + period markets + F5 in parallel; all best-effort.
+export async function buildBestMarketSwap(pick: any): Promise<BestMarketSwap | null> {
+  const league: string = pick?.league || '';
+  const home = pick?.homeTeam, away = pick?.awayTeam;
+  const homeName: string = home?.name || '', awayName: string = away?.name || '';
+  if (!homeName || !awayName) return null;
+
+  const homeTot = home?.trends?.avgTotal10 ?? null;
+  const awayTot = away?.trends?.avgTotal10 ?? null;
+  const homeMargin = home?.trends?.avgMargin10 ?? null;
+  const awayMargin = away?.trends?.avgMargin10 ?? null;
+  const combinedOverRate = (() => {
+    const ho = ouOverRate(home?.trends?.ou10), ao = ouOverRate(away?.trends?.ou10);
+    if (ho != null && ao != null) return (ho + ao) / 2;
+    return ho ?? ao;
+  })();
+
+  const candidates: BestMarketSwap[] = [];
+
+  // 1) FULL-GAME TOTAL — no fetch; line from the scoreboard (pick.total), projection from form.
+  if (pick?.total != null && homeTot != null && awayTot != null) {
+    const proj = (homeTot + awayTot) / 2;
+    const over = proj >= pick.total;
+    const align = combinedOverRate != null ? (over ? combinedOverRate : 1 - combinedOverRate) : null;
+    candidates.push({
+      selection: `${over ? 'Over' : 'Under'} ${pick.total}`, marketType: 'total',
+      selectionSide: over ? 'home' : 'away', odds: '-110', line: `${pick.total}`,
+      confidence: scoreTotalsConfidence(proj, pick.total, align),
+      detail: `Projected ${proj.toFixed(1)} vs line ${pick.total}`,
+    });
+  }
+
+  const lc = league.toLowerCase();
+  const isMlb = lc.includes('mlb') || lc.includes('baseball');
+  const [alt, periods, f5] = await Promise.all([
+    (async () => { try { const m = await import('@/services/oddsApiService'); return await m.getAltLinesForGame(league, awayName, homeName); } catch { return null; } })(),
+    (async () => { try { const m = await import('@/services/periodMarketsService'); return await m.getPeriodMarketsForGame(league, awayName, homeName); } catch { return null; } })(),
+    isMlb ? (async () => { try { const m = await import('@/services/oddsApiService'); return await m.getF5InsightForGame(awayName, homeName); } catch { return null; } })() : Promise.resolve(null),
+  ]);
+
+  // 2) TEAM TOTALS — each team's own projected scoring = (its game-total avg + its margin)/2.
+  if (alt?.teamTotals?.length && homeTot != null && awayTot != null && homeMargin != null && awayMargin != null) {
+    const projFor = { home: (homeTot + homeMargin) / 2, away: (awayTot + awayMargin) / 2 } as const;
+    for (const tt of alt.teamTotals) {
+      if (tt.line == null) continue;
+      const proj = projFor[tt.side];
+      const over = proj >= tt.line;
+      const ob = tt.side === 'home' ? home?.trends?.ou10 : away?.trends?.ou10;
+      const orate = ouOverRate(ob);
+      const align = orate != null ? (over ? orate : 1 - orate) : null;
+      const teamName = tt.side === 'home' ? homeName : awayName;
+      const price = over ? tt.bestOverPrice : tt.bestUnderPrice;
+      candidates.push({
+        selection: `${teamName} Team Total ${over ? 'Over' : 'Under'} ${tt.line}`, marketType: 'team_total',
+        selectionSide: tt.side, odds: price != null ? `${price > 0 ? '+' : ''}${price}` : '-110', line: `${tt.line}`,
+        confidence: scoreTotalsConfidence(proj, tt.line, align),
+        detail: `Projected ${proj.toFixed(1)} vs team line ${tt.line}`,
+      });
+    }
+  }
+
+  // 3) PERIOD TOTALS (1H / 2H / quarters / hockey periods) via the period scorer.
+  if (periods?.markets?.length) {
+    try {
+      const m = await import('@/services/periodMarketsService');
+      const avgTotalCombined = homeTot != null && awayTot != null ? (homeTot + awayTot) / 2 : (homeTot ?? awayTot);
+      const plays = m.scorePeriodMarkets(periods.markets, {
+        gameId: String(pick.gameId), eventName: pick.eventName || '', league,
+        startTime: pick.startTime || null, awayTeam: awayName, homeTeam: homeName,
+        avgTotalCombined,
+        homeOu10: home?.trends?.ou10 ?? null, awayOu10: away?.trends?.ou10 ?? null,
+      });
+      for (const pl of plays) {
+        candidates.push({
+          selection: pl.selection, marketType: `${pl.period.toLowerCase()}_total`,
+          selectionSide: /\bover\b/i.test(pl.selection) ? 'home' : 'away',
+          odds: pl.odds, line: pl.line != null ? `${pl.line}` : null,
+          confidence: pl.edgeScore, detail: pl.reason,
+        });
+      }
+    } catch { /* non-blocking */ }
+  }
+
+  // 4) F5 TOTAL (MLB first 5 innings) — project ~5/9 of the full-game total.
+  if (f5?.totalLine != null && homeTot != null && awayTot != null) {
+    const projF5 = ((homeTot + awayTot) / 2) * (5 / 9);
+    const over = projF5 >= f5.totalLine;
+    const price = over ? f5.bestOverPrice : f5.bestUnderPrice;
+    candidates.push({
+      selection: `F5 ${over ? 'Over' : 'Under'} ${f5.totalLine}`, marketType: 'f5_total',
+      selectionSide: over ? 'home' : 'away', odds: price != null ? `${price > 0 ? '+' : ''}${price}` : '-110',
+      line: `${f5.totalLine}`, confidence: scoreTotalsConfidence(projF5, f5.totalLine, null),
+      detail: `Projected first-5 ${projF5.toFixed(1)} vs line ${f5.totalLine}`,
+    });
+  }
+
+  if (candidates.length === 0) return null;
+  candidates.sort((a, b) => b.confidence - a.confidence);
+  return candidates[0];
+}
+
 function pickForSoccer(
   home: TeamProfile, away: TeamProfile, total: number | null,
 ): { selectionSide: 'home' | 'away'; marketType: 'spread' | 'moneyline' | 'total'; selection: string; odds: string | null; line: string | null } {

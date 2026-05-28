@@ -1129,6 +1129,57 @@ function gradeResultFromEvent(pick: RegistryPickRow, event: any): RegistryResult
     return h1 + a1 === 0 ? 'win' : 'loss';
   }
 
+  // TEAM TOTAL — "Team Over/Under N": that team's final score vs the line.
+  if (market === 'team_total' || /team total/i.test(pick.selection)) {
+    if (!Number.isFinite(line)) return 'void';
+    const isHomeTeam = !!pick.homeTeam && sel.includes((pick.homeTeam || '').toLowerCase());
+    const teamScore = isHomeTeam ? homeScore : awayScore;
+    const over = /\bover\b/i.test(pick.selection);
+    if (teamScore > line) return over ? 'win' : 'loss';
+    if (teamScore < line) return over ? 'loss' : 'win';
+    return 'push';
+  }
+
+  // PERIOD / F5 TOTALS — sum the relevant linescore segments (both teams) vs the line.
+  // 1H = first half, 2H = second half, Q1-Q4 = quarters, P1-P3 = hockey periods,
+  // F5 = first 5 innings (MLB). Settle Over/Under against that summed segment total.
+  const periodCode = (market.match(/^(1h|2h|q[1-4]|p[1-3]|f5)_total$/)?.[1])
+    || (/(^|[^a-z])(1h|2h|q[1-4]|p[1-3]|f5)([^a-z]|$)/i.exec(pick.selection)?.[2]?.toLowerCase());
+  if (periodCode) {
+    if (!Number.isFinite(line)) return 'void';
+    const idxFor = (code: string): number[] => {
+      switch (code) {
+        case '1h': return [0, 1];
+        case '2h': return [2, 3];
+        case 'q1': return [0]; case 'q2': return [1]; case 'q3': return [2]; case 'q4': return [3];
+        case 'p1': return [0]; case 'p2': return [1]; case 'p3': return [2];
+        case 'f5': return [0, 1, 2, 3, 4];
+        default: return [];
+      }
+    };
+    const idxs = idxFor(periodCode);
+    if (idxs.length === 0) return 'void';
+    const sumSeg = (c: any): number | null => {
+      const ls = c?.linescores;
+      if (!Array.isArray(ls) || ls.length === 0) return null;
+      let s = 0;
+      for (const i of idxs) {
+        const v = ls[i]?.value ?? ls[i]?.displayValue;
+        const n = Number(v);
+        if (!Number.isFinite(n)) return null;   // missing segment → can't settle honestly
+        s += n;
+      }
+      return s;
+    };
+    const hs = sumSeg(home), as = sumSeg(away);
+    if (hs == null || as == null) return 'void';
+    const segTotal = hs + as;
+    const over = /\bover\b/i.test(pick.selection);
+    if (segTotal > line) return over ? 'win' : 'loss';
+    if (segTotal < line) return over ? 'loss' : 'win';
+    return 'push';
+  }
+
   if (market.includes('moneyline') || sel.includes(' ml')) {
     const winner = chooseWinningSide(event);
     if (winner === 'draw') return 'push';

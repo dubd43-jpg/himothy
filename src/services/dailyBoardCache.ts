@@ -141,6 +141,58 @@ async function enrichWithOdds(result: any) {
   return result;
 }
 
+// BEST-MARKET-PER-GAME: for each featured pick, check whether a total / team total / half /
+// quarter / F5 on that game is a CLEARLY stronger play than the side/run line — and if so,
+// swap the published market to it. Conservative on purpose (high floor + margin) so a strong
+// side or run line keeps its slot; we only flip when a totals-family play is genuinely better.
+// Never removes a market globally — run lines/sides remain the default.
+async function enrichWithBestMarket(result: any) {
+  if (!hasOddsApi() || !result) return result;
+  const FLOOR = 75;     // a totals-family play must be genuinely strong to take a slot
+  const MARGIN = 4;     // and clearly beat the side's confidence
+  let buildBestMarketSwap: (p: any) => Promise<any>;
+  try {
+    ({ buildBestMarketSwap } = await import('@/services/deepResearchService'));
+  } catch { return result; }
+  const consider = async (p: any) => {
+    if (!p) return;
+    try {
+      const best = await buildBestMarketSwap(p);
+      if (!best) return;
+      if (best.confidence < FLOOR) return;
+      if (best.confidence <= (p.confidenceScore ?? 0) + MARGIN) return;
+      if (best.marketType === p.marketType && best.selection === p.selection) return;
+      p.selection = best.selection;
+      p.marketType = best.marketType;
+      p.selectionSide = best.selectionSide;
+      p.odds = best.odds;
+      p.line = best.line;
+      p.confidenceScore = best.confidence;
+      p.bestMarketDetail = best.detail;
+    } catch { /* non-blocking */ }
+  };
+  if (result.grandSlam) await consider(result.grandSlam);
+  for (const key of ['pressurePack', 'vip4Pack', 'parlayPlan', 'marquee']) {
+    await Promise.all((result[key] || []).map((p: any) => consider(p)));
+  }
+  return result;
+}
+
+// VALUE RANKING: within each multi-pick product, float the plays where our price beats the
+// market (positive valueEdge) to the top, then by confidence. Doesn't add/remove picks —
+// keeps the full slate, just leads with the best-priced plays.
+function rankByValue(result: any) {
+  if (!result) return result;
+  const valOf = (p: any) => (typeof p?.oddsInsight?.valueEdge === 'number' ? p.oddsInsight.valueEdge : -999);
+  const confOf = (p: any) => (typeof p?.confidenceScore === 'number' ? p.confidenceScore : 0);
+  for (const key of ['pressurePack', 'vip4Pack', 'parlayPlan']) {
+    if (Array.isArray(result[key])) {
+      result[key].sort((a: any, b: any) => (valOf(b) - valOf(a)) || (confOf(b) - confOf(a)));
+    }
+  }
+  return result;
+}
+
 function flattenBoardPicks(data: any): any[] {
   const arr: any[] = [];
   if (!data) return arr;
@@ -202,6 +254,10 @@ export async function getOrComputeBoard(board: BoardType): Promise<any> {
 
   const result = await runDailyDeepResearch(board);
   await enrichWithOdds(result);
+  // Swap a featured pick to its best totals-family market (total/team total/half/F5) when
+  // that's clearly the stronger play, then float the best-priced plays to the top.
+  await enrichWithBestMarket(result);
+  rankByValue(result);
   await enrichWithBucketStats(result);
   const valuePool: any[] = [result.grandSlam, ...(result.pressurePack || []), ...(result.vip4Pack || []), ...(result.parlayPlan || []), ...(result.marquee || [])].filter(Boolean);
   (result as any).valuePlays = valuePool
