@@ -135,40 +135,36 @@ export function ProductPickPage({
           </h1>
           {subtitle && <p className="mt-3 max-w-2xl text-base text-white/50 leading-relaxed">{subtitle}</p>}
 
-          {/* BIG lifetime record block — user wants every section's own stats prominent. */}
-          <div className="mt-6 rounded-3xl border-2 border-white/10 bg-gradient-to-br from-white/[0.05] to-white/[0.01] p-5 md:p-6">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex-1">
-                <div className="text-[10px] font-black uppercase tracking-[0.3em] text-white/40">Lifetime Record — {title || meta.label}</div>
-                {/* Always show the real numbers, even when they're 0-0. The earlier
-                    "Tracking starts now" placeholder felt like an excuse — user wants the
-                    actual lifetime line, blank or full. */}
-                <div className="mt-2 flex items-baseline flex-wrap gap-x-5 gap-y-1">
-                  <span className="text-5xl md:text-6xl font-black tabular-nums leading-none">
-                    {record?.wins ?? 0}<span className="text-white/30">-</span>{record?.losses ?? 0}{record?.pushes ? <><span className="text-white/30">-</span>{record.pushes}</> : null}
+          {/* Compact lifetime record strip — readable but doesn't dominate the page. */}
+          <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 md:px-5 md:py-3.5">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="text-[10px] font-black uppercase tracking-widest text-white/40 shrink-0">Lifetime</span>
+                <span className="text-2xl md:text-3xl font-black tabular-nums leading-none">
+                  {record?.wins ?? 0}<span className="text-white/30">-</span>{record?.losses ?? 0}{record?.pushes ? <><span className="text-white/30">-</span>{record.pushes}</> : null}
+                </span>
+                <span className="text-base md:text-lg font-black text-emerald-400 tabular-nums leading-none">{record?.winPercentage || '0.0%'}</span>
+                <span className={`text-sm md:text-base font-black tabular-nums leading-none ${(record?.units ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {(record?.units ?? 0) >= 0 ? '+' : ''}{(record?.units ?? 0).toFixed(1)}u
+                </span>
+                {record?.streak && record.streak.type && record.streak.count >= 2 && (
+                  <span className={`text-sm md:text-base font-black tabular-nums leading-none inline-flex items-center gap-1 ${record.streak.type === 'W' ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {record.streak.type === 'W' ? '🔥' : '🥶'} {record.streak.count}{record.streak.type}
                   </span>
-                  <span className="text-2xl md:text-3xl font-black text-emerald-400 tabular-nums leading-none">{record?.winPercentage || '0.0%'}</span>
-                  <span className={`text-xl md:text-2xl font-black tabular-nums leading-none ${(record?.units ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                    {(record?.units ?? 0) >= 0 ? '+' : ''}{(record?.units ?? 0).toFixed(1)}u
-                  </span>
-                  {record?.streak && record.streak.type && record.streak.count >= 2 && (
-                    <span className={`text-xl md:text-2xl font-black tabular-nums leading-none inline-flex items-center gap-1 ${record.streak.type === 'W' ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {record.streak.type === 'W' ? '🔥' : '🥶'} {record.streak.count}{record.streak.type}
-                    </span>
-                  )}
-                </div>
+                )}
               </div>
-              <button type="button" onClick={() => load(true)} disabled={refreshing}
-                className="shrink-0 inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-white/30 hover:text-white/60 transition-colors disabled:opacity-40 pt-1">
-                <RefreshCw className={`h-3 w-3 ${refreshing ? "animate-spin" : ""}`} /> Refresh
-              </button>
+              <div className="flex items-center gap-3">
+                {combined && (
+                  <span className="text-xs font-black text-primary tabular-nums">
+                    <span className="text-[9px] uppercase tracking-widest text-primary/60 mr-1.5">Parlay</span>{combined}
+                  </span>
+                )}
+                <button type="button" onClick={() => load(true)} disabled={refreshing}
+                  className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-white/30 hover:text-white/60 transition-colors disabled:opacity-40">
+                  <RefreshCw className={`h-3 w-3 ${refreshing ? "animate-spin" : ""}`} /> Refresh
+                </button>
+              </div>
             </div>
-            {combined && (
-              <div className="mt-4 pt-4 border-t border-white/8 flex items-baseline gap-3">
-                <span className="text-[10px] font-black uppercase tracking-[0.3em] text-primary/80">Parlay Odds Today</span>
-                <span className="text-2xl md:text-3xl font-black text-primary tabular-nums">{combined}</span>
-              </div>
-            )}
           </div>
           {accentNote && <p className="mt-4 text-xs font-semibold text-primary/80">{accentNote}</p>}
         </div>

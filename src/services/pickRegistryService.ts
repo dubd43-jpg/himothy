@@ -1370,6 +1370,47 @@ export async function getRegistrySummary({
     byCategory[k].streak = computeStreak(picksByCategory[k] || []);
   });
 
+  // Mirror the parlay ticket-level overwrite onto byCategory too. The product pages
+  // (e.g., /parlay-plan) read `category_stats[meta.category]` which is built from
+  // byCategory — same bug as byProductLine until this loop runs.
+  for (const category of Object.keys(byCategory)) {
+    if (!isParlayProductLine(category)) continue;
+    const catPicks = picksByCategory[category] || [];
+    const ticketBets = aggregateToBetResults(catPicks);
+    const wins = ticketBets.filter((b) => b.result === 'win').length;
+    const losses = ticketBets.filter((b) => b.result === 'loss').length;
+    const pushes = ticketBets.filter((b) => b.result === 'push').length;
+    const pending = ticketBets.filter((b) => b.result === 'pending').length;
+    const totalUnits = ticketBets.reduce((s, t) => s + asUnits(t.result, t.odds), 0);
+    const bucket = byCategory[category];
+    bucket.wins = wins;
+    bucket.losses = losses;
+    bucket.pushes = pushes;
+    bucket.pending = pending;
+    bucket.totalPicks = ticketBets.length;
+    bucket.units = totalUnits;
+    bucket.winRate = safePct(wins, losses);
+    // Re-compute streak at the ticket level using gradedAt ordering.
+    const settled = ticketBets
+      .filter((b) => b.result === 'win' || b.result === 'loss')
+      .sort((a, b) => {
+        const at = a.gradedAt ? new Date(a.gradedAt).getTime() : 0;
+        const bt = b.gradedAt ? new Date(b.gradedAt).getTime() : 0;
+        return bt - at;
+      });
+    if (settled.length === 0) {
+      bucket.streak = { type: null, count: 0 };
+    } else {
+      const first: 'W' | 'L' = settled[0].result === 'win' ? 'W' : 'L';
+      let count = 0;
+      for (const s of settled) {
+        const t = s.result === 'win' ? 'W' : 'L';
+        if (t === first) count++; else break;
+      }
+      bucket.streak = { type: first, count };
+    }
+  }
+
   // TICKET-LEVEL aggregation for parlay product lines. By default the bucket counts each
   // pick row as one win or loss — but parlay legs are NOT independent bets. A 4-leg
   // ticket where 3 legs won + 1 lost is ONE ticket loss, not 3 leg wins. Customers were

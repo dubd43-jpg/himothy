@@ -78,27 +78,24 @@ export default function NrfiPage() {
             MLB games we like for zero runs in the 1st — judged off both starting pitchers, with the reason on every game.
           </p>
 
-          {/* BIG NRFI stat block — matches the rest of the section pages. */}
-          <div className="mt-6 rounded-3xl border-2 border-white/10 bg-gradient-to-br from-white/[0.05] to-white/[0.01] p-5 md:p-6">
-            <div className="text-[10px] font-black uppercase tracking-[0.3em] text-white/40">NRFI Lifetime Record</div>
-            {record && (record.wins + record.losses) > 0 ? (
-              <div className="mt-2 flex items-baseline flex-wrap gap-x-5 gap-y-1">
-                <span className="text-5xl md:text-6xl font-black tabular-nums leading-none">
-                  {record.wins}<span className="text-white/30">-</span>{record.losses}{record.pushes ? <><span className="text-white/30">-</span>{record.pushes}</> : null}
-                </span>
-                <span className="text-2xl md:text-3xl font-black text-emerald-400 tabular-nums leading-none">{record.winPercentage}</span>
-              </div>
-            ) : (
-              <div className="mt-2 text-2xl font-black text-white/30">Tracking starts now — kept 100% real</div>
-            )}
-            {(tonight.won + tonight.lost + tonight.pending) > 0 && (
-              <div className="mt-4 pt-4 border-t border-white/8 flex items-baseline gap-3">
-                <span className="text-[10px] font-black uppercase tracking-[0.3em] text-white/40">Tonight</span>
-                <span className="text-2xl md:text-3xl font-black text-emerald-400 tabular-nums leading-none">{tonight.won}<span className="text-base text-white/30">W</span></span>
-                <span className="text-2xl md:text-3xl font-black text-red-400 tabular-nums leading-none">{tonight.lost}<span className="text-base text-white/30">L</span></span>
-                {tonight.pending > 0 && <span className="text-base font-bold text-amber-400">{tonight.pending} live</span>}
-              </div>
-            )}
+          {/* Compact NRFI stat strip — matches the rest of the section pages. */}
+          <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 md:px-5 md:py-3.5">
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className="text-[10px] font-black uppercase tracking-widest text-white/40 shrink-0">NRFI Lifetime</span>
+              <span className="text-2xl md:text-3xl font-black tabular-nums leading-none">
+                {record?.wins ?? 0}<span className="text-white/30">-</span>{record?.losses ?? 0}{record?.pushes ? <><span className="text-white/30">-</span>{record.pushes}</> : null}
+              </span>
+              <span className="text-base md:text-lg font-black text-emerald-400 tabular-nums leading-none">{record?.winPercentage || '0.0%'}</span>
+              {(tonight.won + tonight.lost + tonight.pending) > 0 && (
+                <>
+                  <span className="text-white/20">·</span>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-white/40">Tonight</span>
+                  <span className="text-base md:text-lg font-black text-emerald-400 tabular-nums leading-none">{tonight.won}W</span>
+                  <span className="text-base md:text-lg font-black text-red-400 tabular-nums leading-none">{tonight.lost}L</span>
+                  {tonight.pending > 0 && <span className="text-xs font-bold text-amber-400">{tonight.pending} live</span>}
+                </>
+              )}
+            </div>
           </div>
         </div>
 
