@@ -1704,6 +1704,20 @@ async function processGame(
     pickData = pickForNA(home, away, mergedSpread, mergedTotal, pickedSideForSignals, league);
   }
 
+  // MARGINAL CHALK / RUN-LINE FILTER — per sharp-bettor analysis 2026-05-27.
+  // Data showed 33% win rate on MLB -1.5 runlines and big losses on -130+ ML with
+  // toss-up win-prob gaps. Both come from the engine forcing a play when the math
+  // doesn't support it. Filter out before scoring:
+  //   - Spread/runline: gap must be ≥ 15 pts (don't lay -110 on coin flips)
+  //   - Moneyline: if odds ≤ -130, gap must be ≥ 12 pts (don't lay heavy juice on marginal)
+  // Returning null here makes processGame skip the game entirely — the slate is
+  // smaller, not padded with negative-EV plays.
+  const pickedML = pickedSideForSignals === 'home' ? mergedHomeML : mergedAwayML;
+  if (sportStyle === 'na') {
+    if (pickData.marketType === 'spread' && winProbGap < 15) return null;
+    if (pickData.marketType === 'moneyline' && pickedML != null && pickedML <= -130 && winProbGap < 12) return null;
+  }
+
   // Build reasons
   const reasonsFor: string[] = [];
   const reasonsAgainst: string[] = [];
@@ -2009,12 +2023,16 @@ export async function runDailyDeepResearch(board: BoardType = 'north-american'):
   // never ship half-empty regardless of how thin the day is.
   //
   // We backfill in three tiers, escalating only if the prior tier comes up short:
-  //   T1: non-PASS picks not in any bucket  — best quality leftovers, includes VIP/Parlay tier
-  //   T2: + asleep-reserved picks           — high-confidence quiet-market plays
-  //   T3: + PASS-tier picks                 — last resort on extremely thin slates
-  //
-  // We promote in product order (Pressure Pack → VIP 4-Pack → Parlay Plan) so the best
-  // leftovers land in the highest-revenue product first.
+  //   T1: non-PASS picks not in any bucket — quality leftovers
+  // Per the sharp-bettor analysis (2026-05-27), we KILLED the multi-tier backfill that
+  // force-filled Pressure Pack → VIP 4-Pack → Parlay Plan even when picks didn't clear
+  // their tier bar. Forcing slots is the #1 retail behavior and drove our VIP win rate
+  // to 33%. New rule: each tier publishes ONLY what its tier-assignment loop above
+  // organically produced. No promotion from weaker tiers. If a tier has <2 picks, it
+  // ships empty for the day — better to publish nothing than to publish negative-EV.
+  // The one promote we keep: T1 leftovers can roll into Parlay Plan only if they
+  // genuinely qualify as PARLAY_PLAN tier or better. Pressure Pack and VIP 4-Pack
+  // never backfill — they're flagship straights.
   const promote = (target: DeepPickResult[], cap: number, tierTag: ProductTier, pool: DeepPickResult[]) => {
     while (target.length < cap && pool.length > 0) {
       const p = pool.shift()!;
@@ -2024,32 +2042,13 @@ export async function runDailyDeepResearch(board: BoardType = 'north-american'):
     }
   };
   const t1 = picks.filter((p) => !usedGames.has(p.gameId) && !asleepReserved.has(p.gameId) && p.tier !== 'PASS');
-  promote(pressurePack, 2, 'PRESSURE_PACK', t1);
-  promote(vip4Pack, 4, 'VIP_4_PACK', t1);
-  promote(parlayPlan, 6, 'PARLAY_PLAN', t1);
+  // Parlay Plan can take up to 2 legs of organic PARLAY_PLAN-or-better picks. NOT 6.
+  // Per analysis: 4+ leg parlays are mathematical poison; restrict to 2 legs that can be
+  // correlated (same game / same conference / same favorite type).
+  promote(parlayPlan, 2, 'PARLAY_PLAN', t1);
 
-  if (pressurePack.length < 2 || vip4Pack.length < 4 || parlayPlan.length < 4) {
-    const t2 = picks.filter((p) => !usedGames.has(p.gameId) && asleepReserved.has(p.gameId) && p.tier !== 'PASS');
-    promote(pressurePack, 2, 'PRESSURE_PACK', t2);
-    promote(vip4Pack, 4, 'VIP_4_PACK', t2);
-    promote(parlayPlan, 6, 'PARLAY_PLAN', t2);
-    // Anything T2 promoted gets removed from the asleep pool so it doesn't double-render.
-    for (const p of t2) if (usedGames.has(p.gameId)) asleepReserved.delete(p.gameId);
-  }
-
-  if (pressurePack.length < 2 || vip4Pack.length < 4 || parlayPlan.length < 4) {
-    const t3 = picks.filter((p) => !usedGames.has(p.gameId));
-    promote(pressurePack, 2, 'PRESSURE_PACK', t3);
-    promote(vip4Pack, 4, 'VIP_4_PACK', t3);
-    promote(parlayPlan, 6, 'PARLAY_PLAN', t3);
-  }
-
-  // A parlay needs at least 2 legs — otherwise it's just a straight bet. If the thin-
-  // slate backfill couldn't fill the Parlay Plan past 1 pick, clear it entirely. We
-  // don't want a "Parlay Plan" section displaying a single play and calling it a parlay.
+  // PARLAY MINIMUM = 2 LEGS — anything less is not a parlay, drop the section.
   if (parlayPlan.length < 2) {
-    // Push the lonely pick back into the candidate pool so it can land somewhere honest
-    // (e.g., asleepPicks, value plays, or just nowhere).
     for (const p of parlayPlan) usedGames.delete(p.gameId);
     parlayPlan.length = 0;
   }

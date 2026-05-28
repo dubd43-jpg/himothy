@@ -67,7 +67,7 @@ export function ProductPickPage({
   const meta = PRODUCT_META[product];
   const liveMap = useLiveScores();
   const [data, setData] = useState<DailyPicksData | null>(null);
-  const [record, setRecord] = useState<{ wins: number; losses: number; pushes: number; winPercentage: string; units: number; streak?: { type: 'W' | 'L' | null; count: number } } | null>(null);
+  const [record, setRecord] = useState<{ wins: number; losses: number; pushes: number; winPercentage: string; units: number; streak?: { type: 'W' | 'L' | null; count: number }; clvBeatRate?: string; clvTracked?: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -150,6 +150,11 @@ export function ProductPickPage({
                 {record?.streak && record.streak.type && record.streak.count >= 2 && (
                   <span className={`text-sm md:text-base font-black tabular-nums leading-none inline-flex items-center gap-1 ${record.streak.type === 'W' ? 'text-emerald-400' : 'text-red-400'}`}>
                     {record.streak.type === 'W' ? '🔥' : '🥶'} {record.streak.count}{record.streak.type}
+                  </span>
+                )}
+                {record?.clvBeatRate && (record.clvTracked ?? 0) > 0 && (
+                  <span className="text-xs md:text-sm font-black tabular-nums leading-none text-white/50">
+                    <span className="text-[9px] uppercase tracking-widest text-white/30 mr-1">CLV</span>{record.clvBeatRate}
                   </span>
                 )}
               </div>
