@@ -1172,21 +1172,40 @@ function DeepResearchSection({ board }: { board: string }) {
         </button>
       </div>
 
-      {/* Main board → category tiles (click in to see that category's picks). */}
+      {/* Main board layout:
+          1. 3 BIG HERO TILES — Grand Slam, Pressure Pack, VIP 4-Pack (the flagship straights)
+          2. Secondary row — Personal Pick + $10 Parlay Plan (still prominent)
+          3. Footer link strip — everything else (Big Games, NRFI, Value, Edges, Tendencies, Asleep, Period Plays)
+          Each tile/link routes to its own dedicated page so every section has room to breathe. */}
       {board === 'north-american' ? (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <CategoryTile href="/himothy-picks" icon={Crown} title="HIMOTHY Personal Pick" count={1} unit="prop" restingLabel="Best prop across every sport" stats={statsFor('Personal Pick')} />
-          <CategoryTile href="/grand-slam" icon={Crown} title="HIMOTHY 1-Pick Grand Slam" count={data.grandSlam ? 1 : 0} unit="pick" restingLabel="Resting today" stats={statsFor('Grand Slam')} />
-          <CategoryTile href="/pressure-pack" icon={Flame} title="HIMOTHY 2-Pick Pressure Pack" count={data.pressurePack.length} unit="pick" stats={statsFor('Pressure Pack')} />
-          <CategoryTile href="/vip-picks" icon={ShieldCheck} title="HIMOTHY VIP 4-Pack" count={data.vip4Pack.length} unit="pick" stats={statsFor('VIP 4-Pack')} />
-          <CategoryTile href="/parlay-plan" icon={DollarSign} title="$10 Parlay Plan" count={data.parlayPlan.length} unit="leg" restingLabel="Not enough legs today" stats={statsFor('Parlay Center')} />
-          <CategoryTile href="/big-games" icon={Trophy} title="Tonight's Big Games" count={data.marquee?.length ?? 0} unit="game" restingLabel="No big game today" stats={statsFor('Big Games')} />
-          <CategoryTile href="/nrfi" icon={Radio} title="NRFI — No Runs 1st" count={data.nrfi?.length ?? 0} unit="game" stats={statsFor('NRFI')} />
-          <CategoryTile href="/value" icon={Target} title="Value Plays — real edge" count={data.valuePlays?.length ?? 0} unit="edge" restingLabel="No value today — sit out" stats={statsFor('Value Plays')} />
-          <CategoryTile href="/edges" icon={TrendingUp} title="Tonight's Edges — top signals" count={(data.valuePlays?.length ?? 0) + (data.grandSlam ? 1 : 0) + data.pressurePack.length + data.vip4Pack.length + data.parlayPlan.length} unit="signal" />
-          <CategoryTile href="/trends" icon={Flame} title="Hot Tendencies — ATS & O/U" count={(data.grandSlam ? 1 : 0) + data.pressurePack.length + data.vip4Pack.length + data.parlayPlan.length + (data.marquee?.length ?? 0)} unit="game" restingLabel="Pulling recent results" />
-          <CategoryTile href="/asleep" icon={Flame} title="Asleep Picks — quiet markets" count={data.asleepPicks?.length ?? 0} unit="play" restingLabel="No quiet edges right now" stats={statsFor('Asleep Picks')} />
-          <CategoryTile href="/period-plays" icon={Radio} title="Period Plays — halves, quarters, hockey periods" count={1} unit="scan" restingLabel="Scanning for 1H / 2H / period edges" />
+        <div className="space-y-6">
+          {/* 1. HERO TILES — the 3 flagship straights products */}
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <HeroTile href="/grand-slam" icon={Crown} title="Grand Slam" subtitle="1 single pick" count={data.grandSlam ? 1 : 0} unit="pick" accent="emerald" restingLabel="Resting today" stats={statsFor('Grand Slam')} />
+            <HeroTile href="/pressure-pack" icon={Flame} title="Pressure Pack" subtitle="2 picks" count={data.pressurePack.length} unit="pick" accent="amber" stats={statsFor('Pressure Pack')} />
+            <HeroTile href="/vip-picks" icon={ShieldCheck} title="VIP 4-Pack" subtitle="4 picks" count={data.vip4Pack.length} unit="pick" accent="sky" stats={statsFor('VIP 4-Pack')} />
+          </div>
+
+          {/* 2. SECONDARY ROW — Personal Pick + Parlay Plan */}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <CategoryTile href="/himothy-picks" icon={Crown} title="HIMOTHY Personal Pick" count={1} unit="prop" restingLabel="Best prop across every sport" stats={statsFor('Personal Pick')} />
+            <CategoryTile href="/parlay-plan" icon={DollarSign} title="$10 Parlay Plan" count={data.parlayPlan.length} unit="leg" restingLabel="Not enough legs today" stats={statsFor('Parlay Center')} />
+          </div>
+
+          {/* 3. FOOTER LINK STRIP — everything else, compact */}
+          <div>
+            <div className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30 mb-3 pl-1">More on tonight's board</div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+              <FooterLink href="/big-games" icon={Trophy} title="Big Games" count={data.marquee?.length ?? 0} />
+              <FooterLink href="/nrfi" icon={Radio} title="NRFI" count={data.nrfi?.length ?? 0} />
+              <FooterLink href="/value" icon={Target} title="Value Plays" count={data.valuePlays?.length ?? 0} />
+              <FooterLink href="/edges" icon={TrendingUp} title="Edges" count={(data.valuePlays?.length ?? 0) + (data.grandSlam ? 1 : 0) + data.pressurePack.length + data.vip4Pack.length + data.parlayPlan.length} />
+              <FooterLink href="/trends" icon={Flame} title="Tendencies" count={(data.grandSlam ? 1 : 0) + data.pressurePack.length + data.vip4Pack.length + data.parlayPlan.length + (data.marquee?.length ?? 0)} />
+              <FooterLink href="/asleep" icon={Flame} title="Asleep" count={data.asleepPicks?.length ?? 0} />
+              <FooterLink href="/period-plays" icon={Radio} title="Period Plays" count={null} />
+              <FooterLink href="/stats" icon={Trophy} title="Full Record" count={null} />
+            </div>
+          </div>
         </div>
       ) : hasPicks ? (
         /* Soccer / Tennis / Overseas — flat "Picks We Like" (no product tiers) */
@@ -1221,6 +1240,78 @@ interface TileStats {
   winRate: string;
   units: number;
   streak: { type: 'W' | 'L' | null; count: number };
+}
+
+// HERO TILE — used for the 3 flagship straights (Grand Slam, Pressure Pack, VIP 4-Pack).
+// Bigger padding, larger title, gradient accent, prominent stats. Distinct from the
+// secondary CategoryTile so the flagship products dominate the page.
+function HeroTile({ href, icon: Icon, title, subtitle, count, unit, restingLabel, stats, accent }: {
+  href: string; icon: any; title: string; subtitle: string;
+  count: number; unit: string; restingLabel?: string; stats?: TileStats | null;
+  accent: 'emerald' | 'amber' | 'sky' | 'primary';
+}) {
+  const has = count > 0;
+  const hasStats = stats && (stats.wins + stats.losses) > 0;
+  const accentMap: Record<typeof accent, string> = {
+    emerald: 'border-emerald-400/30 bg-gradient-to-br from-emerald-500/[0.08] to-transparent hover:border-emerald-400/60 hover:shadow-[0_25px_60px_-15px_rgba(16,185,129,0.4)]',
+    amber:   'border-amber-400/30 bg-gradient-to-br from-amber-500/[0.08] to-transparent hover:border-amber-400/60 hover:shadow-[0_25px_60px_-15px_rgba(245,158,11,0.4)]',
+    sky:     'border-sky-400/30 bg-gradient-to-br from-sky-500/[0.08] to-transparent hover:border-sky-400/60 hover:shadow-[0_25px_60px_-15px_rgba(56,189,248,0.4)]',
+    primary: 'border-primary/30 bg-gradient-to-br from-primary/[0.08] to-transparent hover:border-primary/60 hover:shadow-[0_25px_60px_-15px_rgba(212,168,67,0.4)]',
+  };
+  const iconColor: Record<typeof accent, string> = {
+    emerald: 'text-emerald-400', amber: 'text-amber-400', sky: 'text-sky-400', primary: 'text-primary',
+  };
+  return (
+    <Link href={href} className={`group relative overflow-hidden rounded-3xl border-2 ${accentMap[accent]} p-6 md:p-7 transition-all flex flex-col gap-4 min-h-[180px]`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className={`shrink-0 rounded-2xl bg-white/5 p-3 ${iconColor[accent]}`}><Icon className="h-7 w-7" /></div>
+        <span className="text-xl font-black text-white/30 group-hover:text-white/70 transition-colors">→</span>
+      </div>
+      <div>
+        <div className="text-2xl md:text-3xl font-black uppercase tracking-tight text-white leading-tight">{title}</div>
+        <div className="text-[11px] font-black uppercase tracking-widest text-white/40 mt-1">{subtitle}</div>
+      </div>
+      <div className="mt-auto">
+        {has ? (
+          <div className="text-base font-black text-emerald-400">{count} {unit}{count > 1 ? 's' : ''} today</div>
+        ) : (
+          <div className="text-base font-bold text-white/30">{restingLabel || 'None today'}</div>
+        )}
+        {hasStats && (
+          <div className="flex items-center gap-2 mt-2 text-xs font-black tabular-nums">
+            <span className="text-white/50">{stats!.wins}-{stats!.losses}{stats!.pushes > 0 ? `-${stats!.pushes}` : ''}</span>
+            <span className="text-white/25">·</span>
+            <span className="text-white/50">{stats!.winRate}</span>
+            <span className="text-white/25">·</span>
+            <span className={stats!.units >= 0 ? 'text-emerald-400' : 'text-red-400'}>
+              {stats!.units >= 0 ? '+' : ''}{stats!.units.toFixed(1)}u
+            </span>
+            {stats!.streak.type && stats!.streak.count >= 2 && (
+              <>
+                <span className="text-white/25">·</span>
+                <span className={stats!.streak.type === 'W' ? 'text-emerald-400 inline-flex items-center gap-0.5' : 'text-red-400 inline-flex items-center gap-0.5'}>
+                  {stats!.streak.type === 'W' ? '🔥' : '🥶'} {stats!.streak.count}{stats!.streak.type}
+                </span>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    </Link>
+  );
+}
+
+// FOOTER LINK — compact pill for secondary tools / data pages.
+function FooterLink({ href, icon: Icon, title, count }: { href: string; icon: any; title: string; count: number | null }) {
+  return (
+    <Link href={href} className="group flex items-center gap-2 rounded-xl border border-white/8 bg-white/[0.02] px-3 py-2.5 hover:border-white/20 hover:bg-white/[0.05] transition-all">
+      <Icon className="h-3.5 w-3.5 shrink-0 text-white/40 group-hover:text-white/70 transition-colors" />
+      <span className="text-xs font-black uppercase tracking-wider text-white/60 group-hover:text-white truncate flex-1 transition-colors">{title}</span>
+      {count != null && count > 0 && (
+        <span className="text-[10px] font-black tabular-nums text-emerald-400 shrink-0">{count}</span>
+      )}
+    </Link>
+  );
 }
 
 function CategoryTile({ href, icon: Icon, title, count, unit, restingLabel, stats }: { href: string; icon: any; title: string; count: number; unit: string; restingLabel?: string; stats?: TileStats | null }) {
