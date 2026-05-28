@@ -3,6 +3,7 @@ import {
   TrendingUp, TrendingDown, Activity, AlertTriangle, CheckCircle2, Clock, DollarSign, Flame,
 } from "lucide-react";
 import type { LivePickState } from "@/lib/livePickStatus";
+import { formatGameDateTimeET, TIME_TBD } from "@/lib/datetime";
 
 // ─── Shared pick types ────────────────────────────────────────────────────────
 
@@ -292,7 +293,7 @@ export function LiveMeter({ live, picked }: { live: LivePickState; picked: strin
 // ─── Compact, clickable SUMMARY card (used on category pages) ──────────────────
 
 export function PickSummaryCard({ pick, href, index, live }: { pick: DeepPick; href: string; index?: number; live?: LivePickState | null }) {
-  const startTime = pick.startTime ? new Date(pick.startTime).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "TBD";
+  const startTime = formatGameDateTimeET(pick.startTime) || TIME_TBD;
   const showLive = !!live && live.state !== "pre";
   return (
     <Link href={href} className="block group">
@@ -460,7 +461,7 @@ export function PickBreakdown({ pick, live }: { pick: DeepPick; live?: LivePickS
   const picked = pick.selectionSide === "home" ? pick.homeTeam : pick.awayTeam;
   const opp = pick.selectionSide === "home" ? pick.awayTeam : pick.homeTeam;
   const pickedWin = picked.winProbability;
-  const time = pick.startTime ? new Date(pick.startTime).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : null;
+  const time = formatGameDateTimeET(pick.startTime) || null;
   const sigs = pick.signals || ({} as DeepPick["signals"]);
   const showLive = !!live && live.state !== "pre";
 

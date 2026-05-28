@@ -5,11 +5,13 @@ import Link from "next/link";
 import Image from "next/image";
 import { ArrowLeft, Clock, ExternalLink } from "lucide-react";
 import { buildHardRockUrl } from "@/lib/hardRock";
+import { formatGameDateTimeET } from "@/lib/datetime";
 
 interface PeriodPlay {
   gameId: string;
   eventName: string;
   league: string;
+  startTime: string | null;
   awayTeam: string;
   homeTeam: string;
   period: '1H' | '2H' | 'Q1' | 'Q2' | 'Q3' | 'Q4' | 'P1' | 'P2' | 'P3';
@@ -85,6 +87,9 @@ export default function PeriodPlaysPage() {
                     {p.period} · edge {p.edgeScore}
                   </span>
                 </div>
+                {formatGameDateTimeET(p.startTime) && (
+                  <div className="flex items-center gap-1 text-[10px] text-white/30 mb-2"><Clock className="h-3 w-3" /> {formatGameDateTimeET(p.startTime)}</div>
+                )}
                 <div className="flex items-baseline justify-between gap-3">
                   <div className="text-xl md:text-2xl font-black text-white">{p.selection}</div>
                   {p.odds && (

@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { LEAGUE_URLS } from '@/lib/validation';
 import { hasDatabase } from '@/lib/hasDatabase';
+import { fetchWithTimeout } from '@/lib/fetchWithTimeout';
 import {
   clampToOfficialStartDate,
   getEtDateKey,
@@ -663,8 +664,33 @@ async function syncBoardRecord(boardDate: string) {
 }
 
 async function syncLifetimeTotals() {
+  // Bet-level lifetime totals: singles count individually, parlay tickets collapse to one
+  // outcome (any leg lost → loss; else any pending → pending; else all won → win; else
+  // push). Counting legs would inflate the record — a losing 20-leg ticket is ONE loss.
   const rows = await prisma.$queryRawUnsafe<any[]>(
     `
+      WITH bets AS (
+        SELECT result
+        FROM himothy_pick_registry
+        WHERE board_date >= $1::date
+          AND is_public = TRUE
+          AND status IN ('published','locked','graded','archived')
+          AND parlay_ticket_id IS NULL
+        UNION ALL
+        SELECT CASE
+                 WHEN bool_or(result = 'loss') THEN 'loss'
+                 WHEN bool_or(result = 'pending') THEN 'pending'
+                 WHEN bool_and(result = 'win') THEN 'win'
+                 WHEN bool_and(result = 'void') THEN 'void'
+                 ELSE 'push'
+               END AS result
+        FROM himothy_pick_registry
+        WHERE board_date >= $1::date
+          AND is_public = TRUE
+          AND status IN ('published','locked','graded','archived')
+          AND parlay_ticket_id IS NOT NULL
+        GROUP BY parlay_ticket_id
+      )
       SELECT
         COUNT(*) FILTER (WHERE result = 'win')::int AS wins,
         COUNT(*) FILTER (WHERE result = 'loss')::int AS losses,
@@ -672,10 +698,7 @@ async function syncLifetimeTotals() {
         COUNT(*) FILTER (WHERE result = 'void')::int AS voids,
         COUNT(*)::int AS total_published,
         COUNT(*) FILTER (WHERE result IN ('win','loss','push','void'))::int AS total_settled
-      FROM himothy_pick_registry
-      WHERE board_date >= $1::date
-        AND is_public = TRUE
-        AND status IN ('published','locked','graded','archived')
+      FROM bets
     `,
     OFFICIAL_TRACKING_START_DATE
   );
@@ -1085,6 +1108,23 @@ function gradeResultFromEvent(pick: RegistryPickRow, event: any): RegistryResult
   const market = pick.marketType.toLowerCase();
   const line = parseNumeric(pick.line);
 
+  // NRFI (No Runs First Inning) — settle from each side's 1st-inning linescore. Won if
+  // zero combined runs scored in the 1st; lost otherwise. If the inning-by-inning data
+  // isn't present we void rather than guess (so it never shows a fabricated W/L).
+  if (market === 'special' || /\bnrfi\b/i.test(sel) || /no runs first inning/i.test(sel)) {
+    const firstInningRuns = (c: any): number | null => {
+      const ls = c?.linescores;
+      if (!Array.isArray(ls) || ls.length === 0) return null;
+      const v = ls[0]?.value ?? ls[0]?.displayValue;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : null;
+    };
+    const h1 = firstInningRuns(home);
+    const a1 = firstInningRuns(away);
+    if (h1 == null || a1 == null) return 'void';
+    return h1 + a1 === 0 ? 'win' : 'loss';
+  }
+
   if (market.includes('moneyline') || sel.includes(' ml')) {
     const winner = chooseWinningSide(event);
     if (winner === 'draw') return 'push';
@@ -1128,7 +1168,7 @@ async function fetchEventForPick(pick: RegistryPickRow) {
   const dateStr = toLeagueDate(pick.boardDate);
 
   try {
-    const res = await fetch(`${base}/scoreboard?dates=${dateStr}`, { cache: 'no-store' });
+    const res = await fetchWithTimeout(`${base}/scoreboard?dates=${dateStr}`, { cache: 'no-store', timeoutMs: 7000 });
     if (!res.ok) return null;
     const data = await res.json();
     const events = data.events || [];
@@ -1437,15 +1477,26 @@ export async function getRegistrySummary({
     }
   };
 
-  for (const pick of picks) {
-    if (pick.result === 'win') totals.wins += 1;
-    else if (pick.result === 'loss') totals.losses += 1;
-    else if (pick.result === 'push') totals.pushes += 1;
-    else if (pick.result === 'void') totals.voids += 1;
+  // Headline record is BET-level, not leg-level. Parlay legs collapse into one ticket
+  // outcome (any leg lost → one ticket loss; all legs won → one ticket win); singles
+  // count individually. Without this a losing 20-leg Power parlay added ~19 fake wins to
+  // the top-line record while the parlay section correctly showed 0-1.
+  const headlineBets = aggregateToBetResults(picks);
+  for (const b of headlineBets) {
+    if (b.result === 'win') totals.wins += 1;
+    else if (b.result === 'loss') totals.losses += 1;
+    else if (b.result === 'push') totals.pushes += 1;
+    else if (b.result === 'void') totals.voids += 1;
     else totals.pending += 1;
+    totals.units += asUnits(b.result, b.odds);
+  }
+  totals.totalPicks = headlineBets.length;
 
-    totals.units += asUnits(pick.result, pick.odds);
-    if (pick.edgeScore != null) totals.avgEdgeScore += pick.edgeScore;
+  // Per-bucket accumulation stays per-leg (the parlay product lines + categories get a
+  // ticket-level overwrite further down). Edge/CLV averages are leg-level informational.
+  let edgeCount = 0;
+  for (const pick of picks) {
+    if (pick.edgeScore != null) { totals.avgEdgeScore += pick.edgeScore; edgeCount += 1; }
     if (pick.clvDelta != null) {
       totals.clvTracked += 1;
       if (pick.clvDelta < 0) totals.clvBeatCount += 1;
@@ -1616,7 +1667,7 @@ export async function getRegistrySummary({
       ...totals,
       winRate: safePct(totals.wins, totals.losses),
       units: Number(totals.units.toFixed(2)),
-      avgEdgeScore: totals.totalPicks ? Number((totals.avgEdgeScore / totals.totalPicks).toFixed(1)) : 0,
+      avgEdgeScore: edgeCount ? Number((totals.avgEdgeScore / edgeCount).toFixed(1)) : 0,
       clvBeatRate: totals.clvTracked ? `${((totals.clvBeatCount / totals.clvTracked) * 100).toFixed(1)}%` : '0.0%',
     },
     byCategory,

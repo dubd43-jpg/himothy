@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { ArrowLeft, Radio, Clock } from "lucide-react";
+import { formatGameDateTimeET, TIME_TBD } from "@/lib/datetime";
 
 interface NrfiPlay {
   gameId: string; eventName: string; awayPitcher: string; homePitcher: string;
@@ -113,9 +114,7 @@ export default function NrfiPage() {
         ) : (
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             {plays.map((play) => {
-              const startTime = play.startTime
-                ? new Date(play.startTime).toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "2-digit" })
-                : "TBD";
+              const startTime = formatGameDateTimeET(play.startTime) || TIME_TBD;
               const showLive = play.state !== "pre";
               return (
               <article key={play.gameId} className="rounded-2xl border border-white/10 bg-white/[0.02] p-4 space-y-3">

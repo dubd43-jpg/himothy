@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { ArrowLeft, Layers, ExternalLink, Clock } from "lucide-react";
 import { buildHardRockUrl } from "@/lib/hardRock";
+import { formatGameDateTimeET } from "@/lib/datetime";
 
 interface SportParlayLeg {
   type: "game" | "prop";
@@ -28,14 +29,7 @@ interface SportParlay {
 }
 
 function fmtTime(iso: string | null): string | null {
-  if (!iso) return null;
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return null;
-  return new Intl.DateTimeFormat("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone: "America/New_York",
-  }).format(d) + " ET";
+  return formatGameDateTimeET(iso) || null;
 }
 
 export default function SportParlaysPage() {

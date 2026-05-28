@@ -174,6 +174,7 @@ export interface PeriodPlay {
   gameId: string;
   eventName: string;
   league: string;
+  startTime: string | null;
   awayTeam: string;
   homeTeam: string;
   period: PeriodMarketLine['period'];
@@ -201,6 +202,7 @@ export function scorePeriodMarkets(
     gameId: string;
     eventName: string;
     league: string;
+    startTime?: string | null;
     awayTeam: string;
     homeTeam: string;
     avgTotalCombined: number | null;  // both teams' avgTotal10 summed (proxy for total scoring)
@@ -260,6 +262,7 @@ export function scorePeriodMarkets(
       gameId: ctx.gameId,
       eventName: ctx.eventName,
       league: ctx.league,
+      startTime: ctx.startTime ?? null,
       awayTeam: ctx.awayTeam,
       homeTeam: ctx.homeTeam,
       period: m.period,

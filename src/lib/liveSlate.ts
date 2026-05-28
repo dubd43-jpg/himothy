@@ -1,4 +1,5 @@
 import { LEAGUE_URLS } from '@/lib/validation';
+import { fetchWithTimeout } from '@/lib/fetchWithTimeout';
 
 export interface LiveSlateGame {
   id: string;
@@ -143,7 +144,7 @@ async function fetchLeagueGames(league: string, leagueUrl: string, dates: string
   await Promise.all(
     dates.map(async (date) => {
       try {
-        const res = await fetch(`${leagueUrl}/scoreboard?dates=${date}`, { cache: 'no-store' });
+        const res = await fetchWithTimeout(`${leagueUrl}/scoreboard?dates=${date}`, { cache: 'no-store', timeoutMs: 7000 });
         if (!res.ok) return;
 
         const data = await res.json();

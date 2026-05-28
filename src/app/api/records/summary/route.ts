@@ -15,6 +15,8 @@ import {
 } from '@/lib/officialTracking';
 import { hasDatabase } from '@/lib/hasDatabase';
 
+export const dynamic = 'force-dynamic';
+
 function dateKey(date: Date) {
   return getEtDateKey(date);
 }

@@ -7,6 +7,7 @@ import { hasDatabase } from '@/lib/hasDatabase';
 import { inferBoardTypeFromContext, parseBoardType } from '@/lib/boardSegmentation';
 
 export const maxDuration = 60;
+export const dynamic = 'force-dynamic';
 
 const FALLBACK_CATEGORIES = [
   'GRAND_SLAM',

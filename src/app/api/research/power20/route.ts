@@ -1,11 +1,14 @@
 import { NextResponse } from 'next/server';
 import { runPower20Research } from '@/services/deepResearchService';
 import { getCachedBoardPicks, getOrComputeBoard } from '@/services/dailyBoardCache';
+import { etDayKey } from '@/lib/datetime';
 
 export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
 
-let cache: { data: any; generatedAt: number } | null = null;
+// Keyed to the ET day so a warm instance never serves yesterday's parlays after the slate
+// regenerates in the morning.
+let cache: { data: any; generatedAt: number; day: string } | null = null;
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 function buildExclusionSet(boardPicks: any[]): Set<string> {
@@ -27,8 +30,9 @@ export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     const forceRefresh = url.searchParams.get('refresh') === 'true';
+    const today = etDayKey();
 
-    if (!forceRefresh && cache && Date.now() - cache.generatedAt < CACHE_TTL_MS) {
+    if (!forceRefresh && cache && cache.day === today && Date.now() - cache.generatedAt < CACHE_TTL_MS) {
       return NextResponse.json({ success: true, cached: true, ...cache.data });
     }
 
@@ -45,7 +49,7 @@ export async function GET(req: Request) {
     const excludedKeys = buildExclusionSet(boardPicks);
 
     const result = await runPower20Research(excludedKeys);
-    cache = { data: result, generatedAt: Date.now() };
+    cache = { data: result, generatedAt: Date.now(), day: today };
 
     return NextResponse.json({ success: true, cached: false, ...result });
   } catch (error) {

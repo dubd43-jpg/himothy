@@ -39,6 +39,7 @@ export async function GET() {
           gameId: game.gameId,
           eventName: game.eventName,
           league: game.league,
+          startTime: game.startTime || null,
           awayTeam: game.awayTeam.name,
           homeTeam: game.homeTeam.name,
           avgTotalCombined,

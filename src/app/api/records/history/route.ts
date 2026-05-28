@@ -8,6 +8,8 @@ import {
   OFFICIAL_TRACKING_TIMEZONE,
 } from '@/lib/officialTracking';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);

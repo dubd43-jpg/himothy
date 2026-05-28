@@ -1341,7 +1341,19 @@ function pickForNA(
     const spreadStr = spreadVal > 0 ? `+${spreadVal}` : `${spreadVal}`;
     return { selectionSide: pickedSide, marketType: 'spread' as const, selection: `${pickedTeam.name} ${spreadStr}`, odds: '-110', line: spreadStr };
   };
-  const totalPlay = () => (total === null ? null : { selectionSide: pickedSide, marketType: 'total' as const, selection: `Over ${total}`, odds: '-110', line: `${total}` });
+  const totalPlay = () => {
+    if (total === null) return null;
+    // Pick the SIDE from our own projection, not a hardcoded Over. Each team's avgTotal10
+    // is a full-game total estimate; the projected game total is their average. Predicted
+    // above the posted line → Over is the value; below → Under. Without a projection we
+    // refuse to publish a coin-flip total (fall through to the moneyline instead).
+    const ht = home.trends?.avgTotal10 ?? null;
+    const at = away.trends?.avgTotal10 ?? null;
+    if (ht == null && at == null) return null;
+    const predicted = ht != null && at != null ? (ht + at) / 2 : (ht ?? at) as number;
+    const side = predicted >= total ? 'Over' : 'Under';
+    return { selectionSide: pickedSide, marketType: 'total' as const, selection: `${side} ${total}`, odds: '-110', line: `${total}` };
+  };
 
   // FULL-BOARD selection — we play every market, picking the best version of the play:
   //  • Value side (pick'em, small favorite, or dog priced ≈ -150 to +160) → the MONEYLINE.

@@ -1,14 +1,16 @@
 import { NextResponse } from 'next/server';
 import { buildSportParlays } from '@/services/deepResearchService';
 import { getCachedBoardPicks, getOrComputeBoard } from '@/services/dailyBoardCache';
+import { etDayKey } from '@/lib/datetime';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
 
 // One 4-leg parlay per major NA sport, single-sport each. Skips any sport that can't
 // produce 4 quality legs. Single-game sports (NBA playoffs) fill from player/game props.
-// Cached 10 min in-process so repeated loads don't re-scan every sport.
-let cache: { data: any; at: number } | null = null;
+// Cached 10 min in-process so repeated loads don't re-scan every sport — but keyed to the
+// ET day so a warm instance never serves yesterday's parlays after the slate rolls over.
+let cache: { data: any; at: number; day: string } | null = null;
 const TTL_MS = 10 * 60 * 1000;
 
 function buildExclusionSet(boardPicks: any[]): Set<string> {
@@ -27,7 +29,8 @@ export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     const force = url.searchParams.get('refresh') === 'true';
-    if (!force && cache && Date.now() - cache.at < TTL_MS) {
+    const today = etDayKey();
+    if (!force && cache && cache.day === today && Date.now() - cache.at < TTL_MS) {
       return NextResponse.json({ success: true, cached: true, ...cache.data });
     }
 
@@ -44,7 +47,7 @@ export async function GET(req: Request) {
 
     const parlays = await buildSportParlays(excludedKeys);
     const data = { parlays, generatedAt: new Date().toISOString() };
-    cache = { data, at: Date.now() };
+    cache = { data, at: Date.now(), day: today };
     return NextResponse.json({ success: true, cached: false, ...data });
   } catch (err: any) {
     console.error('[sport-parlays] route error', err);

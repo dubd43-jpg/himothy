@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { refreshLiveOpsSnapshot } from '@/services/liveOpsService';
 
+export const dynamic = 'force-dynamic';
+
 function asBool(value: string | null) {
   return value === '1' || value === 'true' || value === 'yes';
 }

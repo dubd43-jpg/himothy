@@ -45,7 +45,7 @@ export async function POST(req: Request) {
       userId, userEmail: email,
       productKey,
       interval: interval as PriceInterval,
-      successPath: `/account?checkout=success&product=${productKey}`,
+      successPath: `/account?checkout=success&product=${productKey}&session_id={CHECKOUT_SESSION_ID}`,
       cancelPath: `/pricing?checkout=cancel&product=${productKey}`,
     });
     if (!result?.url) return NextResponse.json({ error: 'Checkout session creation failed' }, { status: 500 });

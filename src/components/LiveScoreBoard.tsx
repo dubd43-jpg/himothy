@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Activity, CircleDot, Timer, ShieldAlert, RefreshCw, Globe, Target } from "lucide-react";
+import { formatGameDateTimeET, formatUpdatedET } from "@/lib/datetime";
 
 interface GameScore {
   id: string;
@@ -16,6 +17,7 @@ interface GameScore {
   isLive: boolean;
   isFinal: boolean;
   isScheduled: boolean;
+  startTime?: string;
   externalLink: string;
   oddsSource?: string | null;
   freshnessMinutes?: number;
@@ -68,7 +70,7 @@ export function LiveScoreBoard() {
       const res = await fetch('/api/scores/live', { cache: 'no-store' });
       const data = await res.json();
       setGames(data.games || []);
-      setLastSync(new Date().toLocaleTimeString());
+      setLastSync(new Date().toISOString());
       setLoading(false);
     } catch (err) {
       console.error("Failed to fetch scores", err);
@@ -107,7 +109,7 @@ export function LiveScoreBoard() {
           <span className="text-[11px] font-black uppercase tracking-[0.3em] text-white/60">Live — Games We're On</span>
         </div>
         <div className="flex items-center gap-3 text-[11px] font-black text-white/20 uppercase tracking-[0.2em]">
-          <RefreshCw className="w-4 h-4" /> {lastSync ? `Updated ${lastSync}` : ''}
+          <RefreshCw className="w-4 h-4" /> {lastSync ? `Updated ${formatUpdatedET(lastSync)}` : ''}
         </div>
       </div>
 
@@ -163,10 +165,15 @@ export function LiveScoreBoard() {
               </div>
 
               {/* Status */}
-              <div className="mt-5 pt-4 border-t border-white/5 flex justify-between items-center">
+              <div className="mt-5 pt-4 border-t border-white/5 flex justify-between items-center gap-2">
                 <div className="text-xs font-bold text-primary italic">
                   {game.period}{game.clock && game.clock !== "0:00" ? ` • ${game.clock}` : ''}
                 </div>
+                {game.isScheduled && formatGameDateTimeET(game.startTime) && (
+                  <div className="text-[11px] font-bold text-white/40 inline-flex items-center gap-1">
+                    <Timer className="w-3 h-3" /> {formatGameDateTimeET(game.startTime)}
+                  </div>
+                )}
               </div>
             </div>
           ))

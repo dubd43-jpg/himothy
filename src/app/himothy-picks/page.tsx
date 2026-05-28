@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowLeft, Crown, ExternalLink, TrendingUp, TrendingDown } from "lucide-react";
+import { ArrowLeft, Crown, ExternalLink, TrendingUp, TrendingDown, Clock } from "lucide-react";
 import { buildHardRockUrl } from "@/lib/hardRock";
+import { formatGameDateTimeET } from "@/lib/datetime";
 
 interface PropEdge {
   athleteId: string;
@@ -27,6 +28,7 @@ interface PropEdge {
   recommended: "over" | "under" | null;
   gameId: string;
   eventName: string;
+  startTime: string | null;
 }
 
 interface PersonalPickPayload {
@@ -117,8 +119,13 @@ export default function HimothyPersonalPickPage() {
         ) : (
           <article className="rounded-3xl border-2 border-primary/40 bg-gradient-to-br from-primary/[0.08] to-transparent p-6 md:p-8 space-y-6">
             <div className="flex items-center justify-between gap-3 text-[10px] font-black uppercase tracking-widest text-white/40">
-              <span>{top.league} · {top.eventName}</span>
-              <span className="inline-flex items-center gap-1 text-primary">
+              <span className="min-w-0">
+                <span className="block truncate">{top.league} · {top.eventName}</span>
+                {formatGameDateTimeET(top.startTime) && (
+                  <span className="flex items-center gap-1 text-white/30 mt-0.5"><Clock className="h-3 w-3" /> {formatGameDateTimeET(top.startTime)}</span>
+                )}
+              </span>
+              <span className="inline-flex items-center gap-1 text-primary shrink-0">
                 <Crown className="h-3 w-3" /> Personal Pick · edge {top.edgeScore}
               </span>
             </div>
@@ -187,7 +194,10 @@ export default function HimothyPersonalPickPage() {
                 <div key={`${r.athleteId}-${r.market}`} className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.02] px-4 py-3">
                   <div className="min-w-0">
                     <div className="text-sm font-black truncate">{r.playerName} · {MARKET_LABELS[r.market] || r.market}</div>
-                    <div className="text-[10px] text-white/40 uppercase tracking-widest">{r.league} · {r.eventName}</div>
+                    <div className="text-[10px] text-white/40 uppercase tracking-widest truncate">{r.league} · {r.eventName}</div>
+                    {formatGameDateTimeET(r.startTime) && (
+                      <div className="text-[10px] text-white/30">{formatGameDateTimeET(r.startTime)}</div>
+                    )}
                   </div>
                   <div className="text-right shrink-0">
                     <div className="text-xs font-black text-white/70">

@@ -6,6 +6,7 @@ import Image from "next/image";
 import { useLiveScores } from "@/components/useLiveScores";
 import { computeLiveState, type LivePickState } from "@/lib/livePickStatus";
 import { OutrightTournaments } from "@/components/OutrightTournaments";
+import { formatGameDateTimeET, formatUpdatedET, TIME_TBD } from "@/lib/datetime";
 import {
   ArrowLeft,
   Crown,
@@ -700,7 +701,7 @@ function PublicMoneyBadge({ awayTeam, homeTeam, selectionSide, league }: {
 // Clean, clickable SUMMARY card. The full breakdown (win %, H2H, props, form, reasons)
 // lives on the breakdown page the card links to — the whole card is the click target.
 function DeepPickCard({ pick, variant, href, live }: { pick: DeepPick; variant: 'grand-slam' | 'pressure' | 'vip' | 'parlay'; href?: string; live?: LivePickState | null }) {
-  const startTime = pick.startTime ? new Date(pick.startTime).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'TBD';
+  const startTime = formatGameDateTimeET(pick.startTime) || TIME_TBD;
   const showLive = !!live && live.state !== 'pre';
   const liveClockStr = live ? [live.period, live.clock && live.clock !== '0:00' ? live.clock : null].filter(Boolean).join(' · ') : '';
   const startMs = pick.startTime ? new Date(pick.startTime).getTime() : null;
@@ -813,7 +814,10 @@ function CompactParlayLeg({ pick, index }: { pick: DeepPick; index: number }) {
       </div>
       <div className="flex-1 min-w-0">
         <div className="text-xs font-bold text-white truncate">{pick.selection}</div>
-        <div className="text-[11px] text-white/40">{pick.awayTeam.name} @ {pick.homeTeam.name} · {pick.league}</div>
+        <div className="text-[11px] text-white/40 truncate">{pick.awayTeam.name} @ {pick.homeTeam.name} · {pick.league}</div>
+        {formatGameDateTimeET(pick.startTime) && (
+          <div className="text-[10px] text-white/30">{formatGameDateTimeET(pick.startTime)}</div>
+        )}
       </div>
       {pick.odds && <span className={`text-sm font-black tabular-nums ${oddsTextCls}`}>{pick.odds}</span>}
     </div>
@@ -845,6 +849,9 @@ function Power20Leg({ pick, index }: { pick: Power20Pick; index: number }) {
             <span className="text-[9px] text-amber-400/70 font-bold shrink-0">⚠ INJ</span>
           )}
         </div>
+        {formatGameDateTimeET(pick.startTime) && (
+          <div className="text-[10px] text-white/30 truncate">{formatGameDateTimeET(pick.startTime)}</div>
+        )}
       </div>
       <div className="flex items-center gap-2 shrink-0">
         <WinProbBadge pct={pick.winProbability} />
@@ -1166,7 +1173,7 @@ function DeepResearchSection({ board }: { board: string }) {
       {/* Meta bar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="text-[10px] font-black uppercase tracking-widest text-white/30">
-          Updated {new Date(data.generatedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}{refreshing ? ' · refreshing…' : ''}
+          Updated {formatUpdatedET(data.generatedAt)}{refreshing ? ' · refreshing…' : ''}
         </div>
         <button type="button" onClick={() => load(true)} disabled={refreshing}
           className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-white/30 hover:text-white/60 transition-colors disabled:opacity-40">
@@ -1413,15 +1420,7 @@ interface StructuredBoardResponse {
 }
 
 function formatStartTime(value: string | null) {
-  if (!value) return "TBD";
-  const ts = new Date(value).getTime();
-  if (!Number.isFinite(ts)) return "TBD";
-  return new Date(ts).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return formatGameDateTimeET(value) || TIME_TBD;
 }
 
 function statusConfig(value: string) {
@@ -1578,6 +1577,9 @@ function CompactPickRow({ pick, index }: { pick: BoardPick; index: number }) {
       <div className="flex-1 min-w-0">
         <div className="text-xs font-bold text-white truncate">{pick.awayTeam} vs {pick.homeTeam}</div>
         <div className="text-[11px] text-white/50 font-semibold">{pick.selection} · {pick.marketType}</div>
+        {formatGameDateTimeET(pick.startTime) && (
+          <div className="text-[10px] text-white/30 truncate">{formatGameDateTimeET(pick.startTime)}</div>
+        )}
       </div>
       {pick.odds && (
         <div className={`shrink-0 rounded-lg px-2 py-1 text-sm font-black tabular-nums ${oddsColor(pick.odds)}`}>

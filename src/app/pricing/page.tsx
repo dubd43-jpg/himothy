@@ -2,8 +2,9 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ShieldCheck, Lock, Sparkles } from "lucide-react";
+import { ArrowLeft, ShieldCheck, Lock, Sparkles, X } from "lucide-react";
 import { PRODUCTS, type ProductKey, type PriceInterval } from "@/lib/products";
+import { getOrCreateUserId, getStoredEmail, setStoredEmail, isValidEmail } from "@/lib/clientUser";
 
 // Customer-facing pricing page. Every word here is selected for Stripe/E-E-A-T safety:
 //  - NO "guaranteed winners" / "lock of the day" / ROI promise language anywhere
@@ -42,24 +43,50 @@ function perDayRate(amountCents: number, interval: PriceInterval): string {
 
 export default function PricingPage() {
   const [activeInterval, setActiveInterval] = useState<PriceInterval>('one_month');
+  // Email-capture modal state. We need a real email up front so the Stripe customer,
+  // receipts, billing portal, and trial-abuse checks all key to a real address (not a
+  // shared guest@ placeholder). Once captured it's reused for every future checkout.
+  const [pending, setPending] = useState<{ productKey: ProductKey; interval: PriceInterval } | null>(null);
+  const [emailInput, setEmailInput] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [emailError, setEmailError] = useState('');
 
-  const startCheckout = async (productKey: ProductKey, interval: PriceInterval) => {
+  const launchCheckout = async (productKey: ProductKey, interval: PriceInterval, email: string) => {
+    setSubmitting(true);
     try {
       const res = await fetch('/api/stripe/checkout', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          productKey, interval,
-          userId: (typeof window !== 'undefined' && localStorage.getItem('userId')) || `guest_${Date.now()}`,
-          email: (typeof window !== 'undefined' && localStorage.getItem('email')) || 'guest@himothypicks.com',
-        }),
+        body: JSON.stringify({ productKey, interval, userId: getOrCreateUserId(), email }),
       });
       const j = await res.json();
-      if (j?.url) window.location.href = j.url;
-      else alert(j?.error || 'Checkout unavailable — payment system is still being configured.');
+      if (j?.url) { window.location.href = j.url; return; }
+      setEmailError(j?.error || 'Checkout unavailable — payment system is still being configured.');
     } catch (e: any) {
-      alert(e?.message || 'Checkout failed');
+      setEmailError(e?.message || 'Checkout failed');
+    } finally {
+      setSubmitting(false);
     }
+  };
+
+  // Entry point from a plan button. If we already have a stored email, go straight to
+  // Stripe; otherwise open the modal to collect one.
+  const startCheckout = (productKey: ProductKey, interval: PriceInterval) => {
+    const stored = getStoredEmail();
+    if (stored && isValidEmail(stored)) {
+      void launchCheckout(productKey, interval, stored);
+      return;
+    }
+    setEmailInput('');
+    setEmailError('');
+    setPending({ productKey, interval });
+  };
+
+  const confirmEmailAndCheckout = () => {
+    const email = emailInput.trim().toLowerCase();
+    if (!isValidEmail(email)) { setEmailError('Enter a valid email address.'); return; }
+    setStoredEmail(email);
+    if (pending) void launchCheckout(pending.productKey, pending.interval, email);
   };
 
   return (
@@ -188,6 +215,48 @@ export default function PricingPage() {
           <p>Subscriptions auto-renew at the price shown above. You may cancel at any time before your next renewal in your account portal. Content is delivered immediately upon purchase; <strong>no refunds are issued once content has been delivered</strong>. <Link href="/terms" className="underline text-yellow-400">Terms of Service</Link> · <Link href="/privacy" className="underline text-yellow-400">Privacy Policy</Link>.</p>
         </div>
       </div>
+
+      {pending && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+          onClick={() => !submitting && setPending(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-3xl border-2 border-primary/30 bg-background p-6 md:p-7"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4 mb-1">
+              <h3 className="text-xl font-black uppercase tracking-tight">Where do we send access?</h3>
+              <button type="button" onClick={() => !submitting && setPending(null)} className="text-white/40 hover:text-white" aria-label="Close">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-sm text-white/55 leading-relaxed mb-5">
+              Enter your email — we use it for your receipt and to keep your access tied to your account. You&apos;ll finish payment securely on Stripe.
+            </p>
+            <input
+              type="email"
+              inputMode="email"
+              autoFocus
+              value={emailInput}
+              onChange={(e) => { setEmailInput(e.target.value); setEmailError(''); }}
+              onKeyDown={(e) => { if (e.key === 'Enter') confirmEmailAndCheckout(); }}
+              placeholder="you@email.com"
+              className="w-full rounded-xl border border-white/15 bg-white/[0.03] px-4 py-3 text-base text-white placeholder:text-white/30 focus:border-primary/60 focus:outline-none"
+            />
+            {emailError && <p className="mt-2 text-xs font-bold text-red-400">{emailError}</p>}
+            <button
+              type="button"
+              onClick={confirmEmailAndCheckout}
+              disabled={submitting}
+              className="mt-4 w-full rounded-xl bg-primary py-3 text-sm font-black uppercase tracking-widest text-black hover:bg-white transition disabled:opacity-50"
+            >
+              {submitting ? 'Opening secure checkout…' : 'Continue to checkout'}
+            </button>
+            <p className="mt-3 text-center text-[11px] text-white/30">Payment processed by Stripe · we never see your card.</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

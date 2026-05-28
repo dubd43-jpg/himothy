@@ -4,6 +4,7 @@ import { PreGameValidation, LiveGameTracking } from "@/lib/types";
 import { Activity, Clock, CheckCircle2, ShieldAlert, ExternalLink, RefreshCw, CircleDot, CheckSquare, ListChecks, AlertCircle, Globe, Trophy, Cpu, ShieldCheck } from "lucide-react";
 import { MouseEvent } from "react";
 import { buildHardRockUrl } from "@/lib/hardRock";
+import { formatGameDateTimeET, formatTimeET, TIME_TBD } from "@/lib/datetime";
 
 interface SmartPickCardProps {
   pick: Pick;
@@ -134,7 +135,7 @@ function PreGameCard({ pick, validation, isSelected, onToggleSelect }: { pick: P
                     <span className="text-primary font-black tabular-nums tracking-tighter text-base">{countdown}</span>
                   </span>
                 ) : (
-                  <span className="font-black tracking-[0.2em] text-sm">{validation.display_time_local || "TBD"}</span>
+                  <span className="font-black tracking-[0.2em] text-sm">{formatGameDateTimeET(validation.event_date_utc) || validation.display_time_local || TIME_TBD}</span>
                 )}
               </div>
             </div>
@@ -455,7 +456,7 @@ function LiveGameCard({ pick, tracking, validation }: { pick: Pick; tracking: Li
             <div className="flex flex-col gap-0.5">
                <span className="text-[9px] font-black text-white/20 uppercase tracking-[0.2em]">Node Heartbeat</span>
                <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest">
-                  {new Date(validation.sources_checked[0]?.last_updated || Date.now()).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                  {formatTimeET(validation.sources_checked[0]?.last_updated || new Date().toISOString())}
                </span>
             </div>
          </div>

@@ -94,10 +94,10 @@ export async function invalidatePersonalPick() {
   }
 }
 
-async function fetchTodaysEvents(league: string): Promise<Array<{ gameId: string; eventName: string; competition: any }>> {
+async function fetchTodaysEvents(league: string): Promise<Array<{ gameId: string; eventName: string; startTime: string | null; competition: any }>> {
   const baseUrl = LEAGUE_URLS[league];
   if (!baseUrl) return [];
-  const out: Array<{ gameId: string; eventName: string; competition: any }> = [];
+  const out: Array<{ gameId: string; eventName: string; startTime: string | null; competition: any }> = [];
   try {
     // Today + yesterday (catch late-running games still bookable for live props once live).
     const fmt = (offset: number) => {
@@ -116,7 +116,7 @@ async function fetchTodaysEvents(league: string): Promise<Array<{ gameId: string
         if (state === 'post' || ev?.status?.type?.completed) continue;
         const competition = ev?.competitions?.[0];
         if (!competition) continue;
-        out.push({ gameId: String(ev.id), eventName: ev.name || ev.shortName || '', competition });
+        out.push({ gameId: String(ev.id), eventName: ev.name || ev.shortName || '', startTime: ev.date || null, competition });
       }
     }
   } catch (err) {
@@ -128,8 +128,8 @@ async function fetchTodaysEvents(league: string): Promise<Array<{ gameId: string
 export interface PersonalPickResult {
   generatedAt: string;
   boardDate: string;
-  topPick: PreGamePropEdge & { gameId: string; eventName: string } | null;
-  runnerUps: Array<PreGamePropEdge & { gameId: string; eventName: string }>;
+  topPick: PreGamePropEdge & { gameId: string; eventName: string; startTime: string | null } | null;
+  runnerUps: Array<PreGamePropEdge & { gameId: string; eventName: string; startTime: string | null }>;
   totalGamesScanned: number;
   totalPropsEvaluated: number;
   emptyReason?: string;
@@ -144,7 +144,7 @@ export async function getPersonalPick(forceRefresh = false): Promise<PersonalPic
 
   let totalGames = 0;
   let totalProps = 0;
-  const allEdges: Array<PreGamePropEdge & { gameId: string; eventName: string }> = [];
+  const allEdges: Array<PreGamePropEdge & { gameId: string; eventName: string; startTime: string | null }> = [];
 
   // Scan each league sequentially (rate-friendly) — could parallelize per-league later
   // once we confirm ESPN doesn't rate-limit us.
@@ -156,7 +156,7 @@ export async function getPersonalPick(forceRefresh = false): Promise<PersonalPic
         const propsResult = await buildPreGameProps(game.gameId, game.eventName, league, game.competition);
         totalProps += propsResult.propEdges.length;
         for (const edge of propsResult.propEdges) {
-          allEdges.push({ ...edge, gameId: game.gameId, eventName: game.eventName });
+          allEdges.push({ ...edge, gameId: game.gameId, eventName: game.eventName, startTime: game.startTime });
         }
       } catch (err) {
         console.error(`[personalPickService] buildPreGameProps failed for ${game.eventName}`, err);

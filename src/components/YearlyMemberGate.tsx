@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Lock, Sparkles } from "lucide-react";
+import { getOrCreateUserId } from "@/lib/clientUser";
 
 // Gated content wrapper — shows children only to yearly subscribers. Everyone else sees
 // a teaser explaining what's behind the gate + a CTA to the pricing page. SEO content
@@ -25,11 +26,9 @@ export function YearlyMemberGate({
     let cancelled = false;
     (async () => {
       try {
-        const userId = (typeof window !== 'undefined' && localStorage.getItem('userId')) || '';
-        if (!userId) {
-          if (!cancelled) setStatus('locked');
-          return;
-        }
+        const userId = getOrCreateUserId();
+        // /api/account/me prefers the himothy_uid cookie (set after purchase); the userId
+        // query param is the fallback for this browser if the cookie isn't present.
         const res = await fetch(`/api/account/me?userId=${encodeURIComponent(userId)}`, { cache: 'no-store' });
         const j = await res.json();
         if (!cancelled) setStatus(j?.hasYearlyAccess ? 'yearly' : 'locked');
