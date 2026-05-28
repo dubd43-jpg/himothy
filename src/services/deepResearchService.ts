@@ -2568,7 +2568,9 @@ async function buildOneSportParlay(sport: string): Promise<SportParlay | null> {
   for (const event of events) {
     const gp = await processGameForPower20(event, sport);
     if (!gp || gp.winProbability < 55) continue;
-    if (isHeavyChalkML(gp, PARLAY_LEG_ML_FLOOR)) continue; // honor -450 leg floor
+    // Per user: sport-parlay legs cap at -185 (the single-pick floor), NOT the -450
+    // generic parlay-leg floor. No heavy chalk in these single-sport parlays.
+    if (isHeavyChalkML(gp, SINGLE_PICK_ML_FLOOR)) continue;
     gameLegs.push({
       type: 'game', league: sport, gameId: gp.gameId, eventName: gp.eventName,
       selection: gp.selection, odds: gp.odds, edgeScore: Math.round(gp.winProbability),
