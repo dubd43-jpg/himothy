@@ -1480,10 +1480,13 @@ export async function buildBestMarketSwap(pick: any): Promise<BestMarketSwap | n
       const orate = ouOverRate(ob);
       const align = orate != null ? (over ? orate : 1 - orate) : null;
       const teamName = tt.side === 'home' ? homeName : awayName;
-      const price = over ? tt.bestOverPrice : tt.bestUnderPrice;
+      // Team totals at the MAIN line price ~-110/-120 both ways. The alt-lines feed only
+      // gives us the best price across ALL alternate lines (which can be +650 for a far
+      // alt line) — pairing that with the median line misrepresents the payout, so we quote
+      // the standard -115 for the main line instead of a mismatched longshot price.
       candidates.push({
         selection: `${teamName} Team Total ${over ? 'Over' : 'Under'} ${tt.line}`, marketType: 'team_total',
-        selectionSide: tt.side, odds: price != null ? `${price > 0 ? '+' : ''}${price}` : '-110', line: `${tt.line}`,
+        selectionSide: tt.side, odds: '-115', line: `${tt.line}`,
         confidence: scoreTotalsConfidence(proj, tt.line, align),
         detail: `Projected ${proj.toFixed(1)} vs team line ${tt.line}`,
       });
