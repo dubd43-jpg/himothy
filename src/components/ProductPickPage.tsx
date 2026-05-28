@@ -147,7 +147,7 @@ export function ProductPickPage({
                 <span className={`text-sm md:text-base font-black tabular-nums leading-none ${(record?.units ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                   {(record?.units ?? 0) >= 0 ? '+' : ''}{(record?.units ?? 0).toFixed(1)}u
                 </span>
-                {record?.streak && record.streak.type && record.streak.count >= 2 && (
+                {product === "grandSlam" && record?.streak && record.streak.type && record.streak.count >= 2 && (
                   <span className={`text-sm md:text-base font-black tabular-nums leading-none inline-flex items-center gap-1 ${record.streak.type === 'W' ? 'text-emerald-400' : 'text-red-400'}`}>
                     {record.streak.type === 'W' ? '🔥' : '🥶'} {record.streak.count}{record.streak.type}
                   </span>

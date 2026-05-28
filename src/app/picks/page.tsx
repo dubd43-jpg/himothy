@@ -1183,7 +1183,7 @@ function DeepResearchSection({ board }: { board: string }) {
         <div className="space-y-6">
           {/* 1. HERO TILES — the 3 flagship straights products */}
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <HeroTile href="/grand-slam" icon={Crown} title="Grand Slam" subtitle="1 single pick" count={data.grandSlam ? 1 : 0} unit="pick" accent="emerald" restingLabel="Resting today" stats={statsFor('Grand Slam')} />
+            <HeroTile href="/grand-slam" icon={Crown} title="Grand Slam" subtitle="1 single pick" count={data.grandSlam ? 1 : 0} unit="pick" accent="emerald" restingLabel="Resting today" stats={statsFor('Grand Slam')} showStreak />
             <HeroTile href="/pressure-pack" icon={Flame} title="Pressure Pack" subtitle="2 picks" count={data.pressurePack.length} unit="pick" accent="amber" stats={statsFor('Pressure Pack')} />
             <HeroTile href="/vip-picks" icon={ShieldCheck} title="VIP 4-Pack" subtitle="4 picks" count={data.vip4Pack.length} unit="pick" accent="sky" stats={statsFor('VIP 4-Pack')} />
           </div>
@@ -1248,10 +1248,11 @@ interface TileStats {
 // HERO TILE — used for the 3 flagship straights (Grand Slam, Pressure Pack, VIP 4-Pack).
 // Bigger padding, larger title, gradient accent, prominent stats. Distinct from the
 // secondary CategoryTile so the flagship products dominate the page.
-function HeroTile({ href, icon: Icon, title, subtitle, count, unit, restingLabel, stats, accent }: {
+function HeroTile({ href, icon: Icon, title, subtitle, count, unit, restingLabel, stats, accent, showStreak }: {
   href: string; icon: any; title: string; subtitle: string;
   count: number; unit: string; restingLabel?: string; stats?: TileStats | null;
   accent: 'emerald' | 'amber' | 'sky' | 'primary';
+  showStreak?: boolean;  // streaks only render where this is true — per user, Grand Slam only
 }) {
   const has = count > 0;
   const hasStats = stats && (stats.wins + stats.losses) > 0;
@@ -1289,7 +1290,7 @@ function HeroTile({ href, icon: Icon, title, subtitle, count, unit, restingLabel
             <span className={stats!.units >= 0 ? 'text-emerald-400' : 'text-red-400'}>
               {stats!.units >= 0 ? '+' : ''}{stats!.units.toFixed(1)}u
             </span>
-            {stats!.streak.type && stats!.streak.count >= 2 && (
+            {showStreak && stats!.streak.type && stats!.streak.count >= 2 && (
               <>
                 <span className="text-white/25">·</span>
                 <span className={stats!.streak.type === 'W' ? 'text-emerald-400 inline-flex items-center gap-0.5' : 'text-red-400 inline-flex items-center gap-0.5'}>
@@ -1338,14 +1339,7 @@ function CategoryTile({ href, icon: Icon, title, count, unit, restingLabel, stat
               <span className={stats!.units >= 0 ? 'text-emerald-400/70' : 'text-red-400/70'}>
                 {stats!.units >= 0 ? '+' : ''}{stats!.units.toFixed(1)}u
               </span>
-              {stats!.streak.type && stats!.streak.count >= 2 && (
-                <>
-                  <span className="text-white/30">·</span>
-                  <span className={stats!.streak.type === 'W' ? 'text-emerald-400 inline-flex items-center gap-0.5' : 'text-red-400 inline-flex items-center gap-0.5'}>
-                    {stats!.streak.type === 'W' ? '🔥' : '🥶'} {stats!.streak.count}{stats!.streak.type}
-                  </span>
-                </>
-              )}
+              {/* Streaks intentionally NOT shown here — per user, only Grand Slam shows a streak. */}
             </div>
           )}
         </div>
