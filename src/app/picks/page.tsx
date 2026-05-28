@@ -578,9 +578,10 @@ function LiveRecordBar() {
   if (!hasRecord) return null;
 
   // Per user: ONLY Grand Slam, Pressure Pack, and VIP 4-Pack count toward the main
-  // "Singles" stat. Everything else (Big Games, Personal Pick, Parlays, NRFI, Asleep,
-  // Value Plays) is shown separately or just lives on its own tile. This keeps the
-  // headline number tied to our flagship core products.
+  // "Straights" stat (user prefers "Straights" over "Singles" — sports-betting term).
+  // Everything else (Big Games, Personal Pick, Parlays, NRFI, Asleep, Value Plays) is
+  // shown separately or just lives on its own tile. This keeps the headline number tied
+  // to our flagship core products.
   const lines = stats.productLineStats || {};
   const isCoreSingle = (k: string) => /^(grand slam|pressure pack|vip 4-pack)$/i.test(k);
   const isParlayLine = (k: string) => /parlay|hailmary/i.test(k);
@@ -610,7 +611,7 @@ function LiveRecordBar() {
         </div>
         <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-[10px] font-black tabular-nums">
           <span className="text-white/50">
-            Singles <span className="text-white">{singlesAgg.wins}-{singlesAgg.losses}{singlesAgg.pushes > 0 ? `-${singlesAgg.pushes}` : ''}</span>
+            Straights <span className="text-white">{singlesAgg.wins}-{singlesAgg.losses}{singlesAgg.pushes > 0 ? `-${singlesAgg.pushes}` : ''}</span>
             <span className="text-emerald-400/70 ml-1">{wlPct(singlesAgg.wins, singlesAgg.losses)}</span>
             <span className={`ml-1 ${singlesAgg.units >= 0 ? 'text-emerald-400/80' : 'text-red-400/80'}`}>{unitStr(singlesAgg.units)}</span>
           </span>
