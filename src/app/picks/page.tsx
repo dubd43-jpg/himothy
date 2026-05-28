@@ -1017,6 +1017,39 @@ function DeepResearchSection({ board }: { board: string }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const liveMap = useLiveScores();
+  // Per-section stats (W-L, units, streak). Fetched from /api/records/summary, mapped to
+  // each category tile so users see "Pressure Pack 12-5 (70%) +3.2u · 🔥 3W" inline.
+  const [productStats, setProductStats] = useState<Record<string, TileStats>>({});
+
+  useEffect(() => {
+    const loadStats = () => {
+      fetch('/api/records/summary', { cache: 'no-store' })
+        .then((r) => r.json())
+        .then((d) => {
+          if (!d.success) return;
+          const next: Record<string, TileStats> = {};
+          for (const [k, v] of Object.entries(d.product_line_stats || {}) as Array<[string, any]>) {
+            next[k] = {
+              wins: v.wins || 0, losses: v.losses || 0, pushes: v.pushes || 0,
+              winRate: v.winRate || '0.0%',
+              units: typeof v.units === 'number' ? v.units : 0,
+              streak: v.streak || { type: null, count: 0 },
+            };
+          }
+          setProductStats(next);
+        })
+        .catch(() => {});
+    };
+    loadStats();
+    // Same 60s cadence as LiveRecordBar so per-tile stats update as soon as games settle.
+    const i = setInterval(loadStats, 60_000);
+    return () => clearInterval(i);
+  }, []);
+
+  // Map registry product-line name → CategoryTile title. The registry uses the productLine
+  // we wrote when recording the pick (see recordBoardService.ts). Keep this lookup table
+  // aligned with the labels used in `<CategoryTile>` below.
+  const statsFor = (productLine: string): TileStats | null => productStats[productLine] || null;
 
   const load = async (force = false) => {
     if (force) setRefreshing(true);
@@ -1118,17 +1151,17 @@ function DeepResearchSection({ board }: { board: string }) {
       {/* Main board → category tiles (click in to see that category's picks). */}
       {board === 'north-american' ? (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <CategoryTile href="/himothy-picks" icon={Crown} title="HIMOTHY Personal Pick" count={1} unit="prop" restingLabel="Best prop across every sport" />
-          <CategoryTile href="/grand-slam" icon={Crown} title="HIMOTHY 1-Pick Grand Slam" count={data.grandSlam ? 1 : 0} unit="pick" restingLabel="Resting today" />
-          <CategoryTile href="/pressure-pack" icon={Flame} title="HIMOTHY 2-Pick Pressure Pack" count={data.pressurePack.length} unit="pick" />
-          <CategoryTile href="/vip-picks" icon={ShieldCheck} title="HIMOTHY VIP 4-Pack" count={data.vip4Pack.length} unit="pick" />
-          <CategoryTile href="/parlay-plan" icon={DollarSign} title="$10 Parlay Plan" count={data.parlayPlan.length} unit="leg" restingLabel="Not enough legs today" />
-          <CategoryTile href="/big-games" icon={Trophy} title="Tonight's Big Games" count={data.marquee?.length ?? 0} unit="game" restingLabel="No big game today" />
-          <CategoryTile href="/nrfi" icon={Radio} title="NRFI — No Runs 1st" count={data.nrfi?.length ?? 0} unit="game" />
-          <CategoryTile href="/value" icon={Target} title="Value Plays — real edge" count={data.valuePlays?.length ?? 0} unit="edge" restingLabel="No value today — sit out" />
+          <CategoryTile href="/himothy-picks" icon={Crown} title="HIMOTHY Personal Pick" count={1} unit="prop" restingLabel="Best prop across every sport" stats={statsFor('Personal Pick')} />
+          <CategoryTile href="/grand-slam" icon={Crown} title="HIMOTHY 1-Pick Grand Slam" count={data.grandSlam ? 1 : 0} unit="pick" restingLabel="Resting today" stats={statsFor('Grand Slam')} />
+          <CategoryTile href="/pressure-pack" icon={Flame} title="HIMOTHY 2-Pick Pressure Pack" count={data.pressurePack.length} unit="pick" stats={statsFor('Pressure Pack')} />
+          <CategoryTile href="/vip-picks" icon={ShieldCheck} title="HIMOTHY VIP 4-Pack" count={data.vip4Pack.length} unit="pick" stats={statsFor('VIP 4-Pack')} />
+          <CategoryTile href="/parlay-plan" icon={DollarSign} title="$10 Parlay Plan" count={data.parlayPlan.length} unit="leg" restingLabel="Not enough legs today" stats={statsFor('Parlay Center')} />
+          <CategoryTile href="/big-games" icon={Trophy} title="Tonight's Big Games" count={data.marquee?.length ?? 0} unit="game" restingLabel="No big game today" stats={statsFor('Big Games')} />
+          <CategoryTile href="/nrfi" icon={Radio} title="NRFI — No Runs 1st" count={data.nrfi?.length ?? 0} unit="game" stats={statsFor('NRFI')} />
+          <CategoryTile href="/value" icon={Target} title="Value Plays — real edge" count={data.valuePlays?.length ?? 0} unit="edge" restingLabel="No value today — sit out" stats={statsFor('Value Plays')} />
           <CategoryTile href="/edges" icon={TrendingUp} title="Tonight's Edges — top signals" count={(data.valuePlays?.length ?? 0) + (data.grandSlam ? 1 : 0) + data.pressurePack.length + data.vip4Pack.length + data.parlayPlan.length} unit="signal" />
           <CategoryTile href="/trends" icon={Flame} title="Hot Tendencies — ATS & O/U" count={(data.grandSlam ? 1 : 0) + data.pressurePack.length + data.vip4Pack.length + data.parlayPlan.length + (data.marquee?.length ?? 0)} unit="game" restingLabel="Pulling recent results" />
-          <CategoryTile href="/asleep" icon={Flame} title="Asleep Picks — quiet markets" count={data.asleepPicks?.length ?? 0} unit="play" restingLabel="No quiet edges right now" />
+          <CategoryTile href="/asleep" icon={Flame} title="Asleep Picks — quiet markets" count={data.asleepPicks?.length ?? 0} unit="play" restingLabel="No quiet edges right now" stats={statsFor('Asleep Picks')} />
         </div>
       ) : hasPicks ? (
         /* Soccer / Tennis / Overseas — flat "Picks We Like" (no product tiers) */
@@ -1158,17 +1191,44 @@ function DeepResearchSection({ board }: { board: string }) {
 // Category tile for the Today's board — shows the count and links into that category's
 // page (where the picks live). Keeps the hub from showing every pick wide open, and is
 // the unit that gets locked per-subscription later.
-function CategoryTile({ href, icon: Icon, title, count, unit, restingLabel }: { href: string; icon: any; title: string; count: number; unit: string; restingLabel?: string }) {
+interface TileStats {
+  wins: number; losses: number; pushes: number;
+  winRate: string;
+  units: number;
+  streak: { type: 'W' | 'L' | null; count: number };
+}
+
+function CategoryTile({ href, icon: Icon, title, count, unit, restingLabel, stats }: { href: string; icon: any; title: string; count: number; unit: string; restingLabel?: string; stats?: TileStats | null }) {
   const has = count > 0;
+  const hasStats = stats && (stats.wins + stats.losses) > 0;
   return (
     <Link href={href} className="group flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-5 transition-all hover:border-primary/50">
-      <div className="flex items-center gap-3 min-w-0">
+      <div className="flex items-center gap-3 min-w-0 flex-1">
         <div className="shrink-0 rounded-xl bg-primary/10 p-2.5 text-primary"><Icon className="h-5 w-5" /></div>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="text-sm font-black uppercase tracking-tight text-white truncate">{title}</div>
           <div className="text-[11px] font-bold mt-0.5">
             {has ? <span className="text-emerald-400">{count} {unit}{count > 1 ? 's' : ''} today</span> : <span className="text-white/30">{restingLabel || 'None today'}</span>}
           </div>
+          {hasStats && (
+            <div className="flex items-center gap-2 mt-1.5 text-[10px] font-black tabular-nums">
+              <span className="text-white/40">{stats!.wins}-{stats!.losses}{stats!.pushes > 0 ? `-${stats!.pushes}` : ''}</span>
+              <span className="text-white/30">·</span>
+              <span className="text-white/40">{stats!.winRate}</span>
+              <span className="text-white/30">·</span>
+              <span className={stats!.units >= 0 ? 'text-emerald-400/70' : 'text-red-400/70'}>
+                {stats!.units >= 0 ? '+' : ''}{stats!.units.toFixed(1)}u
+              </span>
+              {stats!.streak.type && stats!.streak.count >= 2 && (
+                <>
+                  <span className="text-white/30">·</span>
+                  <span className={stats!.streak.type === 'W' ? 'text-emerald-400 inline-flex items-center gap-0.5' : 'text-red-400 inline-flex items-center gap-0.5'}>
+                    {stats!.streak.type === 'W' ? '🔥' : '🥶'} {stats!.streak.count}{stats!.streak.type}
+                  </span>
+                </>
+              )}
+            </div>
+          )}
         </div>
       </div>
       <span className="shrink-0 text-lg font-black text-primary/50 group-hover:text-primary transition-colors">→</span>

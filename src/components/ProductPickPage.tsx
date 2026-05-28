@@ -67,7 +67,7 @@ export function ProductPickPage({
   const meta = PRODUCT_META[product];
   const liveMap = useLiveScores();
   const [data, setData] = useState<DailyPicksData | null>(null);
-  const [record, setRecord] = useState<{ wins: number; losses: number; pushes: number; winPercentage: string; units: number } | null>(null);
+  const [record, setRecord] = useState<{ wins: number; losses: number; pushes: number; winPercentage: string; units: number; streak?: { type: 'W' | 'L' | null; count: number } } | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -135,29 +135,43 @@ export function ProductPickPage({
           </h1>
           {subtitle && <p className="mt-3 max-w-2xl text-base text-white/50 leading-relaxed">{subtitle}</p>}
 
-          {/* Record + meta */}
-          <div className="mt-5 flex flex-wrap items-center gap-3">
-            <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-2">
-              <div className="text-[9px] font-black uppercase tracking-widest text-white/30">Lifetime Record</div>
-              {record && (record.wins + record.losses) > 0 ? (
-                <div className="flex items-center gap-2 mt-0.5">
-                  <span className="text-lg font-black">{record.wins}-{record.losses}{record.pushes ? `-${record.pushes}` : ""}</span>
-                  <span className="text-xs font-black text-emerald-400">{record.winPercentage}</span>
-                </div>
-              ) : (
-                <div className="text-sm font-bold text-white/40 mt-0.5">Tracking starts now — kept 100% real</div>
-              )}
+          {/* BIG lifetime record block — user wants every section's own stats prominent. */}
+          <div className="mt-6 rounded-3xl border-2 border-white/10 bg-gradient-to-br from-white/[0.05] to-white/[0.01] p-5 md:p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1">
+                <div className="text-[10px] font-black uppercase tracking-[0.3em] text-white/40">Lifetime Record — {title || meta.label}</div>
+                {record && (record.wins + record.losses) > 0 ? (
+                  <div className="mt-2 flex items-baseline flex-wrap gap-x-5 gap-y-1">
+                    <span className="text-5xl md:text-6xl font-black tabular-nums leading-none">
+                      {record.wins}<span className="text-white/30">-</span>{record.losses}{record.pushes ? <><span className="text-white/30">-</span>{record.pushes}</> : null}
+                    </span>
+                    <span className="text-2xl md:text-3xl font-black text-emerald-400 tabular-nums leading-none">{record.winPercentage}</span>
+                    {typeof record.units === 'number' && (
+                      <span className={`text-xl md:text-2xl font-black tabular-nums leading-none ${record.units >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {record.units >= 0 ? '+' : ''}{record.units.toFixed(1)}u
+                      </span>
+                    )}
+                    {record.streak && record.streak.type && record.streak.count >= 2 && (
+                      <span className={`text-xl md:text-2xl font-black tabular-nums leading-none inline-flex items-center gap-1 ${record.streak.type === 'W' ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {record.streak.type === 'W' ? '🔥' : '🥶'} {record.streak.count}{record.streak.type}
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <div className="mt-2 text-2xl font-black text-white/30">Tracking starts now — kept 100% real</div>
+                )}
+              </div>
+              <button type="button" onClick={() => load(true)} disabled={refreshing}
+                className="shrink-0 inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-white/30 hover:text-white/60 transition-colors disabled:opacity-40 pt-1">
+                <RefreshCw className={`h-3 w-3 ${refreshing ? "animate-spin" : ""}`} /> Refresh
+              </button>
             </div>
             {combined && (
-              <div className="rounded-2xl border border-primary/20 bg-primary/5 px-4 py-2">
-                <div className="text-[9px] font-black uppercase tracking-widest text-primary">Parlay Odds</div>
-                <div className="text-lg font-black text-primary mt-0.5">{combined}</div>
+              <div className="mt-4 pt-4 border-t border-white/8 flex items-baseline gap-3">
+                <span className="text-[10px] font-black uppercase tracking-[0.3em] text-primary/80">Parlay Odds Today</span>
+                <span className="text-2xl md:text-3xl font-black text-primary tabular-nums">{combined}</span>
               </div>
             )}
-            <button type="button" onClick={() => load(true)} disabled={refreshing}
-              className="ml-auto inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-white/30 hover:text-white/60 transition-colors disabled:opacity-40">
-              <RefreshCw className={`h-3 w-3 ${refreshing ? "animate-spin" : ""}`} /> Refresh
-            </button>
           </div>
           {accentNote && <p className="mt-4 text-xs font-semibold text-primary/80">{accentNote}</p>}
         </div>

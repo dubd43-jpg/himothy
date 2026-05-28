@@ -1138,6 +1138,29 @@ export async function getRegistrySummary({
 
   const picks = rows.map(formatRow);
 
+  // Current streak helper: walks newest → oldest, counts consecutive same-result picks.
+  // Pushes/voids/pending are skipped — they don't break or extend a streak. Returns
+  // `{ type: 'W' | 'L' | null, count }`. Used so each section can show "on a 3-game
+  // win streak" or "lost 4 in a row" in the UI.
+  const computeStreak = (productPicks: typeof picks): { type: 'W' | 'L' | null; count: number } => {
+    const settled = productPicks
+      .filter((p) => p.result === 'win' || p.result === 'loss')
+      .sort((a, b) => {
+        const ax = (a.gradedAt ? new Date(a.gradedAt).getTime() : new Date(a.boardDate || 0).getTime());
+        const bx = (b.gradedAt ? new Date(b.gradedAt).getTime() : new Date(b.boardDate || 0).getTime());
+        return bx - ax; // newest first
+      });
+    if (settled.length === 0) return { type: null, count: 0 };
+    const first: 'W' | 'L' = settled[0].result === 'win' ? 'W' : 'L';
+    let count = 0;
+    for (const p of settled) {
+      const t = p.result === 'win' ? 'W' : 'L';
+      if (t === first) count++;
+      else break;
+    }
+    return { type: first, count };
+  };
+
   const totals = {
     totalPicks: picks.length,
     wins: 0,
@@ -1216,6 +1239,13 @@ export async function getRegistrySummary({
       ? `${((byCategory[k].clvBeatCount / byCategory[k].clvTracked) * 100).toFixed(1)}%`
       : '0.0%';
   });
+  // Group picks by category and product line so streaks can be computed per slice.
+  const picksByProductLine: Record<string, typeof picks> = {};
+  const picksByCategory: Record<string, typeof picks> = {};
+  for (const p of picks) {
+    (picksByProductLine[p.productLine] ||= []).push(p);
+    (picksByCategory[p.category] ||= []).push(p);
+  }
   Object.keys(byProductLine).forEach((k) => {
     byProductLine[k].winRate = safePct(byProductLine[k].wins, byProductLine[k].losses);
     byProductLine[k].avgEdgeScore = byProductLine[k].totalPicks
@@ -1224,6 +1254,10 @@ export async function getRegistrySummary({
     byProductLine[k].clvBeatRate = byProductLine[k].clvTracked
       ? `${((byProductLine[k].clvBeatCount / byProductLine[k].clvTracked) * 100).toFixed(1)}%`
       : '0.0%';
+    byProductLine[k].streak = computeStreak(picksByProductLine[k] || []);
+  });
+  Object.keys(byCategory).forEach((k) => {
+    byCategory[k].streak = computeStreak(picksByCategory[k] || []);
   });
   Object.keys(bySport).forEach((k) => {
     bySport[k].winRate = safePct(bySport[k].wins, bySport[k].losses);

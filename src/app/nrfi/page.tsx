@@ -78,27 +78,25 @@ export default function NrfiPage() {
             MLB games we like for zero runs in the 1st — judged off both starting pitchers, with the reason on every game.
           </p>
 
-          {/* NRFI stat scale — lifetime record + tonight's W/L, same as the main stats */}
-          <div className="mt-5 flex flex-wrap items-center gap-3">
-            <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-2">
-              <div className="text-[9px] font-black uppercase tracking-widest text-white/30">NRFI Lifetime Record</div>
-              {record && (record.wins + record.losses) > 0 ? (
-                <div className="mt-0.5 flex items-center gap-2">
-                  <span className="text-lg font-black">{record.wins}-{record.losses}{record.pushes ? `-${record.pushes}` : ""}</span>
-                  <span className="text-xs font-black text-emerald-400">{record.winPercentage}</span>
-                </div>
-              ) : (
-                <div className="mt-0.5 text-sm font-bold text-white/40">Tracking starts now — kept 100% real</div>
-              )}
-            </div>
+          {/* BIG NRFI stat block — matches the rest of the section pages. */}
+          <div className="mt-6 rounded-3xl border-2 border-white/10 bg-gradient-to-br from-white/[0.05] to-white/[0.01] p-5 md:p-6">
+            <div className="text-[10px] font-black uppercase tracking-[0.3em] text-white/40">NRFI Lifetime Record</div>
+            {record && (record.wins + record.losses) > 0 ? (
+              <div className="mt-2 flex items-baseline flex-wrap gap-x-5 gap-y-1">
+                <span className="text-5xl md:text-6xl font-black tabular-nums leading-none">
+                  {record.wins}<span className="text-white/30">-</span>{record.losses}{record.pushes ? <><span className="text-white/30">-</span>{record.pushes}</> : null}
+                </span>
+                <span className="text-2xl md:text-3xl font-black text-emerald-400 tabular-nums leading-none">{record.winPercentage}</span>
+              </div>
+            ) : (
+              <div className="mt-2 text-2xl font-black text-white/30">Tracking starts now — kept 100% real</div>
+            )}
             {(tonight.won + tonight.lost + tonight.pending) > 0 && (
-              <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-2">
-                <div className="text-[9px] font-black uppercase tracking-widest text-white/30">Tonight</div>
-                <div className="mt-0.5 flex items-center gap-2.5 text-lg font-black">
-                  <span className="text-emerald-400">{tonight.won}<span className="text-[10px] text-white/30">W</span></span>
-                  <span className="text-red-400">{tonight.lost}<span className="text-[10px] text-white/30">L</span></span>
-                  {tonight.pending > 0 && <span className="text-amber-400 text-xs font-bold">{tonight.pending} live</span>}
-                </div>
+              <div className="mt-4 pt-4 border-t border-white/8 flex items-baseline gap-3">
+                <span className="text-[10px] font-black uppercase tracking-[0.3em] text-white/40">Tonight</span>
+                <span className="text-2xl md:text-3xl font-black text-emerald-400 tabular-nums leading-none">{tonight.won}<span className="text-base text-white/30">W</span></span>
+                <span className="text-2xl md:text-3xl font-black text-red-400 tabular-nums leading-none">{tonight.lost}<span className="text-base text-white/30">L</span></span>
+                {tonight.pending > 0 && <span className="text-base font-bold text-amber-400">{tonight.pending} live</span>}
               </div>
             )}
           </div>
