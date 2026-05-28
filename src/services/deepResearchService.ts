@@ -2257,6 +2257,31 @@ export async function runDailyDeepResearch(board: BoardType = 'north-american'):
   // Pack / VIP 4-Pack all bucket out of this pool.
   const picks: DeepPickResult[] = allScoredRaw.filter((p) => !isHeavyChalkML(p, SINGLE_PICK_ML_FLOOR));
 
+  // EXPANDED CANDIDATES: each game offers its primary pick PLUS its game TOTAL as a separate
+  // play. The board then features the day's BEST plays by confidence — and since dedup is
+  // per-PICK (game+market+selection), one great game can fill multiple products with
+  // DIFFERENT bets (e.g. its side in Grand Slam, its total in VIP). The exact same pick
+  // never repeats. (Per owner: best picks of the day win; game overlap is fine when that's
+  // where the value is.)
+  const picksExpanded: DeepPickResult[] = [];
+  for (const p of picks) {
+    picksExpanded.push(p);
+    const ht = p.homeTeam?.trends?.avgTotal10 ?? null;
+    const at = p.awayTeam?.trends?.avgTotal10 ?? null;
+    if (p.marketType !== 'total' && p.total != null && ht != null && at != null) {
+      const predicted = (ht + at) / 2;
+      if (Math.abs(predicted - p.total) >= 0.6) {
+        const over = predicted >= p.total;
+        picksExpanded.push({
+          ...p, marketType: 'total', selection: `${over ? 'Over' : 'Under'} ${p.total}`,
+          odds: '-110', line: `${p.total}`, selectionSide: over ? 'home' : 'away',
+          confidenceScore: scoreTotalsConfidence(predicted, p.total, null),
+        });
+      }
+    }
+  }
+  picksExpanded.sort((a, b) => b.confidenceScore - a.confidenceScore);
+
   // $10 PARLAY-ONLY CHALK: picks excluded from straights for being -185 to -250 chalk are
   // still legal $10-Parlay legs (cap -250 per user). These never appear as a straight pick;
   // they only backfill the Parlay Plan. Anything heavier than -250 is dropped entirely.
@@ -2264,8 +2289,12 @@ export async function runDailyDeepResearch(board: BoardType = 'north-american'):
     (p) => isHeavyChalkML(p, SINGLE_PICK_ML_FLOOR) && !isHeavyChalkML(p, PARLAY_PLAN_ML_FLOOR),
   );
 
-  // Assign tiers with hard caps and no duplicate games
+  // Assign tiers with hard caps. Dedup is per-PICK (game+market+selection) so one game can
+  // appear in multiple products with DIFFERENT bets, but the exact same pick never repeats.
+  // usedGames is still tracked (gameId) for downstream consumers (marquee/NRFI/parlay fill).
   const usedGames = new Set<string>();
+  const usedPicks = new Set<string>();
+  const pickKey = (p: DeepPickResult) => `${p.gameId}|${p.marketType}|${(p.selection || '').toLowerCase()}`;
   const pressurePack: DeepPickResult[] = [];
   const vip4Pack: DeepPickResult[] = [];
   const parlayPlan: DeepPickResult[] = [];
@@ -2296,9 +2325,10 @@ export async function runDailyDeepResearch(board: BoardType = 'north-american'):
     if (isHeavyMlForPremium(p)) return false;   // no ML steeper than -145 on Grand Slam
     return true;
   };
-  // `picks` is already sorted by confidenceScore desc — take the first eligible one.
-  const grandSlam: DeepPickResult | null = picks.find(isGrandSlamEligible) || null;
-  if (grandSlam) usedGames.add(grandSlam.gameId);
+  // picksExpanded is sorted by confidenceScore desc — take the first eligible play (which
+  // may be a side OR a total).
+  const grandSlam: DeepPickResult | null = picksExpanded.find(isGrandSlamEligible) || null;
+  if (grandSlam) { usedPicks.add(pickKey(grandSlam)); usedGames.add(grandSlam.gameId); }
 
   // Reserve EVERY asleep-flagged pick so none of them crowd the main board. The asleep
   // tile shows a curated slice (top 8 by confidence) but all are excluded from competing
@@ -2313,17 +2343,20 @@ export async function runDailyDeepResearch(board: BoardType = 'north-american'):
     }
   }
 
-  for (const pick of picks) {
-    if (usedGames.has(pick.gameId)) continue;
-    if (asleepReserved.has(pick.gameId)) continue;   // asleep games skip the main buckets
+  for (const pick of picksExpanded) {
+    if (usedPicks.has(pickKey(pick))) continue;        // exact same pick already placed
+    if (asleepReserved.has(pick.gameId)) continue;     // asleep games skip the main buckets
     const t = pick.tier;
+    const place = (target: DeepPickResult[], tier: ProductTier) => {
+      target.push({ ...pick, tier }); usedPicks.add(pickKey(pick)); usedGames.add(pick.gameId);
+    };
 
     if ((t === 'GRAND_SLAM' || t === 'PRESSURE_PACK') && pressurePack.length < 2 && !isHeavyMlForPremium(pick)) {
-      pressurePack.push({ ...pick, tier: 'PRESSURE_PACK' }); usedGames.add(pick.gameId);
+      place(pressurePack, 'PRESSURE_PACK');
     } else if ((t === 'PRESSURE_PACK' || t === 'VIP_4_PACK') && vip4Pack.length < 4) {
-      vip4Pack.push({ ...pick, tier: 'VIP_4_PACK' }); usedGames.add(pick.gameId);
+      place(vip4Pack, 'VIP_4_PACK');
     } else if (parlayPlan.length < 6 && t !== 'PASS') {
-      parlayPlan.push({ ...pick, tier: 'PARLAY_PLAN' }); usedGames.add(pick.gameId);
+      place(parlayPlan, 'PARLAY_PLAN');
     }
 
     if (pressurePack.length === 2 && vip4Pack.length === 4 && parlayPlan.length === 6) break;
@@ -2345,19 +2378,18 @@ export async function runDailyDeepResearch(board: BoardType = 'north-american'):
   const promote = (target: DeepPickResult[], cap: number, tierTag: ProductTier, pool: DeepPickResult[]) => {
     while (target.length < cap && pool.length > 0) {
       const p = pool.shift()!;
-      if (usedGames.has(p.gameId)) continue;
-      target.push({ ...p, tier: tierTag });
-      usedGames.add(p.gameId);
+      if (usedPicks.has(pickKey(p))) continue;
+      target.push({ ...p, tier: tierTag }); usedPicks.add(pickKey(p)); usedGames.add(p.gameId);
     }
   };
   // Pressure Pack backfill excludes heavy-chalk moneylines (steeper than -145) too.
-  const t1 = picks.filter((p) => !usedGames.has(p.gameId) && !asleepReserved.has(p.gameId) && p.tier !== 'PASS');
+  const t1 = picksExpanded.filter((p) => !usedPicks.has(pickKey(p)) && !asleepReserved.has(p.gameId) && p.tier !== 'PASS');
   promote(pressurePack, 2, 'PRESSURE_PACK', t1.filter((p) => !isHeavyMlForPremium(p)));
   promote(vip4Pack, 4, 'VIP_4_PACK', t1);
   promote(parlayPlan, 6, 'PARLAY_PLAN', t1);
 
   if (pressurePack.length < 2 || vip4Pack.length < 4 || parlayPlan.length < 4) {
-    const t2 = picks.filter((p) => !usedGames.has(p.gameId) && asleepReserved.has(p.gameId) && p.tier !== 'PASS');
+    const t2 = picksExpanded.filter((p) => !usedPicks.has(pickKey(p)) && asleepReserved.has(p.gameId) && p.tier !== 'PASS');
     promote(pressurePack, 2, 'PRESSURE_PACK', t2.filter((p) => !isHeavyMlForPremium(p)));
     promote(vip4Pack, 4, 'VIP_4_PACK', t2);
     promote(parlayPlan, 6, 'PARLAY_PLAN', t2);
@@ -2365,7 +2397,7 @@ export async function runDailyDeepResearch(board: BoardType = 'north-american'):
   }
 
   if (pressurePack.length < 2 || vip4Pack.length < 4 || parlayPlan.length < 4) {
-    const t3 = picks.filter((p) => !usedGames.has(p.gameId));
+    const t3 = picksExpanded.filter((p) => !usedPicks.has(pickKey(p)));
     promote(pressurePack, 2, 'PRESSURE_PACK', t3.filter((p) => !isHeavyMlForPremium(p)));
     promote(vip4Pack, 4, 'VIP_4_PACK', t3);
     promote(parlayPlan, 6, 'PARLAY_PLAN', t3);
