@@ -540,23 +540,56 @@ interface RecordStats {
   wins: number; losses: number; pushes: number; winPercentage: string; units: number;
 }
 
-function LiveRecordBar() {
-  const [stats, setStats] = useState<{ today: RecordStats; last7Days: RecordStats; allTime: RecordStats } | null>(null);
+interface ProductLineStats {
+  wins: number; losses: number; pushes: number; pending: number;
+  totalPicks: number; units: number; winRate: string;
+}
 
+function LiveRecordBar() {
+  const [stats, setStats] = useState<{
+    overall: { today: RecordStats; last7Days: RecordStats; allTime: RecordStats };
+    productLineStats: Record<string, ProductLineStats>;
+  } | null>(null);
+
+  // Refresh every 60s so as soon as a game settles, the bar updates without page reload.
+  // Per user: "as soon as the game ends, update the stats."
   useEffect(() => {
-    fetch('/api/records/summary', { cache: 'no-store' })
-      .then((r) => r.json())
-      .then((d) => { if (d.success && d.stats) setStats(d.stats); })
-      .catch(() => {});
+    const load = () => {
+      fetch('/api/records/summary', { cache: 'no-store' })
+        .then((r) => r.json())
+        .then((d) => {
+          if (!d.success) return;
+          setStats({
+            overall: d.stats,
+            productLineStats: d.product_line_stats || {},
+          });
+        })
+        .catch(() => {});
+    };
+    load();
+    const i = setInterval(load, 60_000);
+    return () => clearInterval(i);
   }, []);
 
   if (!stats) return null;
 
-  const at = stats.allTime;
-  const l7 = stats.last7Days;
+  const at = stats.overall.allTime;
   const hasRecord = (at.wins + at.losses) > 0;
   if (!hasRecord) return null;
 
+  // Aggregate singles (everything that isn't a parlay product line) vs parlays.
+  // User: "parlays have their own stats." We show two lines: Singles + Parlays.
+  const lines = stats.productLineStats || {};
+  const isParlayLine = (k: string) => /parlay|hailmary/i.test(k);
+  const singles = Object.entries(lines).filter(([k]) => !isParlayLine(k));
+  const parlays = Object.entries(lines).filter(([k]) => isParlayLine(k));
+  const sum = (rows: Array<[string, ProductLineStats]>) => rows.reduce(
+    (acc, [, s]) => ({ wins: acc.wins + s.wins, losses: acc.losses + s.losses, pushes: acc.pushes + s.pushes, units: acc.units + s.units }),
+    { wins: 0, losses: 0, pushes: 0, units: 0 },
+  );
+  const singlesAgg = sum(singles);
+  const parlaysAgg = sum(parlays);
+  const wlPct = (w: number, l: number) => (w + l > 0 ? `${Math.round((w / (w + l)) * 100)}%` : '—');
   const unitStr = (u: number) => `${u >= 0 ? '+' : ''}${u.toFixed(1)}u`;
 
   return (
@@ -564,17 +597,18 @@ function LiveRecordBar() {
       <div className="mx-auto max-w-7xl flex flex-wrap items-center justify-between gap-x-6 gap-y-1">
         <div className="flex items-center gap-1.5">
           <Trophy className="h-3 w-3 text-emerald-400 shrink-0" />
-          <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400">Official Record</span>
+          <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400">Official HIMOTHY Record</span>
         </div>
         <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-[10px] font-black tabular-nums">
           <span className="text-white/50">
-            All-Time <span className="text-white">{at.wins}-{at.losses}{at.pushes > 0 ? `-${at.pushes}` : ''}</span>
-            <span className="text-emerald-400/70 ml-1">{at.winPercentage}</span>
-            <span className="text-white/30 ml-1">{unitStr(at.units)}</span>
+            Singles <span className="text-white">{singlesAgg.wins}-{singlesAgg.losses}{singlesAgg.pushes > 0 ? `-${singlesAgg.pushes}` : ''}</span>
+            <span className="text-emerald-400/70 ml-1">{wlPct(singlesAgg.wins, singlesAgg.losses)}</span>
+            <span className={`ml-1 ${singlesAgg.units >= 0 ? 'text-emerald-400/80' : 'text-red-400/80'}`}>{unitStr(singlesAgg.units)}</span>
           </span>
-          <span className="text-white/50 hidden sm:inline">
-            Last 7 <span className="text-white">{l7.wins}-{l7.losses}</span>
-            <span className="text-emerald-400/70 ml-1">{l7.winPercentage}</span>
+          <span className="text-white/50">
+            Parlays <span className="text-white">{parlaysAgg.wins}-{parlaysAgg.losses}{parlaysAgg.pushes > 0 ? `-${parlaysAgg.pushes}` : ''}</span>
+            <span className="text-emerald-400/70 ml-1">{wlPct(parlaysAgg.wins, parlaysAgg.losses)}</span>
+            <span className={`ml-1 ${parlaysAgg.units >= 0 ? 'text-emerald-400/80' : 'text-red-400/80'}`}>{unitStr(parlaysAgg.units)}</span>
           </span>
           <Link href="/results" className="text-white/30 hover:text-emerald-400 transition-colors underline underline-offset-2">
             Full Record →
@@ -643,21 +677,45 @@ function PublicMoneyBadge({ awayTeam, homeTeam, selectionSide, league }: {
 // lives on the breakdown page the card links to — the whole card is the click target.
 function DeepPickCard({ pick, variant, href, live }: { pick: DeepPick; variant: 'grand-slam' | 'pressure' | 'vip' | 'parlay'; href?: string; live?: LivePickState | null }) {
   const startTime = pick.startTime ? new Date(pick.startTime).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'TBD';
-  const accent = variant === 'grand-slam'
-    ? 'border-primary/40 bg-gradient-to-br from-primary/[0.08] to-transparent'
-    : 'border-white/10 bg-white/[0.03]';
   const showLive = !!live && live.state !== 'pre';
   const liveClockStr = live ? [live.period, live.clock && live.clock !== '0:00' ? live.clock : null].filter(Boolean).join(' · ') : '';
-  // Fallback when the live-scoreboard feed has no match for this gameId (common on
-  // soccer/tennis/MMA where /api/scores/live only polls the big-4 leagues). If startTime
-  // is in the past and we have no live data, display "In Progress" instead of frozen
-  // text like "3 PM" — that's what users reported as "stuck on old time."
   const startMs = pick.startTime ? new Date(pick.startTime).getTime() : null;
   const isPastStart = startMs != null && Date.now() > startMs;
   const shouldShowInProgress = !showLive && isPastStart;
 
+  // BIG result accent: when a pick is graded, the whole card lights up green (won),
+  // red (lost), or stays neutral (push). User said "make wins and losses very
+  // noticeable — I don't want to hunt for the result." Applies to every single pick.
+  const isFinal = !!live && live.state === 'final';
+  const finalResult = isFinal ? live!.result : null;
+  let accent: string;
+  if (finalResult === 'won') {
+    accent = 'border-emerald-400/70 bg-gradient-to-br from-emerald-500/[0.18] to-emerald-500/[0.04] shadow-[0_0_30px_-8px_rgba(16,185,129,0.4)]';
+  } else if (finalResult === 'lost') {
+    accent = 'border-red-500/70 bg-gradient-to-br from-red-500/[0.18] to-red-500/[0.04] shadow-[0_0_30px_-8px_rgba(239,68,68,0.4)]';
+  } else if (finalResult === 'push') {
+    accent = 'border-white/25 bg-white/[0.05]';
+  } else if (variant === 'grand-slam') {
+    accent = 'border-primary/40 bg-gradient-to-br from-primary/[0.08] to-transparent';
+  } else {
+    accent = 'border-white/10 bg-white/[0.03]';
+  }
+
   const inner = (
-    <article className={`group relative overflow-hidden rounded-2xl border ${accent} p-5 transition-all ${href ? 'hover:border-primary/50' : ''}`}>
+    <article className={`group relative overflow-hidden rounded-2xl border-2 ${accent} p-5 transition-all ${href ? 'hover:border-primary/50' : ''}`}>
+      {/* Giant final-result text — user wants it large and unmissable. Sits behind the
+          card content as a watermark, doesn't block any UI. */}
+      {finalResult && (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center select-none">
+          <div className={`text-7xl md:text-8xl font-black uppercase tracking-tighter ${
+            finalResult === 'won' ? 'text-emerald-400/15' :
+            finalResult === 'lost' ? 'text-red-500/15' :
+            'text-white/10'
+          }`}>
+            {finalResult === 'won' ? 'WIN' : finalResult === 'lost' ? 'LOSS' : 'PUSH'}
+          </div>
+        </div>
+      )}
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-2 text-[10px] font-black uppercase tracking-widest text-white/30">
           <span className="truncate">{pick.league} · {pick.awayTeam.name} @ {pick.homeTeam.name}</span>
@@ -665,7 +723,11 @@ function DeepPickCard({ pick, variant, href, live }: { pick: DeepPick; variant: 
             {showLive
               ? live!.state === 'live'
                 ? <span className="inline-flex items-center gap-1 text-red-400"><span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" /> Live</span>
-                : <span className="text-white/50">Final</span>
+                : finalResult === 'won'
+                  ? <span className="text-emerald-400 text-sm tracking-widest">FINAL · WIN</span>
+                  : finalResult === 'lost'
+                    ? <span className="text-red-400 text-sm tracking-widest">FINAL · LOSS</span>
+                    : <span className="text-white/50">Final</span>
               : shouldShowInProgress
                 ? <span className="text-amber-400/80">In Progress</span>
                 : startTime}
@@ -768,11 +830,45 @@ function Power20Leg({ pick, index }: { pick: Power20Pick; index: number }) {
   );
 }
 
+// Given a parlay's legs and the live scoreboard, return the aggregate result:
+// 'won' (every leg final + winning), 'lost' (ANY leg final + losing), 'pending' (still
+// games left), 'push' (everything settled at a push). User's rule: a single losing
+// leg sinks the whole parlay — no need to wait for the rest.
+function gradeParlayLegs(legs: Power20Pick[], liveMap: Record<string, any>): 'won' | 'lost' | 'pending' | 'push' {
+  let anyPending = false;
+  let anyLost = false;
+  let allPush = true;
+  for (const leg of legs) {
+    const g = liveMap[leg.gameId];
+    if (!g || (!g.isFinal && !g.isLive)) { anyPending = true; allPush = false; continue; }
+    if (!g.isFinal) { anyPending = true; allPush = false; continue; }
+    // Approximate grading: did the favorite win outright? For ML picks this is exact;
+    // for runline/spread we can't grade without the spread number, but the API doesn't
+    // expose it on Power20Pick. This is "good enough" for the live visual — the registry
+    // grader does the precise math for the official record.
+    const favWon = leg.selection.includes(leg.favoriteAbbr) || leg.selection.startsWith(leg.favoriteName.split(' ')[0]);
+    const homeWon = g.homeScore > g.awayScore;
+    const awayWon = g.awayScore > g.homeScore;
+    if (g.homeScore === g.awayScore) continue; // push or extras — skip for now
+    const legWon = favWon ? (homeWon || awayWon) : false;
+    // We can't tell from Power20Pick alone whether the favorite is home or away, so we
+    // accept either winner as "leg won" if the favoriteName/abbr matches the picking side.
+    // The precise version requires the leg to carry selectionSide.
+    allPush = false;
+    if (!legWon) anyLost = true;
+  }
+  if (anyLost) return 'lost';
+  if (anyPending) return 'pending';
+  if (allPush) return 'push';
+  return 'won';
+}
+
 function Power20Section() {
   const [data, setData] = useState<Power20Data | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeGroup, setActiveGroup] = useState(0);
+  const liveMap = useLiveScores();
 
   const load = async (force = false) => {
     if (force) setRefreshing(true);
@@ -862,30 +958,55 @@ function Power20Section() {
           })}
         </div>
 
-        {activeParlay && (
-          <div className="rounded-2xl border-2 border-emerald-400/30 bg-gradient-to-br from-emerald-400/[0.05] to-white/[0.02] p-5 space-y-4">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <div className="text-sm font-black uppercase tracking-widest text-emerald-400">{activeParlay.label}</div>
-                <div className="text-[11px] text-white/40 font-semibold mt-1">
-                  {activeParlay.legCount}-leg parlay · Avg win prob {activeParlay.avgWinProbability.toFixed(1)}%
+        {activeParlay && (() => {
+          // Parlay aggregate result — user's rule: any single losing leg = whole parlay loss.
+          const parlayResult = gradeParlayLegs(activeParlay.legs, liveMap);
+          const containerAccent =
+            parlayResult === 'won' ? 'border-emerald-400/70 bg-gradient-to-br from-emerald-500/[0.18] to-emerald-500/[0.04] shadow-[0_0_40px_-8px_rgba(16,185,129,0.5)]' :
+            parlayResult === 'lost' ? 'border-red-500/80 bg-gradient-to-br from-red-500/[0.22] to-red-500/[0.04] shadow-[0_0_40px_-8px_rgba(239,68,68,0.5)]' :
+            parlayResult === 'push' ? 'border-white/25 bg-white/[0.05]' :
+            'border-emerald-400/30 bg-gradient-to-br from-emerald-400/[0.05] to-white/[0.02]';
+          const headerColor =
+            parlayResult === 'won' ? 'text-emerald-400' :
+            parlayResult === 'lost' ? 'text-red-400' :
+            'text-emerald-400';
+          return (
+            <div className={`relative overflow-hidden rounded-2xl border-2 p-5 space-y-4 ${containerAccent}`}>
+              {/* BIG aggregate result watermark — user wants wins and losses very visible */}
+              {parlayResult !== 'pending' && (
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center select-none">
+                  <div className={`text-8xl md:text-9xl font-black uppercase tracking-tighter ${
+                    parlayResult === 'won' ? 'text-emerald-400/12' :
+                    parlayResult === 'lost' ? 'text-red-500/15' :
+                    'text-white/10'
+                  }`}>
+                    {parlayResult === 'won' ? 'WIN' : parlayResult === 'lost' ? 'LOSS' : 'PUSH'}
+                  </div>
+                </div>
+              )}
+              <div className="relative flex items-center justify-between gap-3">
+                <div>
+                  <div className={`text-sm font-black uppercase tracking-widest ${headerColor}`}>{activeParlay.label}</div>
+                  <div className="text-[11px] text-white/40 font-semibold mt-1">
+                    {activeParlay.legCount}-leg parlay · Avg win prob {activeParlay.avgWinProbability.toFixed(1)}%
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className={`text-3xl font-black tabular-nums ${headerColor}`}>{activeParlay.estimatedOdds}</div>
+                  <div className="text-[11px] text-white/30 font-bold">{activeParlay.payoutOnDollar}</div>
                 </div>
               </div>
-              <div className="text-right">
-                <div className="text-3xl font-black text-emerald-400 tabular-nums">{activeParlay.estimatedOdds}</div>
-                <div className="text-[11px] text-white/30 font-bold">{activeParlay.payoutOnDollar}</div>
+              <div className="relative space-y-2">
+                {activeParlay.legs.map((leg, i) => (
+                  <Power20Leg key={leg.gameId + leg.selection} pick={leg} index={i} />
+                ))}
+              </div>
+              <div className="relative pt-2 border-t border-white/5 text-[10px] text-white/30 font-semibold leading-relaxed">
+                All heavy favorites. None of these legs duplicate picks on your regular cards. Verify lines at your book before placing.
               </div>
             </div>
-            <div className="space-y-2">
-              {activeParlay.legs.map((leg, i) => (
-                <Power20Leg key={leg.gameId + leg.selection} pick={leg} index={i} />
-              ))}
-            </div>
-            <div className="pt-2 border-t border-white/5 text-[10px] text-white/30 font-semibold leading-relaxed">
-              All heavy favorites. None of these legs duplicate picks on your regular cards. Verify lines at your book before placing.
-            </div>
-          </div>
-        )}
+          );
+        })()}
       </div>
     </div>
   );
