@@ -1185,6 +1185,7 @@ function DeepResearchSection({ board }: { board: string }) {
           <CategoryTile href="/edges" icon={TrendingUp} title="Tonight's Edges — top signals" count={(data.valuePlays?.length ?? 0) + (data.grandSlam ? 1 : 0) + data.pressurePack.length + data.vip4Pack.length + data.parlayPlan.length} unit="signal" />
           <CategoryTile href="/trends" icon={Flame} title="Hot Tendencies — ATS & O/U" count={(data.grandSlam ? 1 : 0) + data.pressurePack.length + data.vip4Pack.length + data.parlayPlan.length + (data.marquee?.length ?? 0)} unit="game" restingLabel="Pulling recent results" />
           <CategoryTile href="/asleep" icon={Flame} title="Asleep Picks — quiet markets" count={data.asleepPicks?.length ?? 0} unit="play" restingLabel="No quiet edges right now" stats={statsFor('Asleep Picks')} />
+          <CategoryTile href="/period-plays" icon={Radio} title="Period Plays — halves, quarters, hockey periods" count={1} unit="scan" restingLabel="Scanning for 1H / 2H / period edges" />
         </div>
       ) : hasPicks ? (
         /* Soccer / Tennis / Overseas — flat "Picks We Like" (no product tiers) */

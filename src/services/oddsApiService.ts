@@ -10,7 +10,7 @@
 const ODDS_API_BASE = 'https://api.the-odds-api.com/v4';
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6h — protects the monthly quota
 
-const LEAGUE_TO_SPORT: Record<string, string> = {
+export const LEAGUE_TO_SPORT: Record<string, string> = {
   MLB: 'baseball_mlb',
   NBA: 'basketball_nba',
   WNBA: 'basketball_wnba',
