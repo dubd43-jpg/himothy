@@ -1451,11 +1451,20 @@ export interface BestMarketSwap {
 // strongest one (or null). Used by the board enrichment to swap a featured pick to a
 // total / team total / half / quarter / F5 when it is clearly the better play than the
 // side/run line. Fetches alt lines + period markets + F5 in parallel; all best-effort.
+// Returns the single strongest market for a pick (used to swap a featured pick's market).
 export async function buildBestMarketSwap(pick: any, opts?: { includeProps?: boolean }): Promise<BestMarketSwap | null> {
+  const all = await buildMarketCandidates(pick, opts);
+  return all[0] ?? null;
+}
+
+// Returns ALL evaluated markets for a game (full total, team totals, halves, quarters,
+// periods, F5, and — when asked — player props), sorted strongest-first. Used by the Big
+// Games expansion to surface MULTIPLE plays per game.
+export async function buildMarketCandidates(pick: any, opts?: { includeProps?: boolean }): Promise<BestMarketSwap[]> {
   const league: string = pick?.league || '';
   const home = pick?.homeTeam, away = pick?.awayTeam;
   const homeName: string = home?.name || '', awayName: string = away?.name || '';
-  if (!homeName || !awayName) return null;
+  if (!homeName || !awayName) return [];
 
   const homeTot = home?.trends?.avgTotal10 ?? null;
   const awayTot = away?.trends?.avgTotal10 ?? null;
@@ -1586,9 +1595,8 @@ export async function buildBestMarketSwap(pick: any, opts?: { includeProps?: boo
     } catch { /* non-blocking — props are an upgrade, never required */ }
   }
 
-  if (candidates.length === 0) return null;
   candidates.sort((a, b) => b.confidence - a.confidence);
-  return candidates[0];
+  return candidates;
 }
 
 function pickForSoccer(

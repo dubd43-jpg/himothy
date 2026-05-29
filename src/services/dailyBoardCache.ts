@@ -272,6 +272,66 @@ export async function getPersistedBoardForDate(etDate: string, board: string): P
   }
 }
 
+// BIG GAMES = MULTIPLE PLAYS. A marquee game can have several plays we like (a side, a total,
+// a half/quarter/period, a player prop), and there can be several big games — so don't cap it
+// at one pick per game. For each big game, evaluate EVERY market and collect every 80+ play,
+// then surface the top 6 across all big games. Owner: "there's a lot of stuff on the big games."
+async function expandBigGames(result: any) {
+  const games = Array.isArray(result?.marquee) ? result.marquee : [];
+  if (!games.length) return result;
+  let buildMarketCandidates: (p: any, opts?: { includeProps?: boolean }) => Promise<any[]>;
+  try { ({ buildMarketCandidates } = await import('@/services/deepResearchService')); } catch { return result; }
+  const expanded: any[] = [];
+  for (const g of games) {
+    if ((g.confidenceScore ?? 0) >= 80) expanded.push(g); // the game's own side/total play
+    let cands: any[] = [];
+    try { cands = await buildMarketCandidates(g, { includeProps: true }); } catch { cands = []; }
+    for (const c of cands) {
+      if ((c.confidence ?? 0) < 80) continue;
+      if (c.marketType === g.marketType && c.selection === g.selection) continue; // already have it
+      expanded.push({
+        ...g, selection: c.selection, marketType: c.marketType, selectionSide: c.selectionSide,
+        odds: c.odds, line: c.line, confidenceScore: c.confidence, bestMarketDetail: c.detail,
+      });
+    }
+  }
+  const seen = new Set<string>();
+  const top: any[] = [];
+  for (const p of expanded.sort((a, b) => (b.confidenceScore ?? 0) - (a.confidenceScore ?? 0))) {
+    const k = `${p.gameId}|${String(p.marketType || '').toLowerCase()}|${String(p.selection || '').toLowerCase().replace(/\s+/g, ' ').trim()}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    top.push(p);
+    if (top.length >= 6) break;
+  }
+  result.marquee = top;
+  return result;
+}
+
+// Remove the EXACT same bet appearing more than once across the board. The best-market hunt
+// can swap two picks from the same game onto the identical market (e.g. both → "Phillies Team
+// Total Under 3.5"), which slipped past the pre-enrichment dedup and showed a duplicate parlay
+// leg. Keep the first occurrence in product-priority order (GS → Pressure → VIP → Parlay →
+// marquee → asleep); drop any later exact duplicate.
+function dedupeBoardPicks(result: any) {
+  if (!result) return result;
+  const seen = new Set<string>();
+  const key = (p: any) => `${p?.gameId}|${String(p?.marketType || '').toLowerCase()}|${String(p?.selection || '').toLowerCase().replace(/\s+/g, ' ').trim()}`;
+  if (result.grandSlam) seen.add(key(result.grandSlam));
+  for (const k of ['pressurePack', 'vip4Pack', 'parlayPlan', 'marquee', 'asleepPicks']) {
+    if (!Array.isArray(result[k])) continue;
+    const out: any[] = [];
+    for (const p of result[k]) {
+      const kk = key(p);
+      if (seen.has(kk)) continue;
+      seen.add(kk);
+      out.push(p);
+    }
+    result[k] = out;
+  }
+  return result;
+}
+
 // GLOBAL FLOOR — owner rule: nothing below 80 confidence anywhere. Run AFTER the full market
 // hunt (totals + props can lift a pick), so a game gets every chance to clear the bar; if it
 // still can't, it's dropped — including a weak Big Game (marquee). No lazy low-confidence
@@ -308,7 +368,9 @@ export async function getOrComputeBoard(board: BoardType): Promise<any> {
   // Swap a featured pick to its best totals-family market (total/team total/half/F5) when
   // that's clearly the stronger play, then float the best-priced plays to the top.
   await enrichWithBestMarket(result);
+  await expandBigGames(result);
   rankByValue(result);
+  dedupeBoardPicks(result);
   applyConfidenceFloor(result, 80);
   await enrichWithBucketStats(result);
   const valuePool: any[] = [result.grandSlam, ...(result.pressurePack || []), ...(result.vip4Pack || []), ...(result.parlayPlan || []), ...(result.marquee || [])].filter(Boolean);

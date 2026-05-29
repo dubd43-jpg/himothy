@@ -8,8 +8,11 @@ import { PickSummaryCard, type DeepPick } from "@/components/PickBreakdown";
 import { useLiveScores } from "@/components/useLiveScores";
 import { computeLiveState } from "@/lib/livePickStatus";
 
+interface CatRecord { wins: number; losses: number; pushes: number; winPercentage: string; units: number; }
+
 export default function BigGamesPage() {
   const [games, setGames] = useState<DeepPick[]>([]);
+  const [record, setRecord] = useState<CatRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const liveMap = useLiveScores();
 
@@ -25,6 +28,11 @@ export default function BigGamesPage() {
       } finally {
         if (mounted) setLoading(false);
       }
+      try {
+        const r = await fetch("/api/records/summary", { cache: "no-store" });
+        const rd = await r.json();
+        if (mounted) setRecord((rd?.category_stats?.MARQUEE as CatRecord) ?? null);
+      } catch { /* ignore */ }
     };
     load();
     const i = setInterval(load, 120000);
@@ -49,8 +57,21 @@ export default function BigGamesPage() {
             <Trophy className="h-8 w-8 text-primary" /> Tonight's Big Games
           </h1>
           <p className="mt-3 max-w-2xl text-base text-white/50 leading-relaxed">
-            Playoff, finals & championship-stage games — the ones everyone's watching. Our honest lean on each, and we tell you when one's a coin-flip.
+            Tonight's headline games — we dig the whole game (sides, totals, halves, quarters, props) and surface every play we love, not just one. Each is an 80+ conviction play; if a game has nothing we love, it isn't here.
           </p>
+          {/* Big Games own record bracket */}
+          <div className="mt-5 inline-flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-2.5">
+            <span className="text-[10px] font-black uppercase tracking-widest text-white/40">Big Games Record</span>
+            <span className="text-xl font-black tabular-nums leading-none">
+              {record?.wins ?? 0}<span className="text-white/30">-</span>{record?.losses ?? 0}{record?.pushes ? <><span className="text-white/30">-</span>{record.pushes}</> : null}
+            </span>
+            <span className="text-sm font-black text-emerald-400 tabular-nums leading-none">{record?.winPercentage || "0.0%"}</span>
+            {typeof record?.units === "number" && (
+              <span className={`text-sm font-black tabular-nums leading-none ${record.units >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                {record.units >= 0 ? "+" : ""}{record.units.toFixed(1)}u
+              </span>
+            )}
+          </div>
         </div>
 
         {loading ? (
@@ -66,8 +87,8 @@ export default function BigGamesPage() {
           </div>
         ) : (
           <div className="space-y-4">
-            {games.map((pick) => (
-              <div key={pick.gameId}>
+            {games.map((pick, i) => (
+              <div key={`${pick.gameId}-${pick.marketType}-${pick.selection}-${i}`}>
                 {pick.bigGameLabel && (
                   <div className="mb-1.5 inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-widest text-primary">
                     <Trophy className="h-2.5 w-2.5" /> {pick.bigGameLabel}
