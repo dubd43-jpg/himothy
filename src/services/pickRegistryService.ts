@@ -979,6 +979,19 @@ export async function getRegistryBoardPicks({
   return rows.map(formatRow);
 }
 
+// Wipe every recorded pick for one ET board date. Used ONLY by the admin reconcile, which
+// then re-records the exact frozen slate so the official record matches what customers saw.
+// Returns the number of rows removed.
+export async function deleteBoardPicks(boardDate?: string): Promise<number> {
+  await ensureRegistrySchema();
+  const date = getOfficialBoardDate(boardDate);
+  const res: any = await prisma.$executeRawUnsafe(
+    `DELETE FROM himothy_pick_registry WHERE board_date = $1::date`,
+    date,
+  );
+  return typeof res === 'number' ? res : 0;
+}
+
 export async function getBoardMainPick(boardDate?: string) {
   await ensureRegistrySchema();
   const date = getOfficialBoardDate(boardDate);

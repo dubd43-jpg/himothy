@@ -171,9 +171,13 @@ async function recordPick(
   }
 }
 
-export async function recordTodaysBoard(): Promise<{ recorded: number; skipped: number; dupes: number; errors: number }> {
+export async function recordTodaysBoard(opts?: { allowFinalized?: boolean }): Promise<{ recorded: number; skipped: number; dupes: number; errors: number }> {
   const out = { recorded: 0, skipped: 0, dupes: 0, errors: 0 };
   if (!hasDatabase()) return out;
+  // Normal runs are HONEST: only pregame picks get recorded (never post-record a known
+  // result). The admin reconcile passes allowFinalized=true to re-record the exact frozen
+  // slate after games have finished — used only to re-sync the record to the posted slate.
+  const allowFinalized = opts?.allowFinalized ?? false;
 
   const boards: BoardType[] = ['north-american', 'soccer', 'overseas'];
   for (const board of boards) {
@@ -231,7 +235,7 @@ export async function recordTodaysBoard(): Promise<{ recorded: number; skipped: 
       // For PARLAY_PLAN: tag every leg with a shared ticket id, position, count, and
       // combined odds — so the day's parlay can be queried as ONE ticket later.
       const isParlay = category === 'PARLAY_PLAN';
-      const eligible = picks.filter((p) => p?.selection && p?.gameId && isTodayEt(p.startTime) && isPregame(p.startTime));
+      const eligible = picks.filter((p) => p?.selection && p?.gameId && isTodayEt(p.startTime) && (allowFinalized || isPregame(p.startTime)));
       const ticketCtx = isParlay && eligible.length > 1
         ? { ticketId: newTicketId('parlay'), legCount: eligible.length, estimatedOdds: combineParlayOdds(eligible) }
         : null;
@@ -281,7 +285,7 @@ export async function recordTodaysBoard(): Promise<{ recorded: number; skipped: 
           await audit('ERROR', `skipped: pick startTime is not today (ET) — was ${p.startTime}`);
           continue;
         }
-        if (!isPregame(p.startTime)) {
+        if (!allowFinalized && !isPregame(p.startTime)) {
           out.skipped++;
           // The Cleveland scenario: game started before the cron got to it. Logged so we
           // can see exactly which picks were lost and when — instead of silent skip.
@@ -291,7 +295,7 @@ export async function recordTodaysBoard(): Promise<{ recorded: number; skipped: 
 
         legPos++;
         const ctx = ticketCtx ? { ticketId: ticketCtx.ticketId, legPosition: legPos, legCount: ticketCtx.legCount, estimatedOdds: ticketCtx.estimatedOdds } : undefined;
-        const r = await recordPick(p, category, ctx, etBoardDate);
+        const r = await recordPick(p, category, ctx, etBoardDate, allowFinalized);
         if (r === 'recorded') out.recorded++;
         else if (r === 'dupe') out.dupes++;
         else out.errors++;
@@ -313,7 +317,7 @@ export async function recordTodaysBoard(): Promise<{ recorded: number; skipped: 
     for (const n of nrfiPlays) {
       if (!n?.gameId) { out.errors++; continue; }
       if (!isTodayEt(n.startTime)) { out.skipped++; continue; }
-      if (!isPregame(n.startTime)) { out.skipped++; continue; }
+      if (!allowFinalized && !isPregame(n.startTime)) { out.skipped++; continue; }
       // Shape NRFI as a recordable pick. Selection text is consistent so the grader can
       // settle by checking actual 1st-inning runs after the game.
       const nrfiPick = {
@@ -334,7 +338,7 @@ export async function recordTodaysBoard(): Promise<{ recorded: number; skipped: 
         reasoningShort: n.reason || 'Both starters have strong 1st-inning ERAs',
       } as any;
       const nrfiBoardDate = n.startTime ? etDate(new Date(n.startTime)) : etDate(new Date());
-      const r = await recordPick(nrfiPick, 'NRFI', undefined, nrfiBoardDate);
+      const r = await recordPick(nrfiPick, 'NRFI', undefined, nrfiBoardDate, allowFinalized);
       if (r === 'recorded') out.recorded++;
       else if (r === 'dupe') out.dupes++;
       else out.errors++;
@@ -357,6 +361,26 @@ export async function recordTodaysBoard(): Promise<{ recorded: number; skipped: 
     }
   }
   return out;
+}
+
+// ─── Reconcile today's record to the frozen slate ──────────────────────────────
+// The recorder logs from the frozen slate, but if the slate was recomputed mid-day BEFORE
+// the freeze locked (the bug that desynced the record from the display), the registry can
+// hold an earlier board than what customers actually saw. Worse, the dedup is keyed on
+// (event+market+selection) — NOT category — so a pick can't be re-categorized in place
+// (e.g. a play that's now the Grand Slam but was recorded as a VIP leg). The only clean fix
+// is to wipe today's recorded picks and re-record the EXACT current frozen slate, then grade.
+// Admin-triggered only. Honest because the frozen slate is the immutable evidence of what we
+// posted — we're correcting the record to match the display, not inventing results.
+export async function reconcileTodayToFrozenSlate(): Promise<{ boardDate: string; deleted: number; recorded: any; graded: any }> {
+  const today = etDate(new Date());
+  if (!hasDatabase()) return { boardDate: today, deleted: 0, recorded: null, graded: null };
+  const { deleteBoardPicks } = await import('@/services/pickRegistryService');
+  const deleted = await deleteBoardPicks(today);
+  const recorded = await recordTodaysBoard({ allowFinalized: true });
+  let graded: any = null;
+  try { graded = await gradeRegistryBoard(today); } catch (e: any) { graded = { error: String(e?.message || e) }; }
+  return { boardDate: today, deleted, recorded, graded };
 }
 
 // ─── Frozen-slate recovery ─────────────────────────────────────────────────────

@@ -37,13 +37,18 @@ async function ensureSlateCacheSchema() {
   }
 }
 
-async function readPersistedSlate(version: string, etDate: string, board: string): Promise<any | null> {
+// FROZEN = IMMUTABLE. Read the day's board regardless of which rules-version froze it. This
+// is what makes "lock once recorded" hold: once ANY version has frozen today's board, every
+// later request — even after a deploy that bumps SLATE_RULES_VERSION — serves that exact
+// board instead of recomputing a different one (which is how the record drifted from the
+// display). A version bump therefore only affects the NEXT ET-day, never a posted slate.
+async function readPersistedSlate(etDate: string, board: string): Promise<any | null> {
   if (!hasDatabase()) return null;
   await ensureSlateCacheSchema();
   try {
     const rows = await prisma.$queryRawUnsafe<any[]>(
-      `SELECT "data" FROM "DailySlateCache" WHERE "version" = $1 AND "etDate" = $2 AND "board" = $3`,
-      version, etDate, board,
+      `SELECT "data" FROM "DailySlateCache" WHERE "etDate" = $1 AND "board" = $2 ORDER BY "generatedAt" DESC LIMIT 1`,
+      etDate, board,
     );
     return rows[0]?.data ?? null;
   } catch (err) {
@@ -52,15 +57,20 @@ async function readPersistedSlate(version: string, etDate: string, board: string
   }
 }
 
+// WRITE-ONCE per ET-day+board. ON CONFLICT DO NOTHING (not DO UPDATE) so a posted slate is
+// never silently overwritten by a later recompute. To intentionally replace it, an admin
+// must first delete it (deletePersistedSlate) — the explicit hard-reset escape hatch.
 async function writePersistedSlate(version: string, etDate: string, board: string, data: any) {
   if (!hasDatabase()) return;
   await ensureSlateCacheSchema();
   try {
+    // Guard against replacing a board already frozen under a DIFFERENT version this ET-day.
+    const existing = await readPersistedSlate(etDate, board);
+    if (existing) return;
     await prisma.$executeRawUnsafe(
       `INSERT INTO "DailySlateCache" ("version", "etDate", "board", "data", "generatedAt")
        VALUES ($1, $2, $3, $4::jsonb, NOW())
-       ON CONFLICT ("version", "etDate", "board") DO UPDATE
-       SET "data" = EXCLUDED."data", "generatedAt" = NOW()`,
+       ON CONFLICT ("version", "etDate", "board") DO NOTHING`,
       version, etDate, board, JSON.stringify(data),
     );
   } catch (err) {
@@ -68,12 +78,14 @@ async function writePersistedSlate(version: string, etDate: string, board: strin
   }
 }
 
-async function deletePersistedSlate(version: string, etDate: string, board: string) {
+// Hard reset (admin only): clears EVERY version of the day's board so the next compute can
+// post a fresh one. This is the single sanctioned way to change a posted slate mid-day.
+async function deletePersistedSlate(etDate: string, board: string) {
   if (!hasDatabase()) return;
   try {
     await prisma.$executeRawUnsafe(
-      `DELETE FROM "DailySlateCache" WHERE "version" = $1 AND "etDate" = $2 AND "board" = $3`,
-      version, etDate, board,
+      `DELETE FROM "DailySlateCache" WHERE "etDate" = $1 AND "board" = $2`,
+      etDate, board,
     );
   } catch (err) {
     console.error('[dailyBoardCache] deletePersistedSlate failed', err);
@@ -112,7 +124,7 @@ export async function getFrozenDaily(key: string, compute: () => Promise<any>, f
   if (!force) {
     const mem = boardCache.get(memKey);
     if (mem) return mem.data;
-    const persisted = await readPersistedSlate(SLATE_RULES_VERSION, etDate, key);
+    const persisted = await readPersistedSlate(etDate, key);
     if (persisted) { boardCache.set(memKey, { data: persisted, generatedAt: Date.now() }); return persisted; }
   }
   const data = await compute();
@@ -229,7 +241,7 @@ export function getCachedBoardPicks(board: string): any[] {
 
 export async function invalidateBoardCache(board: string) {
   boardCache.delete(slateVersionKey(board));
-  await deletePersistedSlate(SLATE_RULES_VERSION, todayEtKey(), board);
+  await deletePersistedSlate(todayEtKey(), board);
 }
 
 export function getCachedBoard(board: string) {
@@ -265,7 +277,7 @@ export async function getOrComputeBoard(board: BoardType): Promise<any> {
   const mem = boardCache.get(key);
   if (mem) return mem.data;
 
-  const persisted = await readPersistedSlate(SLATE_RULES_VERSION, etDate, board);
+  const persisted = await readPersistedSlate(etDate, board);
   if (persisted) {
     boardCache.set(key, { data: persisted, generatedAt: Date.now() });
     return persisted;

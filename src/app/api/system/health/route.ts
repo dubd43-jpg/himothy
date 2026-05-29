@@ -143,6 +143,28 @@ export async function GET(req: Request) {
             ? `Not yet recorded — expected before the ~9am ET record cron (it is ${etHour}:00 ET).`
             : `Today's board is NOT in the registry and it is past 10am ET — record-board cron may have failed.`,
       });
+
+      // 6b) THE RECORD MUST MATCH THE DISPLAY. The single most important honesty check:
+      // the Grand Slam (and every posted pick) in the permanent record must be the SAME
+      // pick customers saw on the frozen slate. This is the exact bug that made a WON Grand
+      // Slam show as a LOSS — the record had an earlier board than the display. CRITICAL.
+      if (gs && recorded.length > 0) {
+        const norm = (s: string) => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+        const recordedGs = recorded.find((p: any) => p.category === 'GRAND_SLAM');
+        const gsMatches = recordedGs && norm(recordedGs.selection) === norm(gs.selection);
+        // Also confirm every displayed pick exists somewhere in the record (by selection).
+        const recordedSel = new Set(recorded.map((p: any) => norm(p.selection)));
+        const displayedMissing = allPosted.filter((p) => !recordedSel.has(norm(p.selection)));
+        const ok = Boolean(gsMatches) && displayedMissing.length === 0;
+        checks.push({
+          id: 'record-matches-display', ok, severity: 'critical',
+          detail: ok
+            ? `Record matches the displayed slate (Grand Slam: ${gs.selection}).`
+            : `RECORD ≠ DISPLAY. Displayed Grand Slam "${gs.selection}" but record has "${recordedGs?.selection ?? 'none'}".` +
+              (displayedMissing.length ? ` ${displayedMissing.length} displayed pick(s) not in the record: ${displayedMissing.map((p) => p.selection).slice(0, 4).join(', ')}.` : '') +
+              ` Run /api/admin/reconcile-board to re-sync.`,
+        });
+      }
     } catch (e: any) {
       checks.push({ id: 'board-recorded', ok: true, severity: 'warn', detail: `Registry check skipped: ${String(e?.message || e)}` });
     }
