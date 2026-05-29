@@ -193,11 +193,34 @@ export async function recordTodaysBoard(): Promise<{ recorded: number; skipped: 
     // surfaced on the site but dropped from the official record (silent data loss).
     // Fix: route every bucket through the registry so what shows on the slate matches
     // what gets graded into the verified record.
+    // The $10 Parlay's prop/total FILL legs (parlayExtraLegs) are shown to customers as
+    // part of the ticket, so they must be recorded as part of the SAME ticket — otherwise
+    // the graded result wouldn't match the displayed parlay (a losing fill leg would be
+    // invisible). Only the gradeable TOTAL fill legs go into the official ticket; prop fill
+    // legs (rare — only when totals run out) are display-only to avoid mis-grading a player
+    // prop as a game total. Each is shaped so the total grader can settle it from the score.
+    const extraLegPicks = (res.parlayExtraLegs || [])
+      .filter((leg: any) => leg.type === 'total' && leg.gameId && leg.selection)
+      .map((leg: any) => {
+        const parts = String(leg.eventName || '').split(/\s+@\s+/);
+        const lineMatch = String(leg.selection).match(/(\d+(?:\.\d+)?)\s*$/);
+        return {
+          gameId: leg.gameId, eventName: leg.eventName, league: leg.league, sport: leg.league,
+          startTime: leg.startTime,
+          homeTeam: { name: parts[1] || '', abbreviation: '', moneyline: null, winProbability: null },
+          awayTeam: { name: parts[0] || '', abbreviation: '', moneyline: null, winProbability: null },
+          selection: leg.selection, selectionSide: 'home' as const, marketType: 'total',
+          line: lineMatch ? lineMatch[1] : null, odds: leg.odds,
+          tier: 'PARLAY_PLAN', confidenceScore: 0, reasonsFor: [leg.detail].filter(Boolean),
+        };
+      });
+    const parlayCombined = [...(res.parlayPlan || []), ...extraLegPicks];
+
     const groups: Array<[string, any[]]> = [
       ['GRAND_SLAM', res.grandSlam ? [res.grandSlam] : []],
       ['PRESSURE_PACK', res.pressurePack || []],
       ['VIP_4_PACK', res.vip4Pack || []],
-      ['PARLAY_PLAN', res.parlayPlan || []],
+      ['PARLAY_PLAN', parlayCombined],
       ['MARQUEE', res.marquee || []],
       ['ASLEEP_PICKS', res.asleepPicks || []],
       ['VALUE_PLAYS', res.valuePlays || []],

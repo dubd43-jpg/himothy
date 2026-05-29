@@ -460,6 +460,7 @@ export interface Power20Pick {
   moneyline: number | null;
   marketType: 'moneyline' | 'runline' | 'spread';
   selection: string;
+  selectionSide: 'home' | 'away';   // which physical side our pick is — needed to grade live
   odds: string;
   isInjuryClear: boolean;
   injuryNote: string | null;
@@ -2759,6 +2760,7 @@ async function processGameForPower20(
     moneyline: favML,
     marketType,
     selection,
+    selectionSide: homeFav ? 'home' : 'away',
     odds,
     isInjuryClear: !hasInjury,
     injuryNote,
@@ -2927,6 +2929,9 @@ export interface SportParlayLeg {
   odds: string | null;
   edgeScore: number;         // 0-100
   detail: string;            // human-readable reasoning
+  // For live grading on the page (game legs only; props can't be live-graded):
+  selectionSide?: 'home' | 'away' | null;
+  marketType?: string | null;
 }
 export interface SportParlay {
   sport: string;
@@ -2966,6 +2971,7 @@ async function buildOneSportParlay(sport: string, excluded: Set<string>): Promis
       startTime: gp.startTime || event.date || null,
       selection: gp.selection, odds: gp.odds, edgeScore: Math.round(gp.winProbability),
       detail: `${gp.winProbability.toFixed(0)}% win probability`,
+      selectionSide: gp.selectionSide, marketType: gp.marketType,
     });
   }
   gameLegs.sort((a, b) => b.edgeScore - a.edgeScore);

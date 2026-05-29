@@ -43,7 +43,7 @@ interface Power20Pick {
   favoriteName: string; favoriteAbbr: string; underdogName: string;
   winProbability: number; moneyline: number | null;
   marketType: 'moneyline' | 'runline' | 'spread';
-  selection: string; odds: string;
+  selection: string; odds: string; selectionSide?: 'home' | 'away';
   isInjuryClear: boolean; injuryNote: string | null;
 }
 interface Power20Group {
@@ -873,20 +873,17 @@ function gradeParlayLegs(legs: Power20Pick[], liveMap: Record<string, any>): 'wo
     const g = liveMap[leg.gameId];
     if (!g || (!g.isFinal && !g.isLive)) { anyPending = true; allPush = false; continue; }
     if (!g.isFinal) { anyPending = true; allPush = false; continue; }
-    // Approximate grading: did the favorite win outright? For ML picks this is exact;
-    // for runline/spread we can't grade without the spread number, but the API doesn't
-    // expose it on Power20Pick. This is "good enough" for the live visual — the registry
-    // grader does the precise math for the official record.
-    const favWon = leg.selection.includes(leg.favoriteAbbr) || leg.selection.startsWith(leg.favoriteName.split(' ')[0]);
-    const homeWon = g.homeScore > g.awayScore;
-    const awayWon = g.awayScore > g.homeScore;
-    if (g.homeScore === g.awayScore) continue; // push or extras — skip for now
-    const legWon = favWon ? (homeWon || awayWon) : false;
-    // We can't tell from Power20Pick alone whether the favorite is home or away, so we
-    // accept either winner as "leg won" if the favoriteName/abbr matches the picking side.
-    // The precise version requires the leg to carry selectionSide.
+    if (g.homeScore === g.awayScore) continue; // tie/extras — skip for now
+    // Grade the picked SIDE correctly. The leg now carries selectionSide (home/away), so we
+    // check whether OUR side won — not "did anyone win" (the old bug marked every non-tie
+    // game a win regardless of which team we were on). If selectionSide is missing (older
+    // cached data), fall back to leaving the leg pending rather than guessing a win.
+    if (leg.selectionSide !== 'home' && leg.selectionSide !== 'away') {
+      anyPending = true; allPush = false; continue;
+    }
+    const ourSideWon = leg.selectionSide === 'home' ? g.homeScore > g.awayScore : g.awayScore > g.homeScore;
     allPush = false;
-    if (!legWon) anyLost = true;
+    if (!ourSideWon) anyLost = true;
   }
   if (anyLost) return 'lost';
   if (anyPending) return 'pending';
