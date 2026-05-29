@@ -5,10 +5,6 @@ import Link from "next/link";
 import Image from "next/image";
 import { ArrowLeft, Lock, ExternalLink } from "lucide-react";
 import { PickBreakdown, type DeepPick } from "@/components/PickBreakdown";
-import { GameProps } from "@/components/GameProps";
-import { NicheMarkets } from "@/components/NicheMarkets";
-import { AltLines } from "@/components/AltLines";
-import { AltPropLadders } from "@/components/AltPropLadders";
 import { AuthorByline } from "@/components/AuthorByline";
 import { useLiveScores } from "@/components/useLiveScores";
 import { computeLiveState } from "@/lib/livePickStatus";
@@ -104,10 +100,10 @@ export default function PickPage({ params }: { params: { gameId: string } }) {
               Bet on Hard Rock <ExternalLink className="h-4 w-4" />
             </a>
             <AuthorByline />
-            <AltLines league={pick.league} homeTeam={pick.homeTeam.name} homeAbbr={pick.homeTeam.abbreviation} awayTeam={pick.awayTeam.name} awayAbbr={pick.awayTeam.abbreviation} />
-            <AltPropLadders league={pick.league} homeTeam={pick.homeTeam.name} awayTeam={pick.awayTeam.name} />
-            <NicheMarkets league={pick.league} homeTeam={pick.homeTeam.name} awayTeam={pick.awayTeam.name} />
-            <GameProps gameId={pick.gameId} league={pick.league} />
+            {/* Alt-line ladders, alt prop ladders, niche markets, and the full game-props
+                screen were REMOVED from the customer page — that's a full odds board that
+                gives away extra plays and our market data. Customers get OUR pick + why we
+                like it, period. (These remain available for the back-end/admin view.) */}
           </>
         ) : (
           <div className="rounded-3xl border-2 border-dashed border-white/10 bg-white/[0.02] py-20 text-center px-6">

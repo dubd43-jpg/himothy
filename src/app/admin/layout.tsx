@@ -138,6 +138,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <Link href="/admin/picks" className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-md hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground">
               <Target className="w-3.5 h-3.5" /> Picks Manager
             </Link>
+            <Link href="/admin/board" className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-md hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground">
+              <BarChart3 className="w-3.5 h-3.5" /> Full Board
+            </Link>
             <Link href="/admin/pricing" className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-md hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground">
               <Crown className="w-3.5 h-3.5" /> Pricing Control
             </Link>
