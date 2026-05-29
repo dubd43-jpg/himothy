@@ -32,6 +32,17 @@ function americanOdds(odds: string | null | undefined): number | null {
   return m ? Number(m[0]) : null;
 }
 
+// ET calendar date (YYYYMMDD) for an ISO time; null if unparseable.
+function etDay(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return null;
+  const p = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(new Date(t));
+  return `${p.find((x) => x.type === 'year')!.value}${p.find((x) => x.type === 'month')!.value}${p.find((x) => x.type === 'day')!.value}`;
+}
+
 function validStartTime(startTime: string | null | undefined): boolean {
   if (!startTime) return false;
   const t = Date.parse(startTime);
@@ -229,6 +240,17 @@ export async function GET(req: Request) {
       detail: finals > 0
         ? `${finals} final game(s) present in the feed — WON/LOST can render.`
         : `0 finals in the feed right now. Expected if nothing has finished today; a red flag if games have ended.`,
+    });
+    // CRITICAL: no STALE games in the feed. The feed is today-only (today's ET games + still-
+    // live carry-overs); a finished game whose ET start date is before today must not be here —
+    // that's the exact thing that put yesterday's Golden State game on today's board and lit a
+    // false WON. A live carry-over (still in progress) is allowed.
+    const stale = feed.filter((g) => !g.isLive && g.startTime && etDay(g.startTime) !== null && etDay(g.startTime)! < et);
+    checks.push({
+      id: 'live-feed-no-stale-games', ok: stale.length === 0, severity: 'critical',
+      detail: stale.length === 0
+        ? 'No stale (pre-today, non-live) games in the feed.'
+        : `${stale.length} STALE game(s) leaked into today's feed: ${stale.map((g) => `${g.awayTeam}@${g.homeTeam}`).slice(0, 4).join(', ')}.`,
     });
   } catch (e: any) {
     checks.push({ id: 'live-feed-reachable', ok: false, severity: 'critical', detail: `Live feed fetch FAILED: ${String(e?.message || e)}` });

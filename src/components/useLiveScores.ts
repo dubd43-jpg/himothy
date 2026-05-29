@@ -28,6 +28,7 @@ export function useLiveScores() {
             clock: g.clock || "",
             homeTeam: g.homeTeam || "",
             awayTeam: g.awayTeam || "",
+            startTime: g.startTime || "",
           };
         }
         setLiveMap(map);

@@ -14,6 +14,18 @@ export interface LiveGame {
   clock: string;
   homeTeam: string;
   awayTeam: string;
+  /** ISO start time — used to reject a FINAL result from a game that isn't today's (ET). */
+  startTime?: string;
+}
+
+// ET calendar date (YYYYMMDD) for an ISO time, or for "now" when omitted.
+function etDateKey(iso?: string): string | null {
+  const d = iso ? new Date(Date.parse(iso)) : new Date();
+  if (Number.isNaN(d.getTime())) return null;
+  const p = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(d);
+  return `${p.find((x) => x.type === 'year')!.value}${p.find((x) => x.type === 'month')!.value}${p.find((x) => x.type === 'day')!.value}`;
 }
 
 // Minimal shape we need from a pick to grade it (kept structural to avoid imports).
@@ -86,7 +98,16 @@ function clampMeter(pct: number): number {
 
 export function computeLiveState(pick: GradablePick, g: LiveGame | undefined | null): LivePickState | null {
   if (!g) return null;
-  const state: LivePickState["state"] = g.isLive ? "live" : g.isFinal ? "final" : "pre";
+  // DATE GUARD: never grade a FINAL result from a game that isn't today's (ET). A pick that
+  // joins to a stale/wrong game (e.g. yesterday's finished game under the same gameId) must
+  // NOT paint a WON/LOST. If the game is final but its ET start date is before today, treat
+  // it as not-yet-played (pre) so no result shows. Live carry-overs still display as live.
+  let state: LivePickState["state"] = g.isLive ? "live" : g.isFinal ? "final" : "pre";
+  if (state === "final" && g.startTime) {
+    const gameDay = etDateKey(g.startTime);
+    const today = etDateKey();
+    if (gameDay && today && gameDay < today) state = "pre";
+  }
 
   const pickedScore = pick.selectionSide === "home" ? g.homeScore : g.awayScore;
   const oppScore = pick.selectionSide === "home" ? g.awayScore : g.homeScore;

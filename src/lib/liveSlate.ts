@@ -74,6 +74,17 @@ function getDateWindow() {
   });
 }
 
+// ET calendar date (YYYYMMDD) for a game's ISO start time. Used to keep the feed today-only.
+function etDateKeyFromIso(iso: string): string | null {
+  if (!iso) return null;
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return null;
+  const p = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(new Date(t));
+  return `${p.find((x) => x.type === 'year')!.value}${p.find((x) => x.type === 'month')!.value}${p.find((x) => x.type === 'day')!.value}`;
+}
+
 function getSportSlugFromLeagueUrl(url: string) {
   if (url.includes('/soccer/')) return 'soccer';
   if (url.includes('/football/nfl')) return 'nfl';
@@ -205,5 +216,15 @@ export async function fetchLiveSlate({
   );
 
   const games = allResults.flat();
-  return sortGames(games).slice(0, maxGames);
+
+  // TODAY-ONLY (ET). The date window fetches yesterday/today/tomorrow so we can grab live
+  // carry-overs, but the feed must only surface games that belong on TODAY's board: games
+  // whose ET start date is today, PLUS still-live games from last night (genuine carry-overs).
+  // Without this, yesterday's FINISHED games (e.g. a West-Coast WNBA game) stayed in the feed
+  // and — because pick cards join to the feed purely by gameId — lit up a false "WON" on
+  // today's board before any of today's games had even started.
+  const today = dates[1]; // getDateWindow() returns [-1, 0, +1] → index 1 is today (ET)
+  const todayOnly = games.filter((g) => g.isLive || etDateKeyFromIso(g.startTime) === today);
+
+  return sortGames(todayOnly).slice(0, maxGames);
 }

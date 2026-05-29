@@ -1045,35 +1045,23 @@ async function fetchLeagueScoreboard(league: string): Promise<{ events: any[]; b
       if (!startKey) return false;
       return startKey <= todayKey && todayKey <= (endKey || startKey);
     };
-    const isFinal = (e: any) => e?.status?.type?.state === 'post' || Boolean(e?.status?.type?.completed);
-    const isLive = (e: any) => e?.status?.type?.state === 'in';
-
-    const responses = await Promise.allSettled([
-      fetch(`${baseUrl}/scoreboard?dates=${dateStr(-1)}`, { cache: 'no-store' }),
-      fetch(`${baseUrl}/scoreboard?dates=${dateStr(0)}`, { cache: 'no-store' }),
-    ]);
+    // STRICT TODAY-ONLY for PICK SELECTION. We do NOT carry over yesterday's still-live games
+    // as today's picks anymore. A game that STARTED yesterday (ET) belongs to yesterday's
+    // board and record — even if it ran past ET midnight. Treating a live carry-over as a
+    // fresh today pick is exactly how a yesterday West-Coast game (e.g. a late WNBA game)
+    // ended up frozen onto today's board and then lit up a false "WON" once it finished.
+    // (Live carry-overs still appear in the live SCORES feed for display — that's liveSlate —
+    // but they are not eligible to become a graded pick on today's products.)
+    const response = await fetch(`${baseUrl}/scoreboard?dates=${dateStr(0)}`, { cache: 'no-store' });
+    if (!response.ok) return null;
+    const data = await response.json();
     const dedupe = new Map<string, any>();
-    const add = async (r: PromiseSettledResult<Response>, carryOversOnly: boolean) => {
-      if (r.status !== 'fulfilled' || !r.value.ok) return;
-      const data = await r.value.json();
-      for (const e of data.events || []) {
-        if (carryOversOnly) {
-          // Yesterday's scoreboard: keep ONLY games still in progress. Skip everything
-          // else (finals, scheduled-but-not-started — those aren't today's slate).
-          if (!isLive(e)) continue;
-        } else {
-          // Today's scoreboard: keep every event whose ET date is today — INCLUDING
-          // finals. The slate is frozen for the whole ET-day (per feedback-frozen-slate);
-          // a game that posted in the morning slate stays visible after it finishes so
-          // customers see the pick + the result side-by-side. The slate composition
-          // doesn't change again until tomorrow's 8am ET cron.
-          if (!isOnTodayET(e)) continue;
-        }
-        dedupe.set(String(e.id), e);
-      }
-    };
-    await add(responses[0], true);
-    await add(responses[1], false);
+    for (const e of data.events || []) {
+      // Keep every event whose ET date is today — INCLUDING finals, so a game that posted in
+      // the morning slate stays visible with its result after it finishes (frozen all ET-day).
+      if (!isOnTodayET(e)) continue;
+      dedupe.set(String(e.id), e);
+    }
     const allEvents = Array.from(dedupe.values());
     return allEvents.length > 0 ? { events: allEvents, baseUrl } : null;
   } catch { return null; }
