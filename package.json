@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "healthcheck": "node scripts/healthcheck.mjs",
     "postinstall": "prisma generate"
   },
   "dependencies": {

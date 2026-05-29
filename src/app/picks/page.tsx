@@ -1464,9 +1464,24 @@ function BookLink({ book }: { book: string | null }) {
 function MainPickCard({ pick }: { pick: BoardPick }) {
   const sc = statusConfig(pick.status);
   const StatusIcon = sc.icon;
+  // Big, unmissable result — same treatment as every other single bet. Once graded the whole
+  // card lights up green (won) / red (lost) with a giant watermark behind the content.
+  const s = (pick.status || "").toLowerCase();
+  const graded = s === "win" || s === "loss";
+  const cardAccent =
+    s === "win" ? "border-emerald-400/70 bg-gradient-to-br from-emerald-950/70 via-emerald-900/30 to-slate-900 shadow-[0_0_46px_-10px_rgba(16,185,129,0.55)]" :
+    s === "loss" ? "border-red-500/80 bg-gradient-to-br from-red-950/70 via-red-900/30 to-slate-900 shadow-[0_0_46px_-10px_rgba(239,68,68,0.55)]" :
+    "border-amber-500/30 bg-gradient-to-br from-amber-950/60 via-amber-900/30 to-slate-900 shadow-xl";
   return (
-    <article className="relative overflow-hidden rounded-3xl border border-amber-500/30 bg-gradient-to-br from-amber-950/60 via-amber-900/30 to-slate-900 p-6 shadow-xl md:p-8">
+    <article className={`relative overflow-hidden rounded-3xl border p-6 md:p-8 ${cardAccent}`}>
       <div className="absolute -top-10 -right-10 h-40 w-40 rounded-full bg-amber-500/10 blur-3xl" />
+      {graded && (
+        <div className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center select-none">
+          <div className={`text-8xl md:text-9xl font-black uppercase tracking-tighter ${s === "win" ? "text-emerald-400/[0.10]" : "text-red-500/[0.12]"}`}>
+            {s === "win" ? "WON" : "LOST"}
+          </div>
+        </div>
+      )}
 
       <div className="relative z-10">
         <div className="flex flex-wrap items-center justify-between gap-3">

@@ -252,12 +252,32 @@ function StatusPill({ live }: { live: LivePickState }) {
         <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" /> Live
       </span>
     );
-  if (live.state === "final")
+  if (live.state === "final") {
+    if (live.result === "won")
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/50 bg-emerald-400/15 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest text-emerald-300">
+          ✓ Won
+        </span>
+      );
+    if (live.result === "lost")
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full border border-red-500/50 bg-red-500/15 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest text-red-400">
+          ✗ Lost
+        </span>
+      );
+    if (live.result === "push")
+      return (
+        <span className="inline-flex items-center rounded-full border border-white/20 bg-white/10 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest text-white/60">
+          Push
+        </span>
+      );
+    // Final but ungradable live (props/NRFI graded later by the registry).
     return (
       <span className="inline-flex items-center rounded-full border border-white/15 bg-white/5 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest text-white/50">
         Final
       </span>
     );
+  }
   return null;
 }
 
@@ -292,12 +312,27 @@ export function LiveMeter({ live, picked }: { live: LivePickState; picked: strin
 
 // ─── Compact, clickable SUMMARY card (used on category pages) ──────────────────
 
-export function PickSummaryCard({ pick, href, index, live }: { pick: DeepPick; href: string; index?: number; live?: LivePickState | null }) {
+export function PickSummaryCard({ pick, href, index, live, hideResultWatermark }: { pick: DeepPick; href: string; index?: number; live?: LivePickState | null; hideResultWatermark?: boolean }) {
   const startTime = formatGameDateTimeET(pick.startTime) || TIME_TBD;
   const showLive = !!live && live.state !== "pre";
+  // A graded straight should SHOUT its result — same prominence as the parlay watermark.
+  const finalResult = live?.state === "final" ? live.result : null;
+  const cardAccent =
+    finalResult === "won" ? "border-emerald-400/70 bg-gradient-to-br from-emerald-500/[0.16] to-emerald-500/[0.03] shadow-[0_0_36px_-10px_rgba(16,185,129,0.55)]" :
+    finalResult === "lost" ? "border-red-500/80 bg-gradient-to-br from-red-500/[0.20] to-red-500/[0.03] shadow-[0_0_36px_-10px_rgba(239,68,68,0.55)]" :
+    finalResult === "push" ? "border-white/25 bg-white/[0.05]" :
+    "border-white/10 bg-white/[0.03] hover:border-primary/50";
   return (
     <Link href={href} className="block group">
-      <article className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 transition-all hover:border-primary/50">
+      <article className={`relative overflow-hidden rounded-2xl border p-5 transition-all ${cardAccent}`}>
+        {!hideResultWatermark && (finalResult === "won" || finalResult === "lost") && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center select-none">
+            <div className={`text-7xl md:text-8xl font-black uppercase tracking-tighter ${finalResult === "won" ? "text-emerald-400/[0.10]" : "text-red-500/[0.12]"}`}>
+              {finalResult === "won" ? "WON" : "LOST"}
+            </div>
+          </div>
+        )}
+        <div className="relative">
         <div className="flex items-center justify-between gap-2 text-[10px] font-black uppercase tracking-widest text-white/30">
           <span className="truncate">
             {typeof index === "number" && <span className="text-primary">#{index + 1} · </span>}
@@ -346,6 +381,7 @@ export function PickSummaryCard({ pick, href, index, live }: { pick: DeepPick; h
 
         <div className="mt-3 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-primary/70 group-hover:text-primary transition-colors">
           {live?.state === "final" ? "View result & breakdown →" : "View full breakdown →"}
+        </div>
         </div>
       </article>
     </Link>

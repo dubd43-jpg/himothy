@@ -265,6 +265,7 @@ export function ProductPickPage({
                     index={i}
                     href={`/pick/${pick.gameId}?board=${board}&from=${PRODUCT_PATH[product]}`}
                     live={computeLiveState(pick, liveMap[pick.gameId])}
+                    hideResultWatermark
                   />
                 ))}
                 {extraLegs.map((leg, i) => (
