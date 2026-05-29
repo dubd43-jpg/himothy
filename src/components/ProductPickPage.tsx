@@ -208,6 +208,22 @@ export function ProductPickPage({
           {accentNote && <p className="mt-4 text-xs font-semibold text-primary/80">{accentNote}</p>}
         </div>
 
+        {/* HOW TO BET — straights only. These plays are priced to win as single bets; do NOT
+            combine them into a parlay (that piles on juice and works against the bettor).
+            Hidden on the Parlay Plan page, which IS the parlay product. */}
+        {product !== "parlayPlan" && (
+          <div className="rounded-2xl border border-amber-400/30 bg-amber-400/[0.07] px-4 py-3.5 md:px-5">
+            <div className="flex items-start gap-3">
+              <Trophy className="mt-0.5 h-5 w-5 shrink-0 text-amber-300" />
+              <p className="text-sm leading-relaxed text-white/75">
+                <span className="font-black uppercase tracking-wide text-amber-300">Bet these as straights (single bets)</span> — one ticket per play.{" "}
+                <span className="font-black text-white">Do not put them in a parlay.</span> Every pick here is priced to win as a single straight bet; stacking them into a parlay just multiplies the juice and works against you. Want a parlay? Our{" "}
+                <Link href="/parlay-plan" className="font-black text-primary hover:underline">$10 Parlay Plan</Link>{" "}is built specifically for that.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Picks */}
         {loading ? (
           <div className="flex flex-col items-center justify-center gap-4 py-24">

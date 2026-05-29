@@ -1192,6 +1192,16 @@ function DeepResearchSection({ board }: { board: string }) {
             <HeroTile href="/vip-picks" icon={ShieldCheck} title="VIP 4-Pack" subtitle="4 picks" count={data.vip4Pack.length} unit="pick" accent="sky" stats={statsFor('VIP 4-Pack')} />
           </div>
 
+          {/* HOW TO BET — the flagship products are STRAIGHTS (single bets). Tell customers not
+              to parlay them; the $10 Parlay Plan is the only parlay product. */}
+          <div className="rounded-2xl border border-amber-400/30 bg-amber-400/[0.07] px-4 py-3">
+            <p className="text-xs md:text-sm leading-relaxed text-white/75">
+              <span className="font-black uppercase tracking-wide text-amber-300">Bet the Grand Slam, Pressure Pack &amp; VIP as straights</span> — single bets, one ticket each.{" "}
+              <span className="font-black text-white">Don&apos;t parlay them.</span> Every play is priced to win on its own; combining them into a parlay just stacks the juice against you. The{" "}
+              <Link href="/parlay-plan" className="font-black text-primary hover:underline">$10 Parlay Plan</Link>{" "}is the only product built for parlays.
+            </p>
+          </div>
+
           {/* 2. SECONDARY ROW — Personal Pick + Parlay Plan */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <CategoryTile href="/himothy-picks" icon={Crown} title="HIMOTHY Personal Pick" count={1} unit="prop" restingLabel="Best prop across every sport" stats={statsFor('Personal Pick')} />
