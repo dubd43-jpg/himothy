@@ -3044,6 +3044,12 @@ function assembleSportParlay(sport: string, legs: SportParlayLeg[], singleGame: 
     const ml = parseAmericanOdds(l.odds);
     decimal *= ml != null ? mlToDecimal(ml) : mlToDecimal(-110);
   }
+  // SAME-GAME PARLAY HAIRCUT: when every leg is from one game, the legs are correlated, so
+  // a book prices the SGP BELOW the naive product. Quote a conservative ~70% of the naive
+  // profit so our advertised payout doesn't overstate what Hard Rock actually pays.
+  if (singleGame && decimal > 1) {
+    decimal = 1 + (decimal - 1) * 0.7;
+  }
   decimal = Math.round(decimal * 100) / 100;
   const startTimes = legs.map((l) => l.startTime).filter(Boolean) as string[];
   const earliestStart = startTimes.length

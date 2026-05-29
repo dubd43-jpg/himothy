@@ -102,6 +102,25 @@ function slateVersionKey(board: string) {
   return `${SLATE_RULES_VERSION}|${todayEtKey()}|${board}`;
 }
 
+// Generic per-ET-day FREEZE for any keyed computation (e.g. sport-parlays, power20). Same
+// model as the main board: compute once per ET-day, persist to Postgres so every Vercel
+// instance serves the SAME frozen result all day — so these "posted picks" don't shift
+// mid-day. Pass force=true (admin only) to regenerate.
+export async function getFrozenDaily(key: string, compute: () => Promise<any>, force = false): Promise<any> {
+  const etDate = todayEtKey();
+  const memKey = `${SLATE_RULES_VERSION}|${etDate}|${key}`;
+  if (!force) {
+    const mem = boardCache.get(memKey);
+    if (mem) return mem.data;
+    const persisted = await readPersistedSlate(SLATE_RULES_VERSION, etDate, key);
+    if (persisted) { boardCache.set(memKey, { data: persisted, generatedAt: Date.now() }); return persisted; }
+  }
+  const data = await compute();
+  boardCache.set(memKey, { data, generatedAt: Date.now() });
+  await writePersistedSlate(SLATE_RULES_VERSION, etDate, key, data);
+  return data;
+}
+
 async function enrichWithBucketStats(result: any) {
   if (!hasDatabase() || !result) return result;
   try {
