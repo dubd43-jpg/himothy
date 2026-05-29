@@ -1,16 +1,20 @@
 import { NextResponse } from 'next/server';
 import { getBoardMainPick } from '@/services/pickRegistryService';
+import { getEtDateKey } from '@/lib/officialTracking';
 import { hasDatabase } from '@/lib/hasDatabase';
 
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const boardDate = searchParams.get('boardDate') || undefined;
+    // Report the Eastern board date, never the server's UTC date — after 8pm ET the UTC
+    // clock has already rolled to tomorrow, which made this endpoint claim the wrong day.
+    const reportedDate = boardDate || getEtDateKey();
 
     if (!hasDatabase()) {
       return NextResponse.json({
         success: true,
-        boardDate: boardDate || new Date().toISOString().slice(0, 10),
+        boardDate: reportedDate,
         hasMainPick: false,
         mainPick: null,
       });
@@ -20,7 +24,7 @@ export async function GET(req: Request) {
 
     return NextResponse.json({
       success: true,
-      boardDate: boardDate || new Date().toISOString().slice(0, 10),
+      boardDate: reportedDate,
       hasMainPick: Boolean(mainPick),
       mainPick,
     });

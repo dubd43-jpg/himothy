@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getCachedBoard, getPersistedBoardForDate } from '@/services/dailyBoardCache';
 import { fetchLiveSlate } from '@/lib/liveSlate';
-import { getBoardMainPick } from '@/services/pickRegistryService';
+import { getRegistryBoardPicks } from '@/services/pickRegistryService';
 import { isAdminRequest } from '@/lib/adminAuth';
 
 // Production health check. Every bug that has reached a paying customer — WON/LOST never
@@ -128,15 +128,17 @@ export async function GET(req: Request) {
     });
 
     // 6) Today's board recorded in the permanent registry (the "0-0, never recorded" bug).
-    // Timing-aware: the record-board cron runs ~9am ET, so before that an empty registry is
-    // expected — warn, don't fail.
+    // Counts the actual recorded public picks for today's ET board (NOT the is_main_pick
+    // flag — this system never sets that, so a main-pick lookup always reads empty). Timing-
+    // aware: the record-board cron runs ~9am ET, so before that an empty registry is expected.
     try {
-      const recorded = await getBoardMainPick(etDash);
+      const recorded = await getRegistryBoardPicks({});
+      const graded = recorded.filter((p: any) => p.status === 'graded').length;
       const etHour = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: '2-digit', hour12: false }).format(new Date()));
       checks.push({
-        id: 'board-recorded', ok: Boolean(recorded) || etHour < 10, severity: 'warn',
-        detail: recorded
-          ? `Today's board is recorded in the registry (main pick: ${recorded.selection ?? 'set'}).`
+        id: 'board-recorded', ok: recorded.length > 0 || etHour < 10, severity: 'warn',
+        detail: recorded.length > 0
+          ? `Today's board is in the registry: ${recorded.length} picks (${graded} graded).`
           : etHour < 10
             ? `Not yet recorded — expected before the ~9am ET record cron (it is ${etHour}:00 ET).`
             : `Today's board is NOT in the registry and it is past 10am ET — record-board cron may have failed.`,

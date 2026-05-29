@@ -30,6 +30,7 @@
 
 import { LEAGUE_URLS } from '@/lib/validation';
 import { fetchWithTimeout } from '@/lib/fetchWithTimeout';
+import { getEtDateKey } from '@/lib/officialTracking';
 import { generateDeepExplanation } from '@/services/aiGenerator';
 import { getSharpIntel, type SharpIntelContext, type SharpFlag } from '@/services/sharpIntelService';
 
@@ -2496,7 +2497,7 @@ export async function runDailyDeepResearch(board: BoardType = 'north-american'):
     if (total < 4) {
       return {
         generatedAt: now.toISOString(),
-        boardDate: now.toISOString().slice(0, 10),
+        boardDate: getEtDateKey(now),
         board,
         grandSlam: null,
         pressurePack: [],
@@ -2515,7 +2516,7 @@ export async function runDailyDeepResearch(board: BoardType = 'north-american'):
 
   return {
     generatedAt: now.toISOString(),
-    boardDate: now.toISOString().slice(0, 10),
+    boardDate: getEtDateKey(now),
     board,
     grandSlam: grandSlam ? (enrichedMap.get(grandSlam.gameId) || grandSlam) : null,
     pressurePack: pressurePack.map((p) => enrichedMap.get(p.gameId) || p),
@@ -2898,7 +2899,7 @@ export async function runPower20Research(excludedKeys: Set<string> = new Set()):
 
   return {
     generatedAt: now.toISOString(),
-    boardDate: now.toISOString().slice(0, 10),
+    boardDate: getEtDateKey(now),
     totalScanned,
     picks,
     parlayGroups,
