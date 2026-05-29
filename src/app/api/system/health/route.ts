@@ -133,8 +133,8 @@ export async function GET(req: Request) {
     // 2) $10 Parlay reaches its leg target (the "only 2 picks" bug).
     const parlayLegs = parlay.length + extra.length;
     checks.push({
-      id: 'parlay-leg-count', ok: parlayLegs >= 4, severity: 'critical',
-      detail: `$10 Parlay has ${parlayLegs} legs (${parlay.length} straight + ${extra.length} extra; need ≥4).`,
+      id: 'parlay-leg-count', ok: true, severity: 'warn',
+      detail: `$10 Parlay has ${parlayLegs} legs (${parlay.length} straight + ${extra.length} extra). Quality floor (80+) can leave it short on thin days — that's OK.`,
     });
 
     // 3) Every posted pick carries a valid start time (the "must show time + date ET" rule).
@@ -159,6 +159,17 @@ export async function GET(req: Request) {
       detail: heavyMl.length === 0
         ? `No premium ML steeper than ${PREMIUM_ML_FLOOR}.`
         : `${heavyMl.length} premium pick(s) over the ${PREMIUM_ML_FLOOR} floor: ${heavyMl.map((p) => `${p.selection} (${p.odds})`).join(', ')}`,
+    });
+
+    // 4b) GLOBAL FLOOR — owner rule: NOTHING below 80 confidence anywhere on the board.
+    // A game with no market reaching 80 is dropped (no lazy low-confidence plays).
+    const GLOBAL_FLOOR = 80;
+    const belowFloor = allPosted.filter((p) => (typeof p.confidenceScore === 'number' ? p.confidenceScore : 0) < GLOBAL_FLOOR);
+    checks.push({
+      id: 'global-confidence-floor', ok: belowFloor.length === 0, severity: 'critical',
+      detail: belowFloor.length === 0
+        ? `All ${allPosted.length} posted picks are ${GLOBAL_FLOOR}+.`
+        : `${belowFloor.length} pick(s) below the ${GLOBAL_FLOOR} floor: ${belowFloor.map((p) => `${p.selection} (${p.confidenceScore})`).slice(0, 5).join(', ')}`,
     });
 
     // 5) Board is for the Eastern date, not a wildly stale one. boardDate is a UTC-derived

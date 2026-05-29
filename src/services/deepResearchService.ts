@@ -1328,14 +1328,17 @@ function scoreGame(signals: Omit<GameSignals, 'confirmingSignals'>): number {
   return Math.max(0, Math.min(100, Math.round(score)));
 }
 
-// Owner confidence bands: Grand Slam 96+, Pressure Pack 83–95, then VIP / Parlay below.
-// A play only earns a tier if it clears that tier's confidence floor — we don't promote a
-// weaker pick up just to fill a slot (see the 83 floor enforced in the Pressure backfill).
+// Owner confidence bands: NOTHING below 80 anywhere (the GLOBAL_FLOOR) — Grand Slam 96+,
+// Pressure 83–95, VIP/Parlay 80–82. A play only earns a tier if it clears that tier's floor;
+// we never promote a weaker pick up to fill a slot. A game with no market reaching 80 is
+// dropped entirely (no lazy 67s, including on Big Games) — quality over quantity.
+const GLOBAL_FLOOR = 80;
 function assignTier(score: number, confirmingSignals: number): ProductTier {
+  if (score < GLOBAL_FLOOR) return 'PASS';
   if (score >= 96 && confirmingSignals >= 6) return 'GRAND_SLAM';
   if (score >= 83 && confirmingSignals >= 5) return 'PRESSURE_PACK';
-  if (score >= 67 && confirmingSignals >= 4) return 'VIP_4_PACK';
-  if (score >= 54 && confirmingSignals >= 3) return 'PARLAY_PLAN';
+  if (confirmingSignals >= 4) return 'VIP_4_PACK';
+  if (confirmingSignals >= 3) return 'PARLAY_PLAN';
   return 'PASS';
 }
 

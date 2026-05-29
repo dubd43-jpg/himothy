@@ -272,6 +272,20 @@ export async function getPersistedBoardForDate(etDate: string, board: string): P
   }
 }
 
+// GLOBAL FLOOR — owner rule: nothing below 80 confidence anywhere. Run AFTER the full market
+// hunt (totals + props can lift a pick), so a game gets every chance to clear the bar; if it
+// still can't, it's dropped — including a weak Big Game (marquee). No lazy low-confidence
+// plays anywhere. Quality over quantity (the owner accepts a thinner board on light days).
+function applyConfidenceFloor(result: any, floor: number) {
+  if (!result) return result;
+  const ok = (p: any) => (typeof p?.confidenceScore === 'number' ? p.confidenceScore : 0) >= floor;
+  if (result.grandSlam && !ok(result.grandSlam)) result.grandSlam = null;
+  for (const k of ['pressurePack', 'vip4Pack', 'parlayPlan', 'marquee', 'asleepPicks']) {
+    if (Array.isArray(result[k])) result[k] = result[k].filter(ok);
+  }
+  return result;
+}
+
 export async function getOrComputeBoard(board: BoardType): Promise<any> {
   const etDate = todayEtKey();
   const key = `${SLATE_RULES_VERSION}|${etDate}|${board}`;
@@ -295,6 +309,7 @@ export async function getOrComputeBoard(board: BoardType): Promise<any> {
   // that's clearly the stronger play, then float the best-priced plays to the top.
   await enrichWithBestMarket(result);
   rankByValue(result);
+  applyConfidenceFloor(result, 80);
   await enrichWithBucketStats(result);
   const valuePool: any[] = [result.grandSlam, ...(result.pressurePack || []), ...(result.vip4Pack || []), ...(result.parlayPlan || []), ...(result.marquee || [])].filter(Boolean);
   (result as any).valuePlays = valuePool
