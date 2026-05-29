@@ -172,15 +172,18 @@ async function enrichWithOdds(result: any) {
   return result;
 }
 
-// BEST-MARKET-PER-GAME: for each featured pick, check whether a total / team total / half /
-// quarter / F5 on that game is a CLEARLY stronger play than the side/run line — and if so,
-// swap the published market to it. Conservative on purpose (high floor + margin) so a strong
-// side or run line keeps its slot; we only flip when a totals-family play is genuinely better.
-// Never removes a market globally — run lines/sides remain the default.
+// BEST-MARKET-PER-GAME: for each featured pick, check EVERY market we can price on that game
+// (full total, team totals, halves, quarters, hockey periods, F5) and publish whichever has
+// the HIGHEST confidence — not just the moneyline/run line. Per the owner: don't be lazy and
+// default to the ML/spread; if a total or team total in the game scores higher, that's the
+// play. We only keep the side/run line when nothing else beats it by the margin.
+// FLOOR is a basic-credibility gate (don't swap into a no-edge total); MARGIN avoids flipping
+// on noise. Was 75/4, which hid genuinely-stronger 68–74 totals behind a moneyline — lowered
+// so the best market actually wins.
 async function enrichWithBestMarket(result: any) {
   if (!hasOddsApi() || !result) return result;
-  const FLOOR = 75;     // a totals-family play must be genuinely strong to take a slot
-  const MARGIN = 4;     // and clearly beat the side's confidence
+  const FLOOR = 58;     // a totals-family play just needs a real edge (base score is 55)
+  const MARGIN = 3;     // and clearly beat the current pick's confidence
   let buildBestMarketSwap: (p: any) => Promise<any>;
   try {
     ({ buildBestMarketSwap } = await import('@/services/deepResearchService'));
