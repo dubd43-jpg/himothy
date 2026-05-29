@@ -14,6 +14,7 @@
 // projections without the market-line edge — the user at least sees player tendencies.
 
 import { getPlayerPropsForGame, type PropLine } from '@/services/oddsApiService';
+import { fetchWithTimeout } from '@/lib/fetchWithTimeout';
 
 const ESPN_BASE_PATHS: Record<string, string> = {
   MLB: 'baseball/mlb',
@@ -78,7 +79,7 @@ async function fetchTeamRoster(league: string, teamId: string, teamName: string,
     return cached.players.map((p) => ({ ...p, teamName, side }));
   }
   try {
-    const r = await fetch(`https://site.api.espn.com/apis/site/v2/sports/${path}/teams/${teamId}/roster`, { cache: 'no-store' });
+    const r = await fetchWithTimeout(`https://site.api.espn.com/apis/site/v2/sports/${path}/teams/${teamId}/roster`, { cache: 'no-store' });
     if (!r.ok) { rosterCache.set(cacheKey, { players: [], at: Date.now() }); return []; }
     const data = await r.json();
     const players: RosterPlayer[] = [];
@@ -128,7 +129,7 @@ async function fetchPlayerGameLog(athleteId: string, league: string): Promise<Re
   const path = ESPN_BASE_PATHS[league];
   if (!path || !athleteId) return null;
   try {
-    const r = await fetch(`https://site.web.api.espn.com/apis/common/v3/sports/${path}/athletes/${athleteId}/gamelog`, { cache: 'no-store' });
+    const r = await fetchWithTimeout(`https://site.web.api.espn.com/apis/common/v3/sports/${path}/athletes/${athleteId}/gamelog`, { cache: 'no-store' });
     if (!r.ok) return null;
     const j = await r.json();
     const names: string[] = (j.names || []).map((s: string) => String(s || '').toLowerCase());

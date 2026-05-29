@@ -29,6 +29,7 @@
  */
 
 import { LEAGUE_URLS } from '@/lib/validation';
+import { fetchWithTimeout } from '@/lib/fetchWithTimeout';
 import { generateDeepExplanation } from '@/services/aiGenerator';
 import { getSharpIntel, type SharpIntelContext, type SharpFlag } from '@/services/sharpIntelService';
 
@@ -540,7 +541,7 @@ export async function prewarmClosingLines(
   await Promise.all(Array.from(teamIds.values()).map(async ({ league, baseUrl, teamId }) => {
     try {
       const year = new Date().getFullYear();
-      const res = await fetch(`${baseUrl}/teams/${teamId}/schedule?season=${year}`, { cache: 'no-store' });
+      const res = await fetchWithTimeout(`${baseUrl}/teams/${teamId}/schedule?season=${year}`, { cache: 'no-store' });
       if (!res.ok) return;
       const data = await res.json();
       const events: any[] = data.events || [];
@@ -566,7 +567,7 @@ async function fetchClosingLine(gameId: string, baseUrl: string): Promise<{ spre
     return { spread: cached.spread, overUnder: cached.overUnder, favAbbr: cached.favAbbr };
   }
   try {
-    const res = await fetch(`${baseUrl}/summary?event=${gameId}`, { cache: 'no-store' });
+    const res = await fetchWithTimeout(`${baseUrl}/summary?event=${gameId}`, { cache: 'no-store' });
     if (!res.ok) {
       closingLineCache.set(key, { fetchedAt: Date.now(), spread: null, overUnder: null, favAbbr: null });
       return { spread: null, overUnder: null, favAbbr: null };
@@ -610,7 +611,7 @@ async function fetchGameSummary(gameId: string, baseUrl: string): Promise<any> {
   const cached = summaryCache.get(key);
   if (cached && Date.now() - cached.fetchedAt < SUMMARY_TTL) return cached.data;
   try {
-    const res = await fetch(`${baseUrl}/summary?event=${gameId}`, { cache: 'no-store' });
+    const res = await fetchWithTimeout(`${baseUrl}/summary?event=${gameId}`, { cache: 'no-store' });
     if (!res.ok) return null;
     const data = await res.json();
     summaryCache.set(key, { fetchedAt: Date.now(), data });
@@ -837,7 +838,7 @@ async function fetchTeamForm(league: string, teamId: string): Promise<TeamForm |
   if (cached && Date.now() - cached.fetchedAt < FORM_TTL) return cached.data;
   try {
     const year = new Date().getFullYear();
-    const res = await fetch(`${baseUrl}/teams/${teamId}/schedule?season=${year}`, { cache: 'no-store' });
+    const res = await fetchWithTimeout(`${baseUrl}/teams/${teamId}/schedule?season=${year}`, { cache: 'no-store' });
     if (!res.ok) return null;
     const data = await res.json();
     const events: any[] = data.events || [];

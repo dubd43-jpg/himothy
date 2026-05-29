@@ -27,6 +27,7 @@
  */
 
 import { LEAGUE_URLS } from '@/lib/validation';
+import { fetchWithTimeout } from '@/lib/fetchWithTimeout';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -200,7 +201,7 @@ async function fetchWeather(lat: number, lon: number, gameTimeIso: string): Prom
   try {
     // Open-Meteo: free, no API key, high accuracy
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,precipitation,wind_speed_10m,wind_gusts_10m&wind_speed_unit=mph&temperature_unit=celsius&precipitation_unit=inch&timezone=auto&forecast_days=3`;
-    const res = await fetch(url, { next: { revalidate: 1800 } }); // 30min cache
+    const res = await fetchWithTimeout(url, { next: { revalidate: 1800 } }); // 30min cache
     if (!res.ok) return empty;
 
     const data = await res.json();
@@ -284,7 +285,7 @@ async function fetchActionNetworkGame(league: string, homeTeam: string, awayTeam
   if (!sport) return null;
 
   try {
-    const res = await fetch(`https://api.actionnetwork.com/web/v1/scoreboard/${sport}`, {
+    const res = await fetchWithTimeout(`https://api.actionnetwork.com/web/v1/scoreboard/${sport}`, {
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; sports-research-bot/1.0)' },
       next: { revalidate: 180 },
     });
@@ -397,7 +398,7 @@ async function fetchRecentGames(league: string): Promise<Map<string, Date>> {
       [1, 2, 3].map(async (offset) => {
         const d = new Date();
         d.setDate(d.getDate() - offset);
-        const res = await fetch(`${baseUrl}/scoreboard?dates=${dateStr(d)}`, { next: { revalidate: 1800 } });
+        const res = await fetchWithTimeout(`${baseUrl}/scoreboard?dates=${dateStr(d)}`, { next: { revalidate: 1800 } });
         if (!res.ok) return [];
         const data = await res.json();
         return (data.events || []).filter((e: any) => e.status?.type?.state === 'post');

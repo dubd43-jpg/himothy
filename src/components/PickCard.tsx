@@ -67,8 +67,12 @@ export function PickCard({
           datePart = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: 'numeric', day: 'numeric' }).format(tomorrow);
         }
 
+        // Use the ACTUAL Eastern offset for today (EDT = -0400, EST = -0500) instead of a
+        // hardcoded -0400 that's an hour off all winter.
+        const etShort = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', timeZoneName: 'short' }).format(now);
+        const etGmt = etShort.includes('EST') ? 'GMT-0500' : 'GMT-0400';
         const dateStr = `${datePart} ${gameTime}`;
-        const startTime = new Date(dateStr + " GMT-0400").getTime();
+        const startTime = new Date(`${dateStr} ${etGmt}`).getTime();
         const diff = startTime - now.getTime();
 
         if (isNaN(startTime) || diff <= 0) {

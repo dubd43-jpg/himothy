@@ -7,6 +7,8 @@
 // Quota-safe: free tier is 500 requests/month. We fetch h2h (moneyline) for the US region
 // only (1 credit per league) and cache for 6 hours, so a normal day uses a handful.
 
+import { fetchWithTimeout } from '@/lib/fetchWithTimeout';
+
 const ODDS_API_BASE = 'https://api.the-odds-api.com/v4';
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6h — protects the monthly quota
 
@@ -46,7 +48,7 @@ async function resolveActiveTennisSportKeys(): Promise<{ atp: string[]; wta: str
   if (_tennisKeysCache && Date.now() - _tennisKeysCache.at < TENNIS_KEYS_TTL_MS) return _tennisKeysCache.keys;
   try {
     const url = `${ODDS_API_BASE}/sports?all=false&apiKey=${process.env.THE_ODDS_API_KEY}`;
-    const res = await fetch(url, { cache: 'no-store' });
+    const res = await fetchWithTimeout(url, { cache: 'no-store' });
     if (!res.ok) return { atp: [], wta: [] };
     const sports: any[] = await res.json();
     const atp: string[] = [];
@@ -129,7 +131,7 @@ async function fetchLeagueOdds(league: string): Promise<LeagueOddsMap> {
   try {
     for (const sport of sportKeys) {
       const url = `${ODDS_API_BASE}/sports/${sport}/odds/?apiKey=${process.env.THE_ODDS_API_KEY}&regions=us&markets=h2h&oddsFormat=american`;
-      const res = await fetch(url, { cache: 'no-store' });
+      const res = await fetchWithTimeout(url, { cache: 'no-store' });
       if (!res.ok) continue;
       anyOk = true;
       const games: any[] = await res.json();
@@ -212,7 +214,7 @@ export async function getTotalsForLeague(league: string): Promise<Record<string,
   const miss = () => { totalsCache.set(league, { data: {}, at: Date.now() }); return {}; };
   try {
     const url = `${ODDS_API_BASE}/sports/${sport}/odds/?apiKey=${process.env.THE_ODDS_API_KEY}&regions=us&markets=totals&oddsFormat=american`;
-    const res = await fetch(url, { cache: 'no-store' });
+    const res = await fetchWithTimeout(url, { cache: 'no-store' });
     if (!res.ok) return miss();
     const games: any[] = await res.json();
     const map: Record<string, TotalsLine> = {};
@@ -320,13 +322,13 @@ export async function getAltPlayerPropsForGame(
   if (cached && Date.now() - cached.at < ALT_PROPS_TTL_MS) return cached.data;
   const miss = () => { altPropsCache.set(key, { data: [], at: Date.now() }); return []; };
   try {
-    const evRes = await fetch(`${ODDS_API_BASE}/sports/${sport}/events?apiKey=${process.env.THE_ODDS_API_KEY}`, { cache: 'no-store' });
+    const evRes = await fetchWithTimeout(`${ODDS_API_BASE}/sports/${sport}/events?apiKey=${process.env.THE_ODDS_API_KEY}`, { cache: 'no-store' });
     if (!evRes.ok) return miss();
     const events: any[] = await evRes.json();
     const ev = events.find((e) => normTeam(e.home_team) === normTeam(homeTeam) && normTeam(e.away_team) === normTeam(awayTeam));
     if (!ev?.id) return miss();
     const url = `${ODDS_API_BASE}/sports/${sport}/events/${ev.id}/odds?apiKey=${process.env.THE_ODDS_API_KEY}&regions=us&markets=${markets.join(',')}&oddsFormat=american`;
-    const res = await fetch(url, { cache: 'no-store' });
+    const res = await fetchWithTimeout(url, { cache: 'no-store' });
     if (!res.ok) return miss();
     const data = await res.json();
 
@@ -388,7 +390,7 @@ export async function getPlayerPropsForGame(league: string, awayTeam: string, ho
   const miss = () => { propsCache.set(key, { data: {}, at: Date.now() }); return {}; };
   try {
     // 1. Find the event id (the /events list is free — no quota cost).
-    const evRes = await fetch(`${ODDS_API_BASE}/sports/${sport}/events?apiKey=${process.env.THE_ODDS_API_KEY}`, { cache: 'no-store' });
+    const evRes = await fetchWithTimeout(`${ODDS_API_BASE}/sports/${sport}/events?apiKey=${process.env.THE_ODDS_API_KEY}`, { cache: 'no-store' });
     if (!evRes.ok) return miss();
     const events: any[] = await evRes.json();
     const ev = events.find((e) => normTeam(e.home_team) === normTeam(homeTeam) && normTeam(e.away_team) === normTeam(awayTeam));
@@ -396,7 +398,7 @@ export async function getPlayerPropsForGame(league: string, awayTeam: string, ho
 
     // 2. Fetch player props for that single event (this is what costs quota).
     const url = `${ODDS_API_BASE}/sports/${sport}/events/${ev.id}/odds?apiKey=${process.env.THE_ODDS_API_KEY}&regions=us&markets=${markets.join(',')}&oddsFormat=american`;
-    const res = await fetch(url, { cache: 'no-store' });
+    const res = await fetchWithTimeout(url, { cache: 'no-store' });
     if (!res.ok) return miss();
     const data = await res.json();
 
@@ -462,14 +464,14 @@ export async function getF5InsightForGame(awayTeam: string, homeTeam: string): P
   if (cached && Date.now() - cached.at < F5_TTL_MS) return cached.data;
   const miss = () => { f5Cache.set(key, { data: null, at: Date.now() }); return null; };
   try {
-    const evRes = await fetch(`${ODDS_API_BASE}/sports/${sport}/events?apiKey=${process.env.THE_ODDS_API_KEY}`, { cache: 'no-store' });
+    const evRes = await fetchWithTimeout(`${ODDS_API_BASE}/sports/${sport}/events?apiKey=${process.env.THE_ODDS_API_KEY}`, { cache: 'no-store' });
     if (!evRes.ok) return miss();
     const events: any[] = await evRes.json();
     const ev = events.find((e) => normTeam(e.home_team) === normTeam(homeTeam) && normTeam(e.away_team) === normTeam(awayTeam));
     if (!ev?.id) return miss();
     const markets = 'totals_1st_5_innings,spreads_1st_5_innings,h2h_1st_5_innings';
     const url = `${ODDS_API_BASE}/sports/${sport}/events/${ev.id}/odds?apiKey=${process.env.THE_ODDS_API_KEY}&regions=us&markets=${markets}&oddsFormat=american`;
-    const res = await fetch(url, { cache: 'no-store' });
+    const res = await fetchWithTimeout(url, { cache: 'no-store' });
     if (!res.ok) return miss();
     const data = await res.json();
     const home = data.home_team || homeTeam;
@@ -546,13 +548,13 @@ export async function getAnytimeScorers(league: string, awayTeam: string, homeTe
   if (cached && Date.now() - cached.at < SCORER_TTL_MS) return cached.data;
   const miss = () => { scorerCache.set(key, { data: [], at: Date.now() }); return []; };
   try {
-    const evRes = await fetch(`${ODDS_API_BASE}/sports/${sport}/events?apiKey=${process.env.THE_ODDS_API_KEY}`, { cache: 'no-store' });
+    const evRes = await fetchWithTimeout(`${ODDS_API_BASE}/sports/${sport}/events?apiKey=${process.env.THE_ODDS_API_KEY}`, { cache: 'no-store' });
     if (!evRes.ok) return miss();
     const events: any[] = await evRes.json();
     const ev = events.find((e) => normTeam(e.home_team) === normTeam(homeTeam) && normTeam(e.away_team) === normTeam(awayTeam));
     if (!ev?.id) return miss();
     const url = `${ODDS_API_BASE}/sports/${sport}/events/${ev.id}/odds?apiKey=${process.env.THE_ODDS_API_KEY}&regions=us&markets=${market}&oddsFormat=american`;
-    const res = await fetch(url, { cache: 'no-store' });
+    const res = await fetchWithTimeout(url, { cache: 'no-store' });
     if (!res.ok) return miss();
     const data = await res.json();
     const acc: Record<string, { prices: number[]; best: number | null; bestBook: string | null }> = {};
@@ -616,7 +618,7 @@ export async function getOutrightContenders(sportKey: string, title: string): Pr
   const miss = () => { outrightCache.set(sportKey, { data: null, at: Date.now() }); return null; };
   try {
     const url = `${ODDS_API_BASE}/sports/${sportKey}/odds?apiKey=${process.env.THE_ODDS_API_KEY}&regions=us&markets=outrights&oddsFormat=american`;
-    const res = await fetch(url, { cache: 'no-store' });
+    const res = await fetchWithTimeout(url, { cache: 'no-store' });
     if (!res.ok) return miss();
     const data: any[] = await res.json();
     if (!data || data.length === 0) return miss();
@@ -676,7 +678,7 @@ async function listActiveOutrightSports(prefixes: string[]): Promise<ActiveSport
     return sportsCache.data.filter((s) => prefixes.some((p) => s.key.startsWith(p)));
   }
   try {
-    const res = await fetch(`${ODDS_API_BASE}/sports?apiKey=${process.env.THE_ODDS_API_KEY}`, { cache: 'no-store' });
+    const res = await fetchWithTimeout(`${ODDS_API_BASE}/sports?apiKey=${process.env.THE_ODDS_API_KEY}`, { cache: 'no-store' });
     if (!res.ok) return [];
     const all: any[] = await res.json();
     const active: ActiveSportInfo[] = (all || [])
@@ -754,13 +756,13 @@ export async function getAltLinesForGame(league: string, awayTeam: string, homeT
   const miss = () => { altLinesCache.set(key, { data: null, at: Date.now() }); return null; };
   try {
     // Find the event id (free).
-    const evRes = await fetch(`${ODDS_API_BASE}/sports/${sport}/events?apiKey=${process.env.THE_ODDS_API_KEY}`, { cache: 'no-store' });
+    const evRes = await fetchWithTimeout(`${ODDS_API_BASE}/sports/${sport}/events?apiKey=${process.env.THE_ODDS_API_KEY}`, { cache: 'no-store' });
     if (!evRes.ok) return miss();
     const events: any[] = await evRes.json();
     const ev = events.find((e) => normTeam(e.home_team) === normTeam(homeTeam) && normTeam(e.away_team) === normTeam(awayTeam));
     if (!ev?.id) return miss();
     const url = `${ODDS_API_BASE}/sports/${sport}/events/${ev.id}/odds?apiKey=${process.env.THE_ODDS_API_KEY}&regions=us&markets=${markets.join(',')}&oddsFormat=american`;
-    const res = await fetch(url, { cache: 'no-store' });
+    const res = await fetchWithTimeout(url, { cache: 'no-store' });
     if (!res.ok) return miss();
     const data = await res.json();
     const home = data.home_team || homeTeam;

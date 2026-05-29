@@ -15,7 +15,7 @@ export const metadata = pageMeta({
 });
 
 export default function KboPicksTodayPage() {
-  const today = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+  const today = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'America/New_York' });
   return (
     <PicksPageTemplate
       sport="KBO"

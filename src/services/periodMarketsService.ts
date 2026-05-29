@@ -21,6 +21,7 @@
 // tendency on the full-game total, that's an edge play.
 
 import { LEAGUE_TO_SPORT, normTeam } from './oddsApiService';
+import { fetchWithTimeout } from '@/lib/fetchWithTimeout';
 
 const ODDS_API_BASE = 'https://api.the-odds-api.com/v4';
 
@@ -102,14 +103,14 @@ export async function getPeriodMarketsForGame(
   if (cached && Date.now() - cached.at < PERIOD_TTL_MS) return cached.data;
 
   try {
-    const evRes = await fetch(`${ODDS_API_BASE}/sports/${sport}/events?apiKey=${process.env.THE_ODDS_API_KEY}`, { cache: 'no-store' });
+    const evRes = await fetchWithTimeout(`${ODDS_API_BASE}/sports/${sport}/events?apiKey=${process.env.THE_ODDS_API_KEY}`, { cache: 'no-store' });
     if (!evRes.ok) { periodCache.set(cacheKey, { data: null, at: Date.now() }); return null; }
     const events: any[] = await evRes.json();
     const ev = events.find((e) => normTeam(e.home_team) === normTeam(homeTeam) && normTeam(e.away_team) === normTeam(awayTeam));
     if (!ev?.id) { periodCache.set(cacheKey, { data: null, at: Date.now() }); return null; }
 
     const url = `${ODDS_API_BASE}/sports/${sport}/events/${ev.id}/odds?apiKey=${process.env.THE_ODDS_API_KEY}&regions=us&markets=${markets.join(',')}&oddsFormat=american`;
-    const res = await fetch(url, { cache: 'no-store' });
+    const res = await fetchWithTimeout(url, { cache: 'no-store' });
     if (!res.ok) { periodCache.set(cacheKey, { data: null, at: Date.now() }); return null; }
     const data = await res.json();
 
