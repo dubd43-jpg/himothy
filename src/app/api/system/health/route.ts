@@ -72,19 +72,52 @@ export async function GET(req: Request) {
     const parlay: any[] = board.parlayPlan ?? [];
     const extra: any[] = board.parlayExtraLegs ?? [];
 
-    // 1) Boards non-empty (the empty-board / thin-board bug).
+    // 1) The engine actually RAN (distinguishes a real crash/empty from a legit thin day).
+    // Under the owner's quality bands (Grand Slam 96+, Pressure 83+), premium tiers are
+    // ALLOWED to be empty when nothing clears the floor — so tier counts are warnings, not
+    // failures. A board that scanned zero games / scored nothing IS a failure.
+    const scanned = Number(board.totalGamesScanned ?? 0);
+    const scoredCount = Array.isArray(board.allScored) ? board.allScored.length : 0;
     checks.push({
-      id: 'board-grand-slam', ok: Boolean(gs), severity: 'critical',
-      detail: gs ? `Grand Slam set: ${gs.selection}` : 'Grand Slam is EMPTY — board has no headline pick.',
+      id: 'board-computed', ok: scanned > 0 || scoredCount > 0, severity: 'critical',
+      detail: scanned > 0 || scoredCount > 0
+        ? `Engine ran: scanned ${scanned} games, ${scoredCount} scored picks.`
+        : 'Engine produced NOTHING — scanned 0 games and 0 scored picks (real failure, not a thin day).',
+    });
+
+    // Tier fill is informational now — quality bands mean these can be legitimately empty.
+    checks.push({
+      id: 'board-grand-slam', ok: true, severity: 'warn',
+      detail: gs ? `Grand Slam set: ${gs.selection} (conf ${gs.confidenceScore}).` : 'No Grand Slam today — nothing cleared the 96 floor (correct, not a bug).',
     });
     checks.push({
-      id: 'board-pressure', ok: pressure.length >= 2, severity: 'critical',
-      detail: `Pressure Pack has ${pressure.length} (need ≥2).`,
+      id: 'board-pressure', ok: true, severity: 'warn',
+      detail: `Pressure Pack has ${pressure.length} pick(s) (83+ quality floor; thin is OK).`,
     });
     checks.push({
-      id: 'board-vip', ok: vip.length >= 4, severity: 'critical',
-      detail: `VIP 4-Pack has ${vip.length} (need ≥4).`,
+      id: 'board-vip', ok: true, severity: 'warn',
+      detail: `VIP 4-Pack has ${vip.length} pick(s).`,
     });
+
+    // 1b) CONFIDENCE BANDS (owner rule). If a Grand Slam exists it MUST be 96+. Every
+    // Pressure pick MUST be 83+. These are hard guarantees — a sub-floor pick in a premium
+    // tier is a real defect, even though an EMPTY tier is fine.
+    if (gs) {
+      const c = Number(gs.confidenceScore ?? 0);
+      checks.push({
+        id: 'grand-slam-confidence-floor', ok: c >= 96, severity: 'critical',
+        detail: c >= 96 ? `Grand Slam confidence ${c} ≥ 96.` : `Grand Slam "${gs.selection}" is only ${c} — below the 96 floor. It should NOT be a Grand Slam.`,
+      });
+    }
+    const weakPressure = pressure.filter((p: any) => Number(p.confidenceScore ?? 0) < 83);
+    if (pressure.length > 0) {
+      checks.push({
+        id: 'pressure-confidence-floor', ok: weakPressure.length === 0, severity: 'critical',
+        detail: weakPressure.length === 0
+          ? `All ${pressure.length} Pressure picks are 83+.`
+          : `${weakPressure.length} Pressure pick(s) below the 83 floor: ${weakPressure.map((p: any) => `${p.selection} (${p.confidenceScore})`).join(', ')}`,
+      });
+    }
 
     // 2) $10 Parlay reaches its leg target (the "only 2 picks" bug).
     const parlayLegs = parlay.length + extra.length;

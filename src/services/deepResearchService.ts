@@ -1340,13 +1340,20 @@ function scoreGame(signals: Omit<GameSignals, 'confirmingSignals'>): number {
   return Math.max(0, Math.min(100, Math.round(score)));
 }
 
+// Owner confidence bands: Grand Slam 96+, Pressure Pack 83–95, then VIP / Parlay below.
+// A play only earns a tier if it clears that tier's confidence floor — we don't promote a
+// weaker pick up just to fill a slot (see the 83 floor enforced in the Pressure backfill).
 function assignTier(score: number, confirmingSignals: number): ProductTier {
-  if (score >= 88 && confirmingSignals >= 6) return 'GRAND_SLAM';
-  if (score >= 79 && confirmingSignals >= 5) return 'PRESSURE_PACK';
+  if (score >= 96 && confirmingSignals >= 6) return 'GRAND_SLAM';
+  if (score >= 83 && confirmingSignals >= 5) return 'PRESSURE_PACK';
   if (score >= 67 && confirmingSignals >= 4) return 'VIP_4_PACK';
   if (score >= 54 && confirmingSignals >= 3) return 'PARLAY_PLAN';
   return 'PASS';
 }
+
+// Pressure Pack confidence floor (owner rule: 83–95). Used to gate the thin-slate backfill
+// so Pressure never gets a sub-83 play.
+const PRESSURE_FLOOR = 83;
 
 // ─── Pick Selection by Sport Style ───────────────────────────────────────────
 
@@ -2322,7 +2329,9 @@ export async function runDailyDeepResearch(board: BoardType = 'north-american'):
     return ml != null && ml < PREMIUM_ML_FLOOR;
   };
 
-  const GRAND_SLAM_FLOOR = 88;
+  // Owner rule: if it's not a 96+, it's NOT a Grand Slam. On days when nothing clears 96
+  // there is simply no Grand Slam — we never crown a weaker play just to fill the slot.
+  const GRAND_SLAM_FLOOR = 96;
   const isGrandSlamEligible = (p: DeepPickResult): boolean => {
     if (p.confidenceScore < GRAND_SLAM_FLOOR) return false;
     if (p.signals.keyInjuryOnPickSide) return false;
@@ -2387,23 +2396,26 @@ export async function runDailyDeepResearch(board: BoardType = 'north-american'):
       target.push({ ...p, tier: tierTag }); usedPicks.add(pickKey(p)); usedGames.add(p.gameId);
     }
   };
-  // Pressure Pack backfill excludes heavy-chalk moneylines (steeper than -145) too.
+  // Pressure Pack backfill excludes heavy-chalk moneylines (steeper than -145) AND anything
+  // below the 83 confidence floor — Pressure is a quality tier, so it stays short rather than
+  // take a sub-83 play. VIP / Parlay still backfill to keep the slate full on thin days.
+  const pressureOk = (p: DeepPickResult) => !isHeavyMlForPremium(p) && p.confidenceScore >= PRESSURE_FLOOR;
   const t1 = picksExpanded.filter((p) => !usedPicks.has(pickKey(p)) && !asleepReserved.has(p.gameId) && p.tier !== 'PASS');
-  promote(pressurePack, 2, 'PRESSURE_PACK', t1.filter((p) => !isHeavyMlForPremium(p)));
+  promote(pressurePack, 2, 'PRESSURE_PACK', t1.filter(pressureOk));
   promote(vip4Pack, 4, 'VIP_4_PACK', t1);
   promote(parlayPlan, 6, 'PARLAY_PLAN', t1);
 
-  if (pressurePack.length < 2 || vip4Pack.length < 4 || parlayPlan.length < 4) {
+  if (vip4Pack.length < 4 || parlayPlan.length < 4 || pressurePack.length < 2) {
     const t2 = picksExpanded.filter((p) => !usedPicks.has(pickKey(p)) && asleepReserved.has(p.gameId) && p.tier !== 'PASS');
-    promote(pressurePack, 2, 'PRESSURE_PACK', t2.filter((p) => !isHeavyMlForPremium(p)));
+    promote(pressurePack, 2, 'PRESSURE_PACK', t2.filter(pressureOk));
     promote(vip4Pack, 4, 'VIP_4_PACK', t2);
     promote(parlayPlan, 6, 'PARLAY_PLAN', t2);
     for (const p of t2) if (usedGames.has(p.gameId)) asleepReserved.delete(p.gameId);
   }
 
-  if (pressurePack.length < 2 || vip4Pack.length < 4 || parlayPlan.length < 4) {
+  if (vip4Pack.length < 4 || parlayPlan.length < 4 || pressurePack.length < 2) {
     const t3 = picksExpanded.filter((p) => !usedPicks.has(pickKey(p)));
-    promote(pressurePack, 2, 'PRESSURE_PACK', t3.filter((p) => !isHeavyMlForPremium(p)));
+    promote(pressurePack, 2, 'PRESSURE_PACK', t3.filter(pressureOk));
     promote(vip4Pack, 4, 'VIP_4_PACK', t3);
     promote(parlayPlan, 6, 'PARLAY_PLAN', t3);
   }
