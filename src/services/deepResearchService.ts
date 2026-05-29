@@ -449,6 +449,27 @@ function buildNrfiPlays(mlbEvents: any[], excludeGameIds: Set<string> = new Set(
   return plays.sort((a, b) => b.nrfiScore - a.nrfiScore).slice(0, 6);
 }
 
+// Shape an NRFI play as a board pick so it can COMPETE for every product (Pressure / VIP /
+// $10 Parlay / — and Grand Slam if it ever cleared 96, though its honest cap is 95). Owner:
+// "nothing is off-limits — NRFI can be a parlay leg or a Grand Slam." marketType stays 'total'
+// for typing, but the "NRFI" selection text routes it to the NRFI grader (1st-inning runs).
+function nrfiToPick(n: NrfiPlay, board: BoardType): DeepPickResult {
+  const sig = n.nrfiScore >= 88 ? 6 : n.nrfiScore >= 83 ? 5 : 4;
+  return {
+    gameId: n.gameId, eventName: n.eventName, league: 'MLB', sport: 'MLB', board,
+    startTime: n.startTime,
+    homeTeam: { name: n.homeTeam, abbreviation: '' } as any,
+    awayTeam: { name: n.awayTeam, abbreviation: '' } as any,
+    spread: null, total: null,
+    selection: 'NRFI — No Runs First Inning', selectionSide: 'home', marketType: 'total',
+    odds: n.odds || '-115', line: null,
+    confidenceScore: n.nrfiScore, tier: assignTier(n.nrfiScore, sig),
+    signals: { confirmingSignals: sig, keyInjuryOnPickSide: false, signalConflict: false } as any,
+    reasonsFor: [n.reason], reasonsAgainst: [],
+    aiExplanation: null, sharpFlags: [], sharpIntel: null, bigGameLabel: null,
+  } as DeepPickResult;
+}
+
 // ─── Power 20 Types ──────────────────────────────────────────────────────────
 
 export interface Power20Pick {
@@ -2382,6 +2403,15 @@ export async function runDailyDeepResearch(board: BoardType = 'north-american'):
           confidenceScore: scoreTotalsConfidence(predicted, p.total, null),
         });
       }
+    }
+  }
+  // NRFI IN THE POOL — make NRFI plays eligible for every product (Pressure / VIP / $10
+  // Parlay / Grand Slam), not just their own tile. Only pregame, 80+ NRFI compete (so they're
+  // honestly recordable and clear the global floor). They flow through tiering + the parlay
+  // like any pick; whichever games get used are excluded from the standalone NRFI tile below.
+  if (board === 'north-american') {
+    for (const n of buildNrfiPlays(mlbEvents)) {
+      if (n.state === 'pre' && n.nrfiScore >= 80) picksExpanded.push(nrfiToPick(n, board));
     }
   }
   picksExpanded.sort((a, b) => b.confidenceScore - a.confidenceScore);
