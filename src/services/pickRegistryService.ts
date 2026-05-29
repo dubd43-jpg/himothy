@@ -1539,6 +1539,83 @@ export async function gradeRegistryBoard(boardDate?: string) {
   return { gradedCount };
 }
 
+// ADMIN DIAGNOSTICS — "why are we winning / losing." Aggregates graded picks since the
+// official start into the cuts that actually inform tuning: CALIBRATION (does a higher
+// conviction score actually win more? — the question the owner keeps asking), plus record +
+// units by market, league, category, and the value-at-entry & cover-margin splits for wins
+// vs losses. Pure read; admin-only via the route.
+export async function getEngineDiagnostics() {
+  await ensureRegistrySchema();
+  const rows = await prisma.$queryRawUnsafe<any[]>(
+    `SELECT edge_score, result, market_type, league, category, odds, value_edge_at_publish, cover_margin
+       FROM himothy_pick_registry
+      WHERE status IN ('published','locked','graded','archived')
+        AND result IN ('win','loss','push')
+        AND board_date >= $1::date`,
+    OFFICIAL_TRACKING_START_DATE,
+  );
+
+  const dec = (o: any): number | null => {
+    const n = parseNumeric(o);
+    if (!Number.isFinite(n)) return null;
+    return n > 0 ? 1 + n / 100 : 1 + 100 / Math.abs(n);
+  };
+  const unitsOf = (r: any): number => r.result === 'win' ? ((dec(r.odds) ?? 2) - 1) : r.result === 'loss' ? -1 : 0;
+  const num = (v: any): number | null => { const n = Number(v); return Number.isFinite(n) ? n : null; };
+  const avg = (arr: any[], f: (r: any) => number | null): number | null => {
+    const vs = arr.map(f).filter((x): x is number => x != null);
+    return vs.length ? Number((vs.reduce((a, b) => a + b, 0) / vs.length).toFixed(2)) : null;
+  };
+
+  function groupBy(keyFn: (r: any) => string | null) {
+    const m: Record<string, { wins: number; losses: number; pushes: number; units: number }> = {};
+    for (const r of rows) {
+      const k = keyFn(r);
+      if (!k) continue;
+      (m[k] ||= { wins: 0, losses: 0, pushes: 0, units: 0 });
+      if (r.result === 'win') m[k].wins++; else if (r.result === 'loss') m[k].losses++; else m[k].pushes++;
+      m[k].units += unitsOf(r);
+    }
+    return Object.entries(m)
+      .map(([key, v]) => ({ key, wins: v.wins, losses: v.losses, pushes: v.pushes,
+        winPct: v.wins + v.losses > 0 ? Number((100 * v.wins / (v.wins + v.losses)).toFixed(1)) : 0,
+        units: Number(v.units.toFixed(2)) }))
+      .sort((a, b) => b.units - a.units);
+  }
+
+  const band = (s: any): string | null => {
+    const n = Number(s);
+    if (!Number.isFinite(n)) return null;
+    if (n >= 96) return '96-100 (Grand Slam tier)';
+    if (n >= 90) return '90-95';
+    if (n >= 85) return '85-89';
+    if (n >= 80) return '80-84';
+    return 'below 80 (legacy)';
+  };
+
+  const wins = rows.filter((r) => r.result === 'win');
+  const losses = rows.filter((r) => r.result === 'loss');
+
+  return {
+    sampleSize: rows.length,
+    note: rows.length < 40 ? 'Small sample — read as directional, not proof.' : 'Sample building.',
+    // The calibration table: if our conviction is meaningful, win% should RISE with the band.
+    calibration: groupBy((r) => band(r.edge_score)),
+    byMarket: groupBy((r) => r.market_type),
+    byLeague: groupBy((r) => r.league),
+    byCategory: groupBy((r) => r.category),
+    // Did we win where we got the better number at entry? (our captured value-at-publish)
+    entryValue: {
+      winsAvgValueEdge: avg(wins, (r) => num(r.value_edge_at_publish)),
+      lossesAvgValueEdge: avg(losses, (r) => num(r.value_edge_at_publish)),
+    },
+    coverMargin: {
+      winsAvg: avg(wins, (r) => num(r.cover_margin)),
+      lossesAvg: avg(losses, (r) => num(r.cover_margin)),
+    },
+  };
+}
+
 function safePct(wins: number, losses: number) {
   const total = wins + losses;
   if (total <= 0) return '0.0%';
