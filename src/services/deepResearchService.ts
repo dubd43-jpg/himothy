@@ -1415,6 +1415,25 @@ function ouOverRate(b: { wins: number; losses: number } | null | undefined): num
   return b.wins / decisive;
 }
 
+// Score a REAL-line player prop to the 0-100 board scale (same shape as scoreTotalsConfidence,
+// cap 90). Only props measured against a real sportsbook line count — a projected line isn't a
+// gradable value play. edgePct is the projection-vs-line edge as a percent; streak is "hit the
+// real line in N of last M games"; confidence is the prop engine's own tier.
+function scorePropConfidence(rec: any): number {
+  if (!rec?.hasRealLine) return 0;
+  const e = Math.abs(Number(rec.edgePct) || 0);
+  let conf = 55;
+  if (e >= 20) conf += 28; else if (e >= 14) conf += 22; else if (e >= 10) conf += 16;
+  else if (e >= 7) conf += 10; else if (e >= 4) conf += 5; else conf -= 6;
+  const win = Number(rec.streakWindow) || 0;
+  if (win > 0) {
+    const rate = (Number(rec.streakOver) || 0) / win;
+    if (rate >= 0.8) conf += 8; else if (rate >= 0.6) conf += 4; else if (rate <= 0.2) conf -= 6;
+  }
+  if (rec.confidence === 'ELITE') conf += 4; else if (rec.confidence === 'LOW') conf -= 8;
+  return Math.max(0, Math.min(90, Math.round(conf)));
+}
+
 export interface BestMarketSwap {
   selection: string;
   marketType: string;            // total | team_total | 1h_total | 2h_total | q1_total..q4_total | p1_total..p3_total | f5_total
@@ -1429,7 +1448,7 @@ export interface BestMarketSwap {
 // strongest one (or null). Used by the board enrichment to swap a featured pick to a
 // total / team total / half / quarter / F5 when it is clearly the better play than the
 // side/run line. Fetches alt lines + period markets + F5 in parallel; all best-effort.
-export async function buildBestMarketSwap(pick: any): Promise<BestMarketSwap | null> {
+export async function buildBestMarketSwap(pick: any, opts?: { includeProps?: boolean }): Promise<BestMarketSwap | null> {
   const league: string = pick?.league || '';
   const home = pick?.homeTeam, away = pick?.awayTeam;
   const homeName: string = home?.name || '', awayName: string = away?.name || '';
@@ -1526,6 +1545,42 @@ export async function buildBestMarketSwap(pick: any): Promise<BestMarketSwap | n
       line: `${f5.totalLine}`, confidence: scoreTotalsConfidence(projF5, f5.totalLine, null),
       detail: `Projected first-5 ${projF5.toFixed(1)} vs line ${f5.totalLine}`,
     });
+  }
+
+  // 5) PLAYER PROPS — only when asked (caller bounds this to marquee / below-floor games to
+  // keep the prop fetches off the full slate). Each real-line prop becomes a candidate; the
+  // selection text is shaped so the prop grader can settle it from the box score.
+  if (opts?.includeProps) {
+    try {
+      const baseUrl = LEAGUE_URLS[league];
+      if (baseUrl) {
+        const summary = await fetchGameSummary(String(pick.gameId), baseUrl);
+        if (summary) {
+          const comp = summary?.header?.competitions?.[0] || {};
+          const propsMod = await import('@/services/playerPropsService');
+          const res = await propsMod.buildGamePropsResearch(
+            String(pick.gameId), pick.eventName || `${awayName} @ ${homeName}`, league, comp, summary, { home: [], away: [] },
+          );
+          for (const rec of (res.topProps || []) as any[]) {
+            const conf = scorePropConfidence(rec);
+            if (conf <= 0) continue;
+            const playerName: string = rec.playerName || '';
+            if (!playerName || rec.estimatedLine == null) continue;
+            const over = rec.direction === 'over';
+            const price = over ? rec.overPrice : rec.underPrice;
+            candidates.push({
+              selection: `${playerName} ${over ? 'Over' : 'Under'} ${rec.estimatedLine} ${rec.displayStat}`,
+              marketType: 'player_prop',
+              selectionSide: 'home',
+              odds: price != null ? `${price > 0 ? '+' : ''}${price}` : '-115',
+              line: `${rec.estimatedLine}`,
+              confidence: conf,
+              detail: rec.reason || `${playerName} ${over ? 'over' : 'under'} ${rec.estimatedLine} ${rec.displayStat}`,
+            });
+          }
+        }
+      }
+    } catch { /* non-blocking — props are an upgrade, never required */ }
   }
 
   if (candidates.length === 0) return null;

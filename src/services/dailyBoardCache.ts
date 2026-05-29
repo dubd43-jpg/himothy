@@ -184,14 +184,17 @@ async function enrichWithBestMarket(result: any) {
   if (!hasOddsApi() || !result) return result;
   const FLOOR = 58;     // a totals-family play just needs a real edge (base score is 55)
   const MARGIN = 3;     // and clearly beat the current pick's confidence
-  let buildBestMarketSwap: (p: any) => Promise<any>;
+  let buildBestMarketSwap: (p: any, opts?: { includeProps?: boolean }) => Promise<any>;
   try {
     ({ buildBestMarketSwap } = await import('@/services/deepResearchService'));
   } catch { return result; }
   const consider = async (p: any) => {
     if (!p) return;
     try {
-      const best = await buildBestMarketSwap(p);
+      // Dig player props too when this play needs lifting — a Big Game / marquee pick or
+      // anything still under 82. Bounded so prop fetches don't run on the whole slate.
+      const includeProps = Boolean(p.bigGameLabel) || (p.confidenceScore ?? 0) < 82;
+      const best = await buildBestMarketSwap(p, { includeProps });
       if (!best) return;
       if (best.confidence < FLOOR) return;
       if (best.confidence <= (p.confidenceScore ?? 0) + MARGIN) return;

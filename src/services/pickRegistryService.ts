@@ -1269,6 +1269,76 @@ function gradeResultFromEvent(pick: RegistryPickRow, event: any): RegistryResult
   return 'void';
 }
 
+// Resolve a player-prop stat label → the ESPN box-score column abbreviation. Only the
+// UNAMBIGUOUS stats (a single box-score category owns them) are supported; anything else
+// returns null so the grader VOIDS rather than risk reading the wrong column.
+function propStatAbbrev(statLabel: string): string | null {
+  const s = statLabel.toLowerCase();
+  if (s.includes('point')) return 'PTS';
+  if (s.includes('rebound')) return 'REB';
+  if (s.includes('assist')) return 'AST';
+  if (s.includes('steal')) return 'STL';
+  if (s.includes('block')) return 'BLK';
+  if (s.includes('three') || s.includes('3-point') || s.includes('3pt')) return '3PT';
+  return null; // unsupported (e.g. yards/strikeouts are ambiguous across categories) → void
+}
+
+function normPlayer(n: string): string {
+  return String(n || '').toLowerCase().replace(/[^a-z]/g, '');
+}
+
+// Read a player's final stat from the ESPN summary box score. Returns null if anything is
+// uncertain (player not found, column not found, value unparseable) so the grader voids.
+function readBoxscoreStat(summary: any, playerName: string, abbrev: string): number | null {
+  const teams = summary?.boxscore?.players;
+  if (!Array.isArray(teams)) return null;
+  const target = normPlayer(playerName);
+  for (const t of teams) {
+    for (const cat of (t.statistics || [])) {
+      const names: string[] = (cat.names || cat.keys || cat.labels || []).map((x: any) => String(x).toUpperCase());
+      const idx = names.findIndex((n) => n === abbrev);
+      if (idx < 0) continue;
+      for (const a of (cat.athletes || [])) {
+        if (normPlayer(a?.athlete?.displayName || '') !== target) continue;
+        const raw = a?.stats?.[idx];
+        if (raw == null) return null;
+        // "3PT" is "made-attempted" (e.g. "5-11") — take makes.
+        const v = String(raw).includes('-') ? Number(String(raw).split('-')[0]) : Number(raw);
+        return Number.isFinite(v) ? v : null;
+      }
+    }
+  }
+  return null;
+}
+
+// Grade a player prop ("{Player} Over/Under {line} {Stat}") from the box score. Void on ANY
+// uncertainty — never a fabricated prop W/L. Supports the unambiguous basketball stats today;
+// other stats void until their box-score columns are wired in.
+async function gradePlayerProp(pick: RegistryPickRow, event: any): Promise<RegistryResult> {
+  const state = event?.status?.type?.state;
+  const completed = state === 'post' || Boolean(event?.status?.type?.completed);
+  if (!completed) return 'pending';
+  const m = String(pick.selection || '').match(/^(.*?)\s+(over|under)\s+([\d.]+)\s+(.+)$/i);
+  if (!m) return 'void';
+  const player = m[1];
+  const over = /over/i.test(m[2]);
+  const line = Number(m[3]);
+  if (!Number.isFinite(line)) return 'void';
+  const abbrev = propStatAbbrev(m[4]);
+  if (!abbrev) return 'void';
+  const base = LEAGUE_URLS[pick.league] || LEAGUE_URLS[pick.sport];
+  if (!base || !pick.eventId) return 'void';
+  let summary: any = null;
+  try {
+    const res = await fetchWithTimeout(`${base}/summary?event=${pick.eventId}`, { cache: 'no-store', timeoutMs: 8000 });
+    if (res.ok) summary = await res.json();
+  } catch { return 'void'; }
+  const val = readBoxscoreStat(summary, player, abbrev);
+  if (val == null) return 'void';
+  if (val === line) return 'push';
+  return over === (val > line) ? 'win' : 'loss';
+}
+
 async function fetchEventForPick(pick: RegistryPickRow) {
   const base = LEAGUE_URLS[pick.league] || LEAGUE_URLS[pick.sport] || LEAGUE_URLS['NBA'];
   const dateStr = toLeagueDate(pick.boardDate);
@@ -1350,7 +1420,9 @@ export async function gradeRegistryBoard(boardDate?: string) {
       continue;
     }
 
-    const result = gradeResultFromEvent(pick, event);
+    const result = (pick.marketType || '').toLowerCase() === 'player_prop'
+      ? await gradePlayerProp(pick, event)
+      : gradeResultFromEvent(pick, event);
     if (result === 'pending') {
       await logPickEvent({
         event: 'ERROR',

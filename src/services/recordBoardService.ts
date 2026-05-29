@@ -64,6 +64,13 @@ function marketAndLine(p: any): { marketType: string; line: string | null } {
   const sel = String(p.selection || '');
   const low = sel.toLowerCase();
   const mt = String(p.marketType || '').toLowerCase();
+  // PLAYER PROP ("{Player} Over/Under {line} {Stat}") — must be caught BEFORE the Over/Under
+  // total check below, or it'd be mislabeled a game total. Line comes from p.line (the engine
+  // sets it) or the number in the selection. The prop grader settles it from the box score.
+  if (mt === 'player_prop') {
+    const n = (p.line != null ? String(p.line).replace(/[^0-9.]/g, '') : null) ?? sel.match(/(\d+(?:\.\d+)?)/)?.[1] ?? null;
+    return { marketType: 'player_prop', line: n };
+  }
   // Preserve the totals-family market types the engine sets (team total / halves / quarters /
   // hockey periods / F5) so the grader can route them — these selections contain "Over/Under"
   // and would otherwise be mislabeled as a plain game total and graded wrong.
