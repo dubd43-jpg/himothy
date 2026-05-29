@@ -788,7 +788,7 @@ function DeepPickCard({ pick, variant, href, live }: { pick: DeepPick; variant: 
             )}
           </div>
         )}
-        {pick.sharpFlags && pick.sharpFlags.length > 0 && <SharpSignalBadges flags={pick.sharpFlags} />}
+        {/* Sharp-signal badges are methodology (our edge) — back-end only, hidden from customers. */}
         {href && (
           <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-primary/70 group-hover:text-primary transition-colors">
             {showLive && live!.state === 'final' ? 'View result & breakdown →' : 'View full breakdown →'}
@@ -1215,8 +1215,7 @@ function DeepResearchSection({ board }: { board: string }) {
               <FooterLink href="/big-games" icon={Trophy} title="Big Games" count={data.marquee?.length ?? 0} />
               <FooterLink href="/nrfi" icon={Radio} title="NRFI" count={data.nrfi?.length ?? 0} />
               <FooterLink href="/value" icon={Target} title="Value Plays" count={data.valuePlays?.length ?? 0} />
-              <FooterLink href="/edges" icon={TrendingUp} title="Edges" count={(data.valuePlays?.length ?? 0) + (data.grandSlam ? 1 : 0) + data.pressurePack.length + data.vip4Pack.length + data.parlayPlan.length} />
-              <FooterLink href="/trends" icon={Flame} title="Tendencies" count={(data.grandSlam ? 1 : 0) + data.pressurePack.length + data.vip4Pack.length + data.parlayPlan.length + (data.marquee?.length ?? 0)} />
+              {/* Edges & Tendencies are methodology (our edge) — back-end only now, not customer-facing. */}
               <FooterLink href="/asleep" icon={Flame} title="Asleep" count={data.asleepPicks?.length ?? 0} />
               <FooterLink href="/period-plays" icon={Radio} title="Period Plays" count={null} />
               <FooterLink href="/sport-parlays" icon={Layers} title="Sport Parlays" count={null} />

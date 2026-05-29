@@ -128,7 +128,7 @@ export interface DeepPick {
 
 // Best-price + value line, powered by real multi-sportsbook odds. Shows customers where
 // to get the best number (line shopping) and flags genuine value vs the true line.
-export function BestPriceLine({ pick }: { pick: DeepPick }) {
+export function BestPriceLine({ pick, admin = false }: { pick: DeepPick; admin?: boolean }) {
   // Total picks get a totals-specific line-shop badge instead of the moneyline best price.
   if (pick.marketType === "total" && pick.totalsInsight) {
     const ti = pick.totalsInsight;
@@ -155,7 +155,7 @@ export function BestPriceLine({ pick }: { pick: DeepPick }) {
       <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-white/60">
         Best price <span className="text-white tabular-nums">{oddsStr}</span>{oi.bestBook ? <span className="text-white/35"> · {oi.bestBook}</span> : null}
       </span>
-      {oi.isValue && (
+      {admin && oi.isValue && (
         <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-emerald-400">
           ✓ Value{oi.valueEdge != null ? ` +${oi.valueEdge}%` : ""}
         </span>
@@ -312,7 +312,7 @@ export function LiveMeter({ live, picked }: { live: LivePickState; picked: strin
 
 // ─── Compact, clickable SUMMARY card (used on category pages) ──────────────────
 
-export function PickSummaryCard({ pick, href, index, live, hideResultWatermark }: { pick: DeepPick; href: string; index?: number; live?: LivePickState | null; hideResultWatermark?: boolean }) {
+export function PickSummaryCard({ pick, href, index, live, hideResultWatermark, admin = false }: { pick: DeepPick; href: string; index?: number; live?: LivePickState | null; hideResultWatermark?: boolean; admin?: boolean }) {
   const startTime = formatGameDateTimeET(pick.startTime) || TIME_TBD;
   const showLive = !!live && live.state !== "pre";
   // A graded straight should SHOUT its result — same prominence as the parlay watermark.
@@ -375,9 +375,9 @@ export function PickSummaryCard({ pick, href, index, live, hideResultWatermark }
           </div>
         )}
 
-        {(pick.oddsInsight?.bestOdds != null || (pick.marketType === "total" && pick.totalsInsight)) && <div className="mt-3"><BestPriceLine pick={pick} /></div>}
+        {(pick.oddsInsight?.bestOdds != null || (pick.marketType === "total" && pick.totalsInsight)) && <div className="mt-3"><BestPriceLine pick={pick} admin={admin} /></div>}
 
-        <PickedSideTendency pick={pick} />
+        {admin && <PickedSideTendency pick={pick} />}
 
         <div className="mt-3 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-primary/70 group-hover:text-primary transition-colors">
           {live?.state === "final" ? "View result & breakdown →" : "View full breakdown →"}
@@ -493,7 +493,11 @@ function TendencyMath({ pick }: { pick: DeepPick }) {
 
 // ─── The full single-pick breakdown ───────────────────────────────────────────
 
-export function PickBreakdown({ pick, live }: { pick: DeepPick; live?: LivePickState | null }) {
+// `admin` = back-end view. Customers see only the persuasive "why we like it" + the pick,
+// odds, our read, and the risk. The HOW — team-form trends, the tendency BET/STAY-AWAY math,
+// the signal count, and the stat chips (ATS%, sharp/public %, buckets) — is OUR edge and is
+// shown ONLY when admin=true. This is a customer site to SELL picks, not teach handicapping.
+export function PickBreakdown({ pick, live, admin = false }: { pick: DeepPick; live?: LivePickState | null; admin?: boolean }) {
   const picked = pick.selectionSide === "home" ? pick.homeTeam : pick.awayTeam;
   const opp = pick.selectionSide === "home" ? pick.awayTeam : pick.homeTeam;
   const pickedWin = picked.winProbability;
@@ -521,7 +525,7 @@ export function PickBreakdown({ pick, live }: { pick: DeepPick; live?: LivePickS
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-black uppercase tracking-widest text-white/30">HIMOTHY rating</span>
           <span className={`text-lg font-black ${confColor(pick.confidenceScore)}`}>{pick.confidenceScore}<span className="text-[10px] text-white/30">/100</span></span>
-          {typeof sigs.confirmingSignals === "number" && <span className="text-[10px] font-bold text-white/30">· {sigs.confirmingSignals} signals</span>}
+          {admin && typeof sigs.confirmingSignals === "number" && <span className="text-[10px] font-bold text-white/30">· {sigs.confirmingSignals} signals</span>}
         </div>
       </div>
 
@@ -536,7 +540,7 @@ export function PickBreakdown({ pick, live }: { pick: DeepPick; live?: LivePickS
               {pick.marketType === "moneyline" ? "current line — verify at your book" : "standard -110 — verify at your book"}
             </span>
           </div>
-          {(pick.oddsInsight?.bestOdds != null || (pick.marketType === "total" && pick.totalsInsight)) && <div className="mt-3"><BestPriceLine pick={pick} /></div>}
+          {(pick.oddsInsight?.bestOdds != null || (pick.marketType === "total" && pick.totalsInsight)) && <div className="mt-3"><BestPriceLine pick={pick} admin={admin} /></div>}
         </div>
 
         {showLive && live!.meterPct != null ? (
@@ -553,7 +557,7 @@ export function PickBreakdown({ pick, live }: { pick: DeepPick; live?: LivePickS
           </div>
         ) : null}
 
-        {(picked.trends || opp.trends) && (
+        {admin && (picked.trends || opp.trends) && (
           <div>
             <div className="text-[11px] font-black uppercase tracking-widest text-white/40 mb-2 flex items-center gap-2">
               <Activity className="h-3 w-3 text-primary" /> Trends · this season
@@ -565,7 +569,7 @@ export function PickBreakdown({ pick, live }: { pick: DeepPick; live?: LivePickS
           </div>
         )}
 
-        {pick.tendencyResolution && <TendencyMath pick={pick} />}
+        {admin && pick.tendencyResolution && <TendencyMath pick={pick} />}
 
         {pick.reasonsFor.length > 0 && (
           <div>
@@ -600,7 +604,7 @@ export function PickBreakdown({ pick, live }: { pick: DeepPick; live?: LivePickS
           </div>
         )}
 
-        <div className="flex flex-wrap gap-2">
+        {admin && <div className="flex flex-wrap gap-2">
           {pickedWin != null && opp.winProbability != null && (
             <Chip icon={TrendingUp} label={`Win edge ${Math.abs(pickedWin - opp.winProbability).toFixed(0)} pts`} tone="good" />
           )}
@@ -645,7 +649,7 @@ export function PickBreakdown({ pick, live }: { pick: DeepPick; live?: LivePickS
           {pick.sharpIntel?.weather?.weatherAlert && (
             <Chip icon={AlertTriangle} label={pick.sharpIntel.weather.weatherAlert} tone={pick.sharpIntel.weather.affectsPlay ? "bad" : "neutral"} />
           )}
-        </div>
+        </div>}
 
         {(pick.reasonsAgainst.length > 0 || pick.aiExplanation?.killCase) && (
           <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-4">
