@@ -184,19 +184,26 @@ export async function GET(req: Request) {
       if (gs && recorded.length > 0) {
         const norm = (s: string) => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
         const recordedGs = recorded.find((p: any) => p.category === 'GRAND_SLAM');
-        const gsMatches = recordedGs && norm(recordedGs.selection) === norm(gs.selection);
-        // Also confirm every displayed pick exists somewhere in the record (by selection).
+        const gsMatches = Boolean(recordedGs && norm(recordedGs.selection) === norm(gs.selection));
+        // CRITICAL: the headline Grand Slam in the record MUST be the one on the display —
+        // this is the exact bug that showed a WON Grand Slam as a LOSS.
+        checks.push({
+          id: 'record-matches-display', ok: gsMatches, severity: 'critical',
+          detail: gsMatches
+            ? `Record's Grand Slam matches the display: ${gs.selection}.`
+            : `RECORD ≠ DISPLAY. Displayed Grand Slam "${gs.selection}" but record has "${recordedGs?.selection ?? 'none'}". Run /api/admin/reconcile-board to re-sync.`,
+        });
+        // WARN: any other displayed pick missing from the record (e.g. a live carryover or a
+        // game whose ET start date excludes it from honest pregame recording). Informational —
+        // a reconcile syncs it, but it doesn't make the record dishonest.
         const recordedSel = new Set(recorded.map((p: any) => norm(p.selection)));
         const displayedMissing = allPosted.filter((p) => !recordedSel.has(norm(p.selection)));
-        const ok = Boolean(gsMatches) && displayedMissing.length === 0;
-        checks.push({
-          id: 'record-matches-display', ok, severity: 'critical',
-          detail: ok
-            ? `Record matches the displayed slate (Grand Slam: ${gs.selection}).`
-            : `RECORD ≠ DISPLAY. Displayed Grand Slam "${gs.selection}" but record has "${recordedGs?.selection ?? 'none'}".` +
-              (displayedMissing.length ? ` ${displayedMissing.length} displayed pick(s) not in the record: ${displayedMissing.map((p) => p.selection).slice(0, 4).join(', ')}.` : '') +
-              ` Run /api/admin/reconcile-board to re-sync.`,
-        });
+        if (displayedMissing.length > 0) {
+          checks.push({
+            id: 'record-covers-display', ok: false, severity: 'warn',
+            detail: `${displayedMissing.length} displayed pick(s) not in the record: ${displayedMissing.map((p) => p.selection).slice(0, 5).join(', ')}. Reconcile to capture them.`,
+          });
+        }
       }
     } catch (e: any) {
       checks.push({ id: 'board-recorded', ok: true, severity: 'warn', detail: `Registry check skipped: ${String(e?.message || e)}` });
