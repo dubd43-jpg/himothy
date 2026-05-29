@@ -1912,6 +1912,11 @@ async function processGame(
       }
     }
   }
+  // CAP AT 100. Confidence is a 0-100 conviction score — it must never read above 100. The
+  // asleep-league boost is a MULTIPLIER on the base score, which could push it to 110+; that's
+  // nonsensical to show ("110% sure") so we clamp it. 100 = our maximum conviction, not a
+  // claim of a 100% win — see the win-probability note: conviction ≠ win odds.
+  confidenceScore = Math.min(100, Math.round(confidenceScore));
   const isAsleepPick = asleepBoost > 1.05;
   const confirmingSignals = countConfirmingSignals(pickedSideForSignals, signalsPartial);
   const signals: GameSignals = { ...signalsPartial, confirmingSignals };
