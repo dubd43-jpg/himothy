@@ -56,13 +56,21 @@ function toLeagueDate(date: Date) {
 }
 
 function getDateWindow() {
-  const now = new Date();
-  const windows = [-1, 0, 1];
-
-  return windows.map((offset) => {
-    const d = new Date(now);
-    d.setDate(now.getDate() + offset);
-    return toLeagueDate(d);
+  // EASTERN-anchored. The old version used the server clock (UTC on Vercel), so late ET
+  // evening the window shifted forward and today's finished games could fall outside it.
+  // We are an Eastern-time product — build the ET calendar date, then walk -1/0/+1 ET days.
+  const etParts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(new Date());
+  const y = Number(etParts.find((p) => p.type === 'year')!.value);
+  const m = Number(etParts.find((p) => p.type === 'month')!.value);
+  const dd = Number(etParts.find((p) => p.type === 'day')!.value);
+  // Anchor at UTC-noon so ±1 day arithmetic is DST-safe, then format YYYYMMDD for ESPN.
+  const base = new Date(Date.UTC(y, m - 1, dd, 12, 0, 0));
+  return [-1, 0, 1].map((offset) => {
+    const d = new Date(base);
+    d.setUTCDate(base.getUTCDate() + offset);
+    return `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, '0')}${String(d.getUTCDate()).padStart(2, '0')}`;
   });
 }
 
@@ -163,13 +171,19 @@ async function fetchLeagueGames(league: string, leagueUrl: string, dates: string
 }
 
 function sortGames(games: LiveSlateGame[]) {
+  // Order: LIVE first, then FINAL (most-recent first), then SCHEDULED (soonest first). This
+  // matters because the caller slices to maxGames — the OLD order put finals LAST, so on a
+  // busy multi-day slate finished games got cut from the feed entirely and the pick pages
+  // (which read this feed) could never show WON/LOST. Keeping finals near the top fixes that;
+  // only far-future scheduled games get trimmed, which is correct for a "live" feed.
+  const rank = (g: LiveSlateGame) => (g.isLive ? 0 : g.isFinal ? 1 : 2);
   return games.sort((a, b) => {
-    if (a.isLive !== b.isLive) return a.isLive ? -1 : 1;
-    if (a.isScheduled !== b.isScheduled) return a.isScheduled ? -1 : 1;
-
+    const r = rank(a) - rank(b);
+    if (r !== 0) return r;
     const aTs = a.startTime ? new Date(a.startTime).getTime() : Number.MAX_SAFE_INTEGER;
     const bTs = b.startTime ? new Date(b.startTime).getTime() : Number.MAX_SAFE_INTEGER;
-    return aTs - bTs;
+    // Finals: most recent first. Live/scheduled: soonest first.
+    return rank(a) === 1 ? bTs - aTs : aTs - bTs;
   });
 }
 

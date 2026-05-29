@@ -254,6 +254,7 @@ export interface BoardPicksResult {
   vip4Pack: DeepPickResult[];
   parlayPlan: DeepPickResult[];
   parlayExtraLegs?: ParlayExtraLeg[];   // prop/total legs that top up a thin $10 Parlay
+  revealAt?: string | null;             // ISO time the whole slate becomes visible (1h before first game)
   marquee: DeepPickResult[];        // tonight's headline NBA/NHL/NFL games we cover regardless of tier
   asleepPicks: DeepPickResult[];    // lesser-watched-league plays where edges are bigger — surfaced regardless of tier
   outrights?: any[];                // active tournament futures: golf majors, tennis slams, F1 championships
