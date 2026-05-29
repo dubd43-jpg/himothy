@@ -998,6 +998,27 @@ export async function deleteBoardPicks(boardDate?: string): Promise<number> {
   return typeof res === 'number' ? res : 0;
 }
 
+// Purge ALL records before a date — used to start the official record fresh from the day the
+// upgraded engine launched. Clears picks + the per-day board records, then recomputes the
+// cached lifetime totals so the all-time stat reflects only the kept (>= date) era. NOT a
+// fabrication — it moves the start FORWARD (we claim fewer days), removing the old-engine era.
+export async function deleteRegistryBefore(boardDate: string): Promise<{ picks: number; days: number }> {
+  await ensureRegistrySchema();
+  const picksRes: any = await prisma.$executeRawUnsafe(
+    `DELETE FROM himothy_pick_registry WHERE board_date < $1::date`,
+    boardDate,
+  );
+  let daysRes: any = 0;
+  try {
+    daysRes = await prisma.$executeRawUnsafe(
+      `DELETE FROM himothy_daily_board_records WHERE board_date < $1::date`,
+      boardDate,
+    );
+  } catch { /* table may not exist on a fresh DB */ }
+  try { await syncLifetimeTotals(); } catch { /* recompute best-effort */ }
+  return { picks: typeof picksRes === 'number' ? picksRes : 0, days: typeof daysRes === 'number' ? daysRes : 0 };
+}
+
 // Remove duplicate straight picks: the SAME bet (event_id + market + selection) recorded
 // more than once for a day — e.g. the Dodgers -1.5 that landed under both GRAND_SLAM and
 // PRESSURE_PACK because old dedup keyed on the event-name string. Keeps ONE row per bet,

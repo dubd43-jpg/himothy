@@ -1,7 +1,9 @@
 // Verified record begins the day real auto-tracking went live. Every pick from this date
 // forward is recorded before its game and graded against the real final — 100% honest,
 // with no backfilled or fabricated history.
-export const OFFICIAL_TRACKING_START_DATE = '2026-05-22';
+// Official record starts when the upgraded engine went live (tendencies, multi-market hunt,
+// 80 floor). Pre-27 picks were the old engine and were cleared — we start fresh here.
+export const OFFICIAL_TRACKING_START_DATE = '2026-05-27';
 export const OFFICIAL_TRACKING_TIMEZONE = 'America/New_York';
 
 // Human-readable label for the start date — derived from the canonical date so UI copy can
