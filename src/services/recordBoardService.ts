@@ -383,6 +383,83 @@ export async function reconcileTodayToFrozenSlate(): Promise<{ boardDate: string
   return { boardDate: today, deleted, recorded, graded };
 }
 
+// Reconcile a PAST day to the slate that was actually frozen (persisted) for it. The frozen
+// slate is the immutable evidence of what we showed — so this wipes that day's recorded picks
+// and re-records the exact frozen board, then grades. If NO frozen slate was persisted for
+// that day (true for days before the freeze was reliable), there is nothing honest to restore
+// from — returns frozenExists:false so the caller can tell the owner rather than invent picks.
+export async function reconcileDateToFrozenSlate(date: string): Promise<{ boardDate: string; frozenExists: boolean; deleted: number; recorded: number; graded: any }> {
+  const out = { boardDate: date, frozenExists: false, deleted: 0, recorded: 0, graded: null as any };
+  if (!hasDatabase()) return out;
+  const { deleteBoardPicks } = await import('@/services/pickRegistryService');
+
+  const boards: BoardType[] = ['north-american', 'soccer', 'overseas'];
+  const frozen: Array<[BoardType, any]> = [];
+  for (const b of boards) {
+    const fb = await getPersistedBoardForDate(date, b);
+    if (fb) frozen.push([b, fb]);
+  }
+  // No frozen NA slate => the real board for that day wasn't preserved; do NOT guess.
+  if (!frozen.some(([b]) => b === 'north-american')) return out;
+  out.frozenExists = true;
+
+  out.deleted = await deleteBoardPicks(date);
+
+  for (const [, fb] of frozen) {
+    const extraLegPicks = (fb.parlayExtraLegs || [])
+      .filter((leg: any) => leg.type === 'total' && leg.gameId && leg.selection)
+      .map((leg: any) => {
+        const parts = String(leg.eventName || '').split(/\s+@\s+/);
+        const lineMatch = String(leg.selection).match(/(\d+(?:\.\d+)?)\s*$/);
+        return {
+          gameId: leg.gameId, eventName: leg.eventName, league: leg.league, sport: leg.league, startTime: leg.startTime,
+          homeTeam: { name: parts[1] || '', abbreviation: '', moneyline: null, winProbability: null },
+          awayTeam: { name: parts[0] || '', abbreviation: '', moneyline: null, winProbability: null },
+          selection: leg.selection, selectionSide: 'home' as const, marketType: 'total',
+          line: lineMatch ? lineMatch[1] : null, odds: leg.odds, tier: 'PARLAY_PLAN', confidenceScore: 0, reasonsFor: [leg.detail].filter(Boolean),
+        };
+      });
+    const groups: Array<[string, any[]]> = [
+      ['GRAND_SLAM', fb.grandSlam ? [fb.grandSlam] : []],
+      ['PRESSURE_PACK', fb.pressurePack || []],
+      ['VIP_4_PACK', fb.vip4Pack || []],
+      ['PARLAY_PLAN', [...(fb.parlayPlan || []), ...extraLegPicks]],
+      ['MARQUEE', fb.marquee || []],
+      ['ASLEEP_PICKS', fb.asleepPicks || []],
+      ['VALUE_PLAYS', fb.valuePlays || []],
+    ];
+    for (const [category, picks] of groups) {
+      const valid = (picks || []).filter((p: any) => p?.selection && p?.gameId);
+      const isParlay = category === 'PARLAY_PLAN';
+      const ticketCtx = isParlay && valid.length > 1
+        ? { ticketId: newTicketId('parlay'), legCount: valid.length, estimatedOdds: combineParlayOdds(valid) }
+        : null;
+      let legPos = 0;
+      for (const p of valid) {
+        legPos++;
+        const ctx = ticketCtx ? { ticketId: ticketCtx.ticketId, legPosition: legPos, legCount: ticketCtx.legCount, estimatedOdds: ticketCtx.estimatedOdds } : undefined;
+        const r = await recordPick(p, category, ctx, date, /* allowFinalized */ true);
+        if (r === 'recorded') out.recorded++;
+      }
+    }
+    for (const n of (fb.nrfi || [])) {
+      if (!n?.gameId) continue;
+      const nrfiPick = {
+        gameId: n.gameId, eventName: n.eventName, league: n.league || 'MLB', sport: 'MLB', startTime: n.startTime,
+        homeTeam: { name: n.homeTeam, abbreviation: '', moneyline: null, winProbability: null },
+        awayTeam: { name: n.awayTeam, abbreviation: '', moneyline: null, winProbability: null },
+        selection: 'NRFI — No Runs First Inning', selectionSide: 'home' as const, marketType: 'special',
+        line: null, odds: n.odds || null, confidenceScore: n.nrfiScore || 0, tier: 'NRFI',
+      } as any;
+      const r = await recordPick(nrfiPick, 'NRFI', undefined, date, true);
+      if (r === 'recorded') out.recorded++;
+    }
+  }
+
+  try { out.graded = await gradeRegistryBoard(date); } catch (e: any) { out.graded = { error: String(e?.message || e) }; }
+  return out;
+}
+
 // ─── Frozen-slate recovery ─────────────────────────────────────────────────────
 // Walk every past ET day from the official start to yesterday, read the FROZEN slate that
 // was published that day (immutable evidence of what we showed), and record any pick that

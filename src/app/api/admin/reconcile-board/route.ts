@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { reconcileTodayToFrozenSlate } from '@/services/recordBoardService';
+import { reconcileTodayToFrozenSlate, reconcileDateToFrozenSlate } from '@/services/recordBoardService';
 import { isAdminRequest, adminUnauthorized } from '@/lib/adminAuth';
 import { hasDatabase } from '@/lib/hasDatabase';
 
@@ -23,7 +23,11 @@ async function handle(req: Request) {
     return NextResponse.json({ success: false, error: 'no database connected' }, { status: 400 });
   }
   try {
-    const result = await reconcileTodayToFrozenSlate();
+    // ?date=YYYY-MM-DD reconciles a PAST day from its frozen slate; omit for today.
+    const date = new URL(req.url).searchParams.get('date');
+    const result = date
+      ? await reconcileDateToFrozenSlate(date)
+      : await reconcileTodayToFrozenSlate();
     return NextResponse.json({ success: true, ...result });
   } catch (error: any) {
     console.error('reconcile-board failed', error);
