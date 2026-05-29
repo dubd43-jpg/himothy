@@ -764,21 +764,27 @@ export async function publishRegistryPick(input: RegistryPickInput) {
     throw new Error(`Publish blocked: board ${boardDate} is finalized and immutable.`);
   }
 
+  // Dedup on the SAME bet for the day: same market + selection on the same game. We match
+  // the game by event_id FIRST (reliable) and fall back to event_name — because the same
+  // game can be recorded with slightly different name strings ("Rockies at Dodgers" vs
+  // "Rockies @ Dodgers"), and name-only matching let an identical pick get logged twice under
+  // two categories (the duplicate the archive showed). event_id closes that hole.
   const duplicateRows = await prisma.$queryRawUnsafe<any[]>(
     `
       SELECT id, odds, line, sportsbook
       FROM himothy_pick_registry
       WHERE board_date = $1::date
         AND status IN ('published','locked','graded','archived')
-        AND lower(event_name) = lower($2)
         AND lower(market_type) = lower($3)
         AND lower(selection) = lower($4)
+        AND ( ($5 <> '' AND event_id = $5) OR lower(event_name) = lower($2) )
       LIMIT 1
     `,
     boardDate,
     input.eventName,
     input.marketType,
-    input.selection
+    input.selection,
+    String(input.eventId || '')
   );
   if (duplicateRows[0]?.id) {
     // Pick already exists. Check if the new offer has BETTER odds — if so, update the
@@ -988,6 +994,38 @@ export async function deleteBoardPicks(boardDate?: string): Promise<number> {
   const res: any = await prisma.$executeRawUnsafe(
     `DELETE FROM himothy_pick_registry WHERE board_date = $1::date`,
     date,
+  );
+  return typeof res === 'number' ? res : 0;
+}
+
+// Remove duplicate straight picks: the SAME bet (event_id + market + selection) recorded
+// more than once for a day — e.g. the Dodgers -1.5 that landed under both GRAND_SLAM and
+// PRESSURE_PACK because old dedup keyed on the event-name string. Keeps ONE row per bet,
+// preferring the higher tier (Grand Slam > Pressure > VIP > Marquee) then the earliest entry.
+// Scoped to straight categories only — never touches PARLAY_PLAN legs or NRFI (removing a
+// leg would corrupt a parlay ticket). Pass a boardDate to limit to one day, omit for all.
+export async function dedupeRegistry(boardDate?: string): Promise<number> {
+  await ensureRegistrySchema();
+  const params: any[] = [];
+  let scope = '';
+  if (boardDate) { params.push(getOfficialBoardDate(boardDate)); scope = 'AND board_date = $1::date'; }
+  const res: any = await prisma.$executeRawUnsafe(
+    `DELETE FROM himothy_pick_registry t
+     USING (
+       SELECT id, ROW_NUMBER() OVER (
+         PARTITION BY board_date, event_id, lower(market_type), lower(selection)
+         ORDER BY CASE category
+           WHEN 'GRAND_SLAM' THEN 1 WHEN 'PRESSURE_PACK' THEN 2
+           WHEN 'VIP_4_PACK' THEN 3 WHEN 'MARQUEE' THEN 4 ELSE 5 END,
+           created_at ASC
+       ) AS rn
+       FROM himothy_pick_registry
+       WHERE event_id IS NOT NULL AND event_id <> ''
+         AND category IN ('GRAND_SLAM','PRESSURE_PACK','VIP_4_PACK','MARQUEE')
+         ${scope}
+     ) d
+     WHERE t.id = d.id AND d.rn > 1`,
+    ...params,
   );
   return typeof res === 'number' ? res : 0;
 }

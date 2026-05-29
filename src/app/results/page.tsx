@@ -9,6 +9,7 @@ import {
   ShieldAlert
 } from "lucide-react";
 import { HistoricalResults } from "@/components/HistoricalResults";
+import { OFFICIAL_TRACKING_START_LABEL } from "@/lib/officialTracking";
 
 export default function ResultsPage() {
   return (
@@ -45,7 +46,7 @@ export default function ResultsPage() {
               ARCHIVE
             </h1>
             <p className="text-lg md:text-xl text-white/40 font-medium leading-relaxed max-w-2xl">
-              Official public record tracking starts on April 20, 2026 (ET). Every published pick is logged permanently,
+              Official public record tracking starts on {OFFICIAL_TRACKING_START_LABEL} (ET). Every published pick is logged permanently,
               graded live as results settle, and never deleted from history.
             </p>
           </div>

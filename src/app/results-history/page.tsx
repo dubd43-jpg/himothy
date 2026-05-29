@@ -2,6 +2,7 @@ import { Metadata } from "next";
 import Link from "next/link";
 import { RecordDashboard } from "@/components/RecordDashboard";
 import { History, ArrowLeft, BarChart3, ShieldCheck } from "lucide-react";
+import { OFFICIAL_TRACKING_START_LABEL } from "@/lib/officialTracking";
 
 export const metadata: Metadata = {
   title: "Results History | Detailed Betting Performance | HIMOTHY",
@@ -22,7 +23,7 @@ export default function ResultsHistoryPage() {
               <History className="w-10 h-10 text-primary" /> Results History
            </h1>
            <p className="text-muted-foreground text-lg mt-2 max-w-2xl">
-              Official tracking starts April 20, 2026 (ET). Every win, loss, push, and void is recorded permanently from that day forward.
+              Official tracking starts {OFFICIAL_TRACKING_START_LABEL} (ET). Every win, loss, push, and void is recorded permanently from that day forward.
            </p>
         </div>
 

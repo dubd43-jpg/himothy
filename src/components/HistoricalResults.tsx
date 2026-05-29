@@ -14,6 +14,7 @@ import {
   MinusCircle,
   ShieldCheck
 } from "lucide-react";
+import { OFFICIAL_TRACKING_START_DATE } from "@/lib/officialTracking";
 
 interface PickResult {
   package: string;
@@ -34,7 +35,7 @@ interface DailyRecord {
 }
 
 const TRACKING_TIMEZONE = 'America/New_York';
-const OFFICIAL_START_DATE = '2026-04-20';
+const OFFICIAL_START_DATE = OFFICIAL_TRACKING_START_DATE;
 
 function toEtDateKey(date: Date) {
   const parts = new Intl.DateTimeFormat('en-US', {
@@ -128,7 +129,7 @@ export function HistoricalResults() {
             {isToday ? "LIVE BOARD" : "HISTORICAL ARCHIVE"}
           </div>
           <span className="text-xl md:text-2xl font-black uppercase">{data?.date || "Loading..."}</span>
-          <span className="text-[10px] font-black uppercase tracking-widest text-white/40 mt-1">Official Record Since 2026-04-20 (ET)</span>
+          <span className="text-[10px] font-black uppercase tracking-widest text-white/40 mt-1">Official Record Since {OFFICIAL_TRACKING_START_DATE} (ET)</span>
         </div>
 
         <button 

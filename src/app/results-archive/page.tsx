@@ -2,6 +2,7 @@ import { Metadata } from 'next';
 import Link from 'next/link';
 import { ArrowLeft, History, Filter, Download, Calendar } from 'lucide-react';
 import { RecordDashboard } from '@/components/RecordDashboard';
+import { OFFICIAL_TRACKING_START_LABEL } from '@/lib/officialTracking';
 
 export const metadata: Metadata = {
   title: "Results Archive | HIMOTHY Performance History",
@@ -35,7 +36,7 @@ export default function ResultsArchivePage() {
              <History className="w-10 h-10 text-primary" /> Results <span className="italic font-light">Archive</span>
           </h1>
           <p className="text-xl text-muted-foreground mt-2 max-w-2xl">
-             Official archive since April 20, 2026 (ET). Every authorized published pick is preserved with final result and settlement timestamps.
+             Official archive since {OFFICIAL_TRACKING_START_LABEL} (ET). Every authorized published pick is preserved with final result and settlement timestamps.
           </p>
         </div>
 

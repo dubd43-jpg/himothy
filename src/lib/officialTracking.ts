@@ -4,6 +4,12 @@
 export const OFFICIAL_TRACKING_START_DATE = '2026-05-22';
 export const OFFICIAL_TRACKING_TIMEZONE = 'America/New_York';
 
+// Human-readable label for the start date — derived from the canonical date so UI copy can
+// never drift to a wrong/fabricated start (e.g. a stale "April 20" that implies history we
+// don't actually have). Use this everywhere instead of hardcoding a date string.
+export const OFFICIAL_TRACKING_START_LABEL = new Date(`${OFFICIAL_TRACKING_START_DATE}T12:00:00Z`)
+  .toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: OFFICIAL_TRACKING_TIMEZONE });
+
 function toParts(date: Date) {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: OFFICIAL_TRACKING_TIMEZONE,
