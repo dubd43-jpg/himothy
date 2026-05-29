@@ -461,7 +461,9 @@ function nrfiToPick(n: NrfiPlay, board: BoardType): DeepPickResult {
     homeTeam: { name: n.homeTeam, abbreviation: '' } as any,
     awayTeam: { name: n.awayTeam, abbreviation: '' } as any,
     spread: null, total: null,
-    selection: 'NRFI — No Runs First Inning', selectionSide: 'home', marketType: 'total',
+    // Name the matchup so two NRFI plays are never indistinguishable in a list/parlay. The
+    // "NRFI" text still routes it to the 1st-inning grader.
+    selection: `NRFI — ${n.awayTeam} @ ${n.homeTeam}`, selectionSide: 'home', marketType: 'total',
     odds: n.odds || '-115', line: null,
     confidenceScore: n.nrfiScore, tier: assignTier(n.nrfiScore, sig),
     signals: { confirmingSignals: sig, keyInjuryOnPickSide: false, signalConflict: false } as any,
