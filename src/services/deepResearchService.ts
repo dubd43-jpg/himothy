@@ -1831,6 +1831,29 @@ async function processGame(
   if (dq < 30) confidenceScore = Math.min(confidenceScore, 52);
   else if (dq < 50) confidenceScore = Math.min(confidenceScore, 63);
   else if (dq < 65) confidenceScore = Math.min(confidenceScore, 75);
+
+  // DIG THE WHOLE GAME — don't anchor to the moneyline/run line. Score the full-game TOTAL
+  // from each team's last-10 scoring and, if it's a stronger play than the side, make the
+  // total the pick. Zero API cost (uses avgTotal10 already fetched). Deeper markets (team
+  // totals, halves, quarters, periods, F5, props) get layered on for featured picks in
+  // enrichWithBestMarket. Confidence only ever RISES here, so the GS 96 / Pressure 83 floors
+  // can't be undercut, and a genuinely strong side (100+) keeps its slot.
+  let totalPlay: { over: boolean; line: number } | null = null;
+  if (sportStyle === 'na' && mergedTotal != null && !starOutPickSide) {
+    const ht = homeForm?.avgTotal10 ?? null;
+    const at = awayForm?.avgTotal10 ?? null;
+    if (ht != null && at != null) {
+      const proj = (ht + at) / 2;
+      let tConf = scoreTotalsConfidence(proj, mergedTotal, null);
+      if (dq < 30) tConf = Math.min(tConf, 52);
+      else if (dq < 50) tConf = Math.min(tConf, 63);
+      else if (dq < 65) tConf = Math.min(tConf, 75);
+      if (tConf > confidenceScore) {
+        totalPlay = { over: proj >= mergedTotal, line: mergedTotal };
+        confidenceScore = tConf;
+      }
+    }
+  }
   const isAsleepPick = asleepBoost > 1.05;
   const confirmingSignals = countConfirmingSignals(pickedSideForSignals, signalsPartial);
   const signals: GameSignals = { ...signalsPartial, confirmingSignals };
@@ -1893,6 +1916,16 @@ async function processGame(
     pickData = pickForSoccer(home, away, mergedTotal);
   } else {
     pickData = pickForNA(home, away, mergedSpread, mergedTotal, pickedSideForSignals, league);
+  }
+
+  // If the full-game total out-scored the side above, publish the TOTAL as the play (the
+  // side score already lost the tiering decision, so the displayed market matches it).
+  if (totalPlay && sportStyle === 'na') {
+    pickData = {
+      selectionSide: pickedSideForSignals, marketType: 'total',
+      selection: `${totalPlay.over ? 'Over' : 'Under'} ${totalPlay.line}`,
+      odds: '-110', line: `${totalPlay.line}`,
+    };
   }
 
   // (Marginal chalk / run-line filter removed 2026-05-27 — user prefers the full slate
