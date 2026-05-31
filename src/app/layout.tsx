@@ -4,6 +4,7 @@ import Image from "next/image";
 import { MapPin } from "lucide-react";
 import "./globals.css";
 import { SITE_URL, SITE_NAME, TWITTER_HANDLE, DEFAULT_OG_IMAGE } from "@/lib/seo";
+import { ContactWidget } from "@/components/ContactWidget";
 
 // Viewport + theme color live as a separate export in Next 14+ (warning if mixed with metadata).
 export const viewport: Viewport = {
@@ -110,6 +111,9 @@ export default function RootLayout({
           </div>
           
           {children}
+          {/* Floating Contact widget — customer messages email rentalsgradea@gmail.com.
+              Hides itself on /admin so admin pages stay clean. */}
+          <ContactWidget />
 
           {/* Global 21+ Disclaimer Footer */}
           <footer className="bg-card border-t border-border mt-auto py-8 text-center text-xs text-muted-foreground z-10 relative">
