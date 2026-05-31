@@ -988,6 +988,83 @@ export async function getRegistryBoardPicks({
 // Wipe every recorded pick for one ET board date. Used ONLY by the admin reconcile, which
 // then re-records the exact frozen slate so the official record matches what customers saw.
 // Returns the number of rows removed.
+// ─── Per-pick admin edit ────────────────────────────────────────────────────
+// Whitelist of columns the owner can edit/insert from the admin Edit Picks UI. Anything else
+// (id, created_at, audit fields) is computed and not touched here. The owner has full control:
+// these tools intentionally bypass dedup / pregame / finalized guards. Honesty is the owner's
+// call, not ours.
+const EDITABLE_COLS = [
+  'category', 'product_line', 'sport', 'league', 'event_id', 'event_name', 'home_team',
+  'away_team', 'market_type', 'selection', 'line', 'odds', 'sportsbook', 'status', 'result',
+  'confidence_tier', 'edge_score', 'board_date', 'reasoning_summary', 'risk_summary',
+  'cover_margin',
+] as const;
+
+export async function getPickById(id: string) {
+  await ensureRegistrySchema();
+  const rows = await prisma.$queryRawUnsafe<any[]>(`SELECT * FROM himothy_pick_registry WHERE id = $1 LIMIT 1`, id);
+  return rows[0] ? formatRow(rows[0]) : null;
+}
+
+export async function listPicksForDate(boardDate: string) {
+  await ensureRegistrySchema();
+  const rows = await prisma.$queryRawUnsafe<any[]>(
+    `SELECT * FROM himothy_pick_registry WHERE board_date = $1::date ORDER BY category ASC, created_at ASC`,
+    boardDate,
+  );
+  return rows.map(formatRow);
+}
+
+export async function updatePickById(id: string, fields: Record<string, any>): Promise<boolean> {
+  await ensureRegistrySchema();
+  const sets: string[] = [];
+  const vals: any[] = [];
+  for (const [k, v] of Object.entries(fields)) {
+    if (!(EDITABLE_COLS as readonly string[]).includes(k)) continue;
+    vals.push(v);
+    sets.push(`"${k}" = $${vals.length}`);
+  }
+  if (sets.length === 0) return false;
+  vals.push(id);
+  const sql = `UPDATE himothy_pick_registry SET ${sets.join(', ')}, updated_at = NOW() WHERE id = $${vals.length}`;
+  await prisma.$executeRawUnsafe(sql, ...vals);
+  try { await syncLifetimeTotals(); } catch {}
+  return true;
+}
+
+export async function deletePickById(id: string): Promise<boolean> {
+  await ensureRegistrySchema();
+  await prisma.$executeRawUnsafe(`DELETE FROM himothy_pick_registry WHERE id = $1`, id);
+  try { await syncLifetimeTotals(); } catch {}
+  return true;
+}
+
+// Owner-created pick (bypasses publishRegistryPick's dedup/pregame/finalized guards). Use
+// from the admin Edit Picks UI for anything that didn't come from the engine.
+export async function createPickManual(fields: Record<string, any>): Promise<string> {
+  await ensureRegistrySchema();
+  const id = randomUUID();
+  const now = new Date();
+  const cols: string[] = ['id', 'publish_time', 'created_at', 'updated_at', 'is_public'];
+  const vals: any[] = [id, now, now, now, true];
+  const placeholders: string[] = ['$1', '$2', '$3', '$4', '$5'];
+  for (const [k, v] of Object.entries(fields)) {
+    if (!(EDITABLE_COLS as readonly string[]).includes(k)) continue;
+    if (v == null || v === '') continue;
+    vals.push(v);
+    cols.push(`"${k}"`);
+    placeholders.push(`$${vals.length}`);
+  }
+  // Defaults if owner didn't fill in
+  if (!cols.includes('status')) { cols.push('status'); vals.push('published'); placeholders.push(`$${vals.length}`); }
+  if (!cols.includes('result')) { cols.push('result'); vals.push('pending'); placeholders.push(`$${vals.length}`); }
+  if (!cols.includes('board_date')) { cols.push('board_date'); vals.push(getOfficialBoardDate()); placeholders.push(`$${vals.length}`); }
+  const sql = `INSERT INTO himothy_pick_registry (${cols.join(', ')}) VALUES (${placeholders.join(', ')})`;
+  await prisma.$executeRawUnsafe(sql, ...vals);
+  try { await syncLifetimeTotals(); } catch {}
+  return id;
+}
+
 export async function deleteBoardPicks(boardDate?: string): Promise<number> {
   await ensureRegistrySchema();
   const date = getOfficialBoardDate(boardDate);
