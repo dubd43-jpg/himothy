@@ -1505,6 +1505,14 @@ function scoreGame(signals: Omit<GameSignals, 'confirmingSignals'>): number {
     if (signals.tendencyOppFirstFrameScored <= 30) score += 2;
   }
 
+  // F5 TOTAL DIVERGENCE — when our team's F5 avg is well above the opponent's, we're
+  // the side that scores early. Pairs with a strong starter for the side bet logic.
+  if (signals.tendencyFirstFrameSample >= 5 && signals.tendencyF5TotalAvg > 0 && signals.tendencyOppF5TotalAvg > 0) {
+    const f5Delta = signals.tendencyF5TotalAvg - signals.tendencyOppF5TotalAvg;
+    if (f5Delta >= 2.5) score += 3;
+    else if (f5Delta <= -2.5) score -= 3;
+  }
+
   // Data quality floor
   const dq = signals.dataQuality;
   if (dq < 30) score = Math.min(score, 52);

@@ -211,11 +211,28 @@ function SignalBlock({ title, data, injuries }: { title: string; data: any; inju
       <SignalRow label="ATS H/A%" value={data.atsHomeAwayCoverPct?.toFixed(1)} />
       <SignalRow label="Line value gap" value={data.lineValueGap?.toFixed(1)} />
       <SignalRow label="Streak" value={data.recentFormStreak} />
+      <SignalRow label="Avg margin L10" value={data.pickedAvgMargin10 != null ? data.pickedAvgMargin10.toFixed(1) : null} />
       <SignalRow label="Sharp aligned" value={data.sharpMoneyAligned ? "yes" : "no"} />
       <SignalRow label="Reverse line" value={data.reverseLineMovement ? "yes" : "no"} />
       <SignalRow label="Rest edge" value={data.restAdvantage ? "yes" : "no"} />
       <SignalRow label="Key inj. on side" value={data.keyInjuryOnPickSide ? "yes" : "no"} />
       <SignalRow label="Sharp bonus" value={data.sharpScoreBonus} />
+      {data.oddsBucketSample > 0 && (
+        <SignalRow label={`Bucket edge (${data.oddsBucketSample}g)`} value={`${data.oddsBucketEdgePct > 0 ? '+' : ''}${data.oddsBucketEdgePct?.toFixed(1)}pp`} />
+      )}
+      {data.tendencyFirstFrameSample > 0 && (
+        <>
+          <SignalRow label="1st-inn scored %" value={data.tendencyFirstFrameScored?.toFixed(0)} />
+          <SignalRow label="1st-inn allowed %" value={data.tendencyFirstFrameAllowed?.toFixed(0)} />
+          {data.tendencyF5TotalAvg > 0 && <SignalRow label="F5 avg total" value={data.tendencyF5TotalAvg?.toFixed(1)} />}
+        </>
+      )}
+      {data.pickedPitcherStarts > 0 && (
+        <>
+          <SignalRow label={`SP ERA L${data.pickedPitcherStarts}`} value={data.pickedPitcherEraL5?.toFixed(2)} />
+          {data.pickedPitcherWhipL5 > 0 && <SignalRow label="SP WHIP L5" value={data.pickedPitcherWhipL5?.toFixed(2)} />}
+        </>
+      )}
       {injuries && (injuries.out?.length || injuries.doubtful?.length) ? (
         <div className="mt-1 text-[11px] text-red-300">
           OUT: {injuries.out?.join(", ") || "—"} · DOUBTFUL: {injuries.doubtful?.join(", ") || "—"}
