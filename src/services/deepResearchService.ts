@@ -33,6 +33,23 @@ import { fetchWithTimeout } from '@/lib/fetchWithTimeout';
 import { getEtDateKey } from '@/lib/officialTracking';
 import { generateDeepExplanation } from '@/services/aiGenerator';
 import { getSharpIntel, type SharpIntelContext, type SharpFlag } from '@/services/sharpIntelService';
+import { getTeamTendencies, type TeamTendencies } from '@/services/tendenciesService';
+import { oddsBucket } from '@/lib/oddsBucket';
+
+// Module-level cache for odds-bucket stats — refreshed every 5 minutes during a slate
+// run. Pulled from the registry, so it's our OWN verified hit rate per price band.
+let _bucketStatsCache: { data: Record<string, { wins: number; losses: number; pushes: number; total: number; winRate: string }>; at: number } | null = null;
+async function getCachedBucketStats() {
+  if (_bucketStatsCache && Date.now() - _bucketStatsCache.at < 5 * 60 * 1000) return _bucketStatsCache.data;
+  try {
+    const { getOddsBucketStats } = await import('@/services/pickRegistryService');
+    const data = await getOddsBucketStats();
+    _bucketStatsCache = { data, at: Date.now() };
+    return data;
+  } catch {
+    return {};
+  }
+}
 
 // ─── Board ──────────────────────────────────────────────────────────────────
 
@@ -166,6 +183,20 @@ export interface GameSignals {
   oppOnB2B: boolean;                  // opponent played yesterday
   weatherAlert: boolean;              // significant weather affecting outdoor game
   sharpScoreBonus: number;            // 0-25 pts added by sharp intel signals
+  // Odds-bucket tendency ("eyes") — actual hit rate of this price band from our own
+  // verified record vs the implied break-even at this price. Positive = bucket beating
+  // break-even (real edge), negative = bucket failing break-even (we keep overpaying).
+  // bucketSample is the # of settled bets in the bucket; 0 = no data, ignored.
+  oddsBucketEdgePct: number;          // (actualHitRate% - impliedBreakEven%); 0 if no sample
+  oddsBucketSample: number;           // # of settled single bets in this bucket since 5/27
+  // Deep tendencies from per-game linescores (MLB 1st-inning, F5; NBA/WNBA Q1, H1)
+  tendencyFirstFrameScored: number;   // % of last-10 games team scored in first frame
+  tendencyFirstFrameAllowed: number;  // % of last-10 games team allowed in first frame
+  tendencyOppFirstFrameScored: number;
+  tendencyOppFirstFrameAllowed: number;
+  tendencyF5TotalAvg: number;         // avg combined runs in F5 (MLB only; 0 otherwise)
+  tendencyOppF5TotalAvg: number;
+  tendencyFirstFrameSample: number;   // games used to compute tendencies (per side; 0 if unavailable)
 }
 
 export interface DeepPickResult {
@@ -1280,6 +1311,19 @@ function countConfirmingSignals(
 
 // ─── Confidence Scoring ───────────────────────────────────────────────────────
 
+// American odds → break-even win % required to be profitable. A -135 ML implies the
+// team must win 57.4% of the time. A +105 dog must win 48.8%. We compare this to the
+// bucket's ACTUAL hit rate from our registry to find where we're overpaying or
+// underpaying. Pure math, no opinion.
+function impliedBreakEvenPct(americanOdds: number): number {
+  if (!Number.isFinite(americanOdds) || americanOdds === 0) return 50;
+  if (americanOdds < 0) {
+    const a = Math.abs(americanOdds);
+    return (a / (a + 100)) * 100;
+  }
+  return (100 / (americanOdds + 100)) * 100;
+}
+
 function scoreGame(signals: Omit<GameSignals, 'confirmingSignals'>): number {
   let score = 50;
 
@@ -1370,6 +1414,37 @@ function scoreGame(signals: Omit<GameSignals, 'confirmingSignals'>): number {
 
   // Odds available boost
   if (signals.oddsAvailable) score += 4;
+
+  // ODDS-BUCKET HIT-RATE ("eyes" tendency) — owner directive: track how each price band
+  // is actually performing in OUR record. A -135 bucket that's gone 1-7 since 5/27 is
+  // overpaying chalk; dock confidence so we stop slot-filling there. A +105 bucket
+  // hitting 55% is real value; reward it. Minimum sample 5 — otherwise we're reacting
+  // to noise. Capped at ±10 to avoid overcorrecting on streaky samples.
+  if (signals.oddsBucketSample >= 5) {
+    const edge = signals.oddsBucketEdgePct; // already (actual - breakeven)
+    if (edge >= 15) score += 8;
+    else if (edge >= 8) score += 5;
+    else if (edge >= 3) score += 2;
+    else if (edge <= -15) score -= 10;
+    else if (edge <= -8) score -= 6;
+    else if (edge <= -3) score -= 3;
+  }
+
+  // FIRST-FRAME TENDENCY — owner directive: "Are they better in the first quarter? Are
+  // they better in the first half?" For MLB, this is 1st-inning scoring. For NBA/WNBA,
+  // Q1. A team that scores in the 1st 65%+ of games gives confidence to first-half/F5
+  // unders/overs and to backing them on the runline (they're not waiting around). A
+  // team that ALLOWS in the 1st 60%+ of games is the inverse — fade their early lines.
+  // Only fires when we have a real sample (min 5 games tracked).
+  if (signals.tendencyFirstFrameSample >= 5) {
+    if (signals.tendencyFirstFrameScored >= 70) score += 4;
+    else if (signals.tendencyFirstFrameScored >= 60) score += 2;
+    if (signals.tendencyFirstFrameAllowed >= 70) score -= 4;
+    else if (signals.tendencyFirstFrameAllowed >= 60) score -= 2;
+    // Opponent inverse — they bleed in the 1st = boost us
+    if (signals.tendencyOppFirstFrameAllowed >= 70) score += 3;
+    if (signals.tendencyOppFirstFrameScored <= 30) score += 2;
+  }
 
   // Data quality floor
   const dq = signals.dataQuality;
@@ -1859,6 +1934,25 @@ async function processGame(
     });
   } catch { /* non-blocking */ }
 
+  // Deep tendencies + odds-bucket hit rate — both fetched in parallel, both non-blocking.
+  // tendencies = 1st-frame scoring + F5 from ESPN linescores. bucketStats = our actual
+  // win rate by price band from the registry. The engine now factors both into scoreGame.
+  const tendencyHomeId = String(homeRaw.team?.id || homeRaw.id || '');
+  const tendencyAwayId = String(awayRaw.team?.id || awayRaw.id || '');
+  let homeTendencies: TeamTendencies | null = null;
+  let awayTendencies: TeamTendencies | null = null;
+  let bucketStats: Record<string, { wins: number; losses: number; total: number }> = {};
+  try {
+    const [ht, at, bs] = await Promise.all([
+      tendencyHomeId ? getTeamTendencies(league, tendencyHomeId).catch(() => null) : Promise.resolve(null),
+      tendencyAwayId ? getTeamTendencies(league, tendencyAwayId).catch(() => null) : Promise.resolve(null),
+      getCachedBucketStats().catch(() => ({})),
+    ]);
+    homeTendencies = ht;
+    awayTendencies = at;
+    bucketStats = bs as any;
+  } catch { /* non-blocking */ }
+
   // OWNER RULE: don't anchor on the favorite. Score BOTH sides' tendencies and pick the side
   // whose signals are actually stronger — an underdog with better ATS, a hot streak, opponent
   // on a B2B, or a key injury on the favorite can be the play (and gets +money on the ML).
@@ -1908,6 +2002,36 @@ async function processGame(
       oppOnB2B: side === 'home' ? (sharpIntel?.rest?.awayIsB2B ?? false) : (sharpIntel?.rest?.homeIsB2B ?? false),
       weatherAlert: sharpIntel?.weather?.affectsPlay ?? false,
       sharpScoreBonus: sharpIntel?.scoreBonus ?? 0,
+      // Odds-bucket "eyes" — compare this price band's actual hit rate to its implied
+      // break-even. Positive edge = bucket beating break-even; negative = overpaying.
+      oddsBucketEdgePct: (() => {
+        const pml = side === 'home' ? mergedHomeML : mergedAwayML;
+        const oddsForBucket = sportStyle !== 'na' ? pml : (pml != null && pml >= -150 && pml <= 160 ? pml : (mergedSpread !== null || mergedTotal !== null ? -110 : pml));
+        if (oddsForBucket == null) return 0;
+        const bucket = oddsBucket(oddsForBucket);
+        if (!bucket) return 0;
+        const stat = bucketStats[bucket];
+        if (!stat || stat.total < 5) return 0;
+        const actualPct = (stat.wins / stat.total) * 100;
+        const breakEven = impliedBreakEvenPct(oddsForBucket);
+        return Number((actualPct - breakEven).toFixed(1));
+      })(),
+      oddsBucketSample: (() => {
+        const pml = side === 'home' ? mergedHomeML : mergedAwayML;
+        const oddsForBucket = sportStyle !== 'na' ? pml : (pml != null && pml >= -150 && pml <= 160 ? pml : (mergedSpread !== null || mergedTotal !== null ? -110 : pml));
+        if (oddsForBucket == null) return 0;
+        const bucket = oddsBucket(oddsForBucket);
+        if (!bucket) return 0;
+        return bucketStats[bucket]?.total ?? 0;
+      })(),
+      // First-frame tendency (MLB 1st-inning, NBA/WNBA Q1) — from ESPN linescores.
+      tendencyFirstFrameScored: side === 'home' ? (homeTendencies?.pctScoredFirstInning ?? 0) : (awayTendencies?.pctScoredFirstInning ?? 0),
+      tendencyFirstFrameAllowed: side === 'home' ? (homeTendencies?.pctAllowedFirstInning ?? 0) : (awayTendencies?.pctAllowedFirstInning ?? 0),
+      tendencyOppFirstFrameScored: side === 'home' ? (awayTendencies?.pctScoredFirstInning ?? 0) : (homeTendencies?.pctScoredFirstInning ?? 0),
+      tendencyOppFirstFrameAllowed: side === 'home' ? (awayTendencies?.pctAllowedFirstInning ?? 0) : (homeTendencies?.pctAllowedFirstInning ?? 0),
+      tendencyF5TotalAvg: side === 'home' ? (homeTendencies?.avgF5Total ?? 0) : (awayTendencies?.avgF5Total ?? 0),
+      tendencyOppF5TotalAvg: side === 'home' ? (awayTendencies?.avgF5Total ?? 0) : (homeTendencies?.avgF5Total ?? 0),
+      tendencyFirstFrameSample: side === 'home' ? (homeTendencies?.sampleGames ?? 0) : (awayTendencies?.sampleGames ?? 0),
     };
     return { signalsPartial, pickedInj, oppInj, pickedAts, oppAts, pickedAtsHA, pickedStreak, starOutPickSide, starOutOppSide, hasKeyInjuryPicked, hasKeyInjuryOpp };
   };
