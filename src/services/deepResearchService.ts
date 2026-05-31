@@ -203,6 +203,35 @@ export interface DeepPickResult {
   // says BET (clear edge), STAY_AWAY (conflict with no edge), or PASS (no signal at all).
   // Surfaces transparently on the UI so customers see WHY we like (or skip) a pick.
   tendencyResolution?: TendencyResolution | null;
+  // Signal capture at publish — both sides' signals + scores frozen at pick time.
+  // The whole point: when a pick loses, we can read this field and see exactly what
+  // the engine knew about both teams when it chose the winner. Lets us answer
+  // "should we have flipped?" with real data instead of guessing after the fact.
+  evidence?: PickEvidence;
+}
+
+// Per-pick evidence file — frozen snapshot of what the engine saw on BOTH sides at
+// the moment we made the call. Persisted to research_payload.evidence so loss
+// postmortems can compare what we picked vs what the dog showed.
+export interface PickEvidence {
+  pickedSide: 'home' | 'away';
+  homeScore: number;
+  awayScore: number;
+  scoreGap: number;              // |homeScore - awayScore| — how confident the side decision was
+  homeSignals: Omit<GameSignals, 'confirmingSignals'>;
+  awaySignals: Omit<GameSignals, 'confirmingSignals'>;
+  pickedInjuries: { out: string[]; doubtful: string[]; questionable: string[] };
+  oppInjuries:    { out: string[]; doubtful: string[]; questionable: string[] };
+  pickedAtsSeason: string | null;
+  oppAtsSeason: string | null;
+  pickedAtsHomeAway: string | null;
+  pickedStreak: number;
+  starOutPickSide: string | null;
+  starOutOppSide: string | null;
+  totalPlayApplied: boolean;     // true if the side decision lost to a totals play
+  baseScore: number;             // score before asleep boost / DQ cap
+  asleepBoost: number;           // multiplier applied
+  dataQuality: number;
 }
 
 // Detects a TRULY big game (championship/playoff/finals/Game 7) from ESPN event data —
@@ -2090,6 +2119,38 @@ async function processGame(
     awayAvgMargin: awayForm?.avgMargin10 ?? null,
   });
 
+  // Freeze both sides' evaluation into the evidence file. This is the irreplaceable
+  // forensic data — once the game starts, we can never reconstruct what the engine
+  // knew at publish. Stored on research_payload.evidence by recordBoardService.
+  const evidence: PickEvidence = {
+    pickedSide: pickedSideForSignals,
+    homeScore: Math.round(homeScoreEval),
+    awayScore: Math.round(awayScoreEval),
+    scoreGap: Math.abs(Math.round(homeScoreEval) - Math.round(awayScoreEval)),
+    homeSignals: homeEval.signalsPartial,
+    awaySignals: awayEval.signalsPartial,
+    pickedInjuries: {
+      out: pickedInj.out.slice(0, 5),
+      doubtful: pickedInj.doubtful.slice(0, 5),
+      questionable: pickedInj.questionable.slice(0, 5),
+    },
+    oppInjuries: {
+      out: oppInj.out.slice(0, 5),
+      doubtful: oppInj.doubtful.slice(0, 5),
+      questionable: oppInj.questionable.slice(0, 5),
+    },
+    pickedAtsSeason: pickedAts?.display ?? null,
+    oppAtsSeason: oppAts?.display ?? null,
+    pickedAtsHomeAway: pickedAtsHA?.display ?? null,
+    pickedStreak,
+    starOutPickSide: starOutPickSide ?? null,
+    starOutOppSide: starOutOppSide ?? null,
+    totalPlayApplied: totalPlay !== null,
+    baseScore: Math.round(baseScore),
+    asleepBoost,
+    dataQuality: dq,
+  };
+
   return {
     gameId, eventName: `${away.name} @ ${home.name}`, league, sport: league, board,
     startTime: event.date || '', homeTeam: home, awayTeam: away,
@@ -2108,6 +2169,7 @@ async function processGame(
     isAsleepPick,
     asleepBoost,
     tendencyResolution,
+    evidence,
   };
 }
 

@@ -155,6 +155,17 @@ async function recordPick(
       reasoningSummary: p.aiExplanation?.shortReason || p.reasonsFor?.[0] || null,
       riskSummary: p.reasonsAgainst?.[0] || null,
       edgeScore: typeof p.confidenceScore === 'number' ? p.confidenceScore : null,
+      // Signal capture at publish — both sides scored, both sides' signals frozen.
+      // Lets postmortems answer "what did the engine know about the dog when it picked
+      // the favorite?" instead of guessing after the loss.
+      researchPayload: p.evidence ? {
+        evidence: p.evidence,
+        signals: p.signals,
+        reasonsFor: p.reasonsFor,
+        reasonsAgainst: p.reasonsAgainst,
+        sharpFlags: p.sharpFlags,
+        tendencyResolution: p.tendencyResolution || null,
+      } : null,
       status: 'published',
       // Capture-at-publish (Tier 1):
       bestOddsAtPublish,
