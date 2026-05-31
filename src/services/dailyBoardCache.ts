@@ -78,6 +78,26 @@ async function writePersistedSlate(version: string, etDate: string, board: strin
   }
 }
 
+// Admin override: force-replace the persisted slate for today. Use sparingly — this exists
+// for surgical mid-day edits (cutting a pick whose data turned bad post-publish) that the
+// write-once guard above is supposed to block. ALSO clears in-memory cache for that key so
+// the next request reads the patched JSONB instead of stale RAM.
+export async function adminOverwritePersistedSlate(etDate: string, board: string, data: any) {
+  if (!hasDatabase()) return;
+  await ensureSlateCacheSchema();
+  try {
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "DailySlateCache" ("version", "etDate", "board", "data", "generatedAt")
+       VALUES ($1, $2, $3, $4::jsonb, NOW())
+       ON CONFLICT ("version", "etDate", "board") DO UPDATE SET "data" = EXCLUDED."data", "generatedAt" = NOW()`,
+      SLATE_RULES_VERSION, etDate, board, JSON.stringify(data),
+    );
+    boardCache.delete(`${SLATE_RULES_VERSION}|${etDate}|${board}`);
+  } catch (err) {
+    console.error('[dailyBoardCache] adminOverwritePersistedSlate failed', err);
+  }
+}
+
 // Hard reset (admin only): clears EVERY version of the day's board so the next compute can
 // post a fresh one. This is the single sanctioned way to change a posted slate mid-day.
 async function deletePersistedSlate(etDate: string, board: string) {
