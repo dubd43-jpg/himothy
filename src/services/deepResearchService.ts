@@ -1799,35 +1799,8 @@ async function processGame(
   if (awayAtsData.overall) dq += 15;
   dq = Math.min(100, dq);
 
-  // Determine picked side for signal computation
-  const pickedSideForSignals: 'home' | 'away' = (homeWinPct ?? 50) >= (awayWinPct ?? 50) ? 'home' : 'away';
-
-  const pickedAts = pickedSideForSignals === 'home' ? homeAtsData.overall : awayAtsData.overall;
-  const pickedAtsHA = pickedSideForSignals === 'home' ? homeAtsData.homeAway : awayAtsData.homeAway;
-  const oppAts = pickedSideForSignals === 'home' ? awayAtsData.overall : homeAtsData.overall;
-
-  // Recency-weighted ATS for the picked side and the opponent. We use the rolling
-  // last-5 / last-10 / season blend (40/40/20) computed from completed games so a recent
-  // collapse or hot streak actually moves the confidence number — not buried under a
-  // season-long average that's still 50-40.
-  const pickedFormBuckets = pickedSideForSignals === 'home' ? homeForm : awayForm;
-  const oppFormBuckets = pickedSideForSignals === 'home' ? awayForm : homeForm;
-  const weightedPickedAts = weightedAtsCoverPct(pickedFormBuckets?.ats5, pickedFormBuckets?.ats10, pickedFormBuckets?.atsSeason);
-  const weightedOppAts = weightedAtsCoverPct(oppFormBuckets?.ats5, oppFormBuckets?.ats10, oppFormBuckets?.atsSeason);
-  const pickedInj = pickedSideForSignals === 'home' ? homeInj : awayInj;
-  const oppInj = pickedSideForSignals === 'home' ? awayInj : homeInj;
-  const pickedStreak = pickedSideForSignals === 'home' ? homeStreak : awayStreak;
-
-  // Breaking-news guard: is a STAR (team leader) on our side / the opponent OUT?
-  const pickedLeadersList = pickedSideForSignals === 'home' ? homeLeaders : awayLeaders;
-  const oppLeadersList = pickedSideForSignals === 'home' ? awayLeaders : homeLeaders;
-  const starOutPickSide = leaderRuledOut(pickedLeadersList, pickedInj.out);
-  const starOutOppSide = leaderRuledOut(oppLeadersList, oppInj.out);
-
-  // Line value gap: compare market spread to implied spread. The implied-spread model
-  // (~2.8% win-prob per point) is ONLY valid for high-scoring point-spread sports
-  // (NBA/NFL/CFB/CBB). Applying it to MLB/NHL/soccer/tennis manufactured fake "value gaps"
-  // (a run/goal ≠ 2.8%) that inflated confidence on no-edge games — so we zero it there.
+  // SYMMETRIC pieces (don't depend on which side we'd pick) — compute once.
+  const winProbGap = homeWinPct !== null && awayWinPct !== null ? Math.abs(homeWinPct - awayWinPct) : 0;
   const lvgLeague = (league || '').toLowerCase();
   const spreadModelValid = lvgLeague.includes('nba') || lvgLeague.includes('nfl') ||
     lvgLeague.includes('college football') || lvgLeague.includes('ncaa basketball') ||
@@ -1837,72 +1810,86 @@ async function processGame(
     const impliedSpread = impliedSpreadFromWinPct(homeWinPct);
     return Math.abs(impliedSpread - mergedSpread);
   })();
-
-  // Signal conflict: ATS and win-prob pointing opposite directions
+  // Signal conflict — ATS and win-prob pointing opposite directions (intrinsic to the game).
   const signalConflict = (() => {
-    if (pickedAts === null || homeWinPct === null) return false;
+    if (homeAtsData.overall === null || homeWinPct === null) return false;
     const atsFavorHome = (homeAtsData.overall?.coverPct ?? 50) > (awayAtsData.overall?.coverPct ?? 50);
     const probFavorHome = (homeWinPct ?? 50) > (awayWinPct ?? 50);
     return atsFavorHome !== probFavorHome;
   })();
 
-  const winProbGap = homeWinPct !== null && awayWinPct !== null ? Math.abs(homeWinPct - awayWinPct) : 0;
-  const hasKeyInjuryPicked = pickedInj.out.length > 0 || pickedInj.doubtful.length > 0;
-  const hasKeyInjuryOpp = oppInj.out.length > 0 || oppInj.doubtful.length > 0;
-
-  // Sharp intel: run in parallel, zero block if it fails
+  // Sharp intel — pulled ONCE; the result has both-side fields so either side can be picked.
   const homeTeamName = homeRaw.team?.displayName || 'Home';
   const awayTeamName = awayRaw.team?.displayName || 'Away';
   const gameTime = event.date || null;
-
   let sharpIntel: SharpIntelContext | null = null;
   try {
     sharpIntel = await getSharpIntel({
       gameId, league, homeTeam: homeTeamName, awayTeam: awayTeamName,
-      pickedSide: pickedSideForSignals, gameTime,
+      pickedSide: 'home', gameTime,
     });
-  } catch {
-    // Sharp intel is non-blocking — picks still qualify without it
-  }
+  } catch { /* non-blocking */ }
 
-  const signalsPartial: Omit<GameSignals, 'confirmingSignals'> = {
-    oddsAvailable: hasOdds,
-    winProbabilityGap: winProbGap,
-    // Prefer the recency-weighted ATS (rolling-window blend). Falls back to ESPN's
-    // pickcenter season-overall ATS only when we have no rolling history (cold start,
-    // small-sample team, individual sports).
-    atsCoverPct: weightedPickedAts ?? pickedAts?.coverPct ?? null,
-    atsCoverPctOpp: weightedOppAts ?? oppAts?.coverPct ?? null,
-    atsHomeAwayCoverPct: pickedAtsHA?.coverPct ?? null,
-    lineValueGap,
-    signalConflict,
-    recentFormStreak: pickedStreak,
-    keyInjuryOnPickSide: hasKeyInjuryPicked,
-    keyInjuryOnOppSide: hasKeyInjuryOpp,
-    spreadFavorable: mergedSpread !== null && Math.abs(mergedSpread) < 8,
-    noKeyInjuries: !hasKeyInjuryPicked && !hasKeyInjuryOpp,
-    sharpLineDetected: hasOdds && winProbGap > 10,
-    neutralSite: Boolean(comp.neutralSite),
-    dataQuality: dq,
-    // The price we'll actually PLAY (mirrors pickForNA): plus-money/pickem on the ML,
-    // heavier favorites on the spread at standard -110 — never heavy-chalk moneylines.
-    pickedOddsAmerican: (() => {
-      const pml = pickedSideForSignals === 'home' ? mergedHomeML : mergedAwayML;
-      if (sportStyle !== 'na') return pml;                       // soccer/tennis = ML
-      // Mirror pickForNA (full board): moneyline on value-priced sides; chalky favorites
-      // play the spread / run line / total at the standard -110.
-      if (pml != null && pml >= -150 && pml <= 160) return pml;
-      if (mergedSpread !== null || mergedTotal !== null) return -110;
-      return pml;
-    })(),
-    // Sharp intel signals
-    sharpMoneyAligned: sharpIntel?.betting?.sharpFavors === pickedSideForSignals && (sharpIntel.betting.sharpConfidence ?? 0) >= 55,
-    reverseLineMovement: sharpIntel?.betting?.reverseLineMovement ?? false,
-    restAdvantage: sharpIntel?.rest?.restAdvantage === pickedSideForSignals && (sharpIntel.rest.restEdge ?? 0) >= 3,
-    oppOnB2B: pickedSideForSignals === 'home' ? (sharpIntel?.rest?.awayIsB2B ?? false) : (sharpIntel?.rest?.homeIsB2B ?? false),
-    weatherAlert: sharpIntel?.weather?.affectsPlay ?? false,
-    sharpScoreBonus: sharpIntel?.scoreBonus ?? 0,
+  // OWNER RULE: don't anchor on the favorite. Score BOTH sides' tendencies and pick the side
+  // whose signals are actually stronger — an underdog with better ATS, a hot streak, opponent
+  // on a B2B, or a key injury on the favorite can be the play (and gets +money on the ML).
+  const buildSideSignals = (side: 'home' | 'away') => {
+    const pickedAts = side === 'home' ? homeAtsData.overall : awayAtsData.overall;
+    const pickedAtsHA = side === 'home' ? homeAtsData.homeAway : awayAtsData.homeAway;
+    const oppAts = side === 'home' ? awayAtsData.overall : homeAtsData.overall;
+    const pickedFormBuckets = side === 'home' ? homeForm : awayForm;
+    const oppFormBuckets = side === 'home' ? awayForm : homeForm;
+    const weightedPickedAts = weightedAtsCoverPct(pickedFormBuckets?.ats5, pickedFormBuckets?.ats10, pickedFormBuckets?.atsSeason);
+    const weightedOppAts = weightedAtsCoverPct(oppFormBuckets?.ats5, oppFormBuckets?.ats10, oppFormBuckets?.atsSeason);
+    const pickedInj = side === 'home' ? homeInj : awayInj;
+    const oppInj = side === 'home' ? awayInj : homeInj;
+    const pickedStreak = side === 'home' ? homeStreak : awayStreak;
+    const pickedLeadersList = side === 'home' ? homeLeaders : awayLeaders;
+    const oppLeadersList = side === 'home' ? awayLeaders : homeLeaders;
+    const starOutPickSide = leaderRuledOut(pickedLeadersList, pickedInj.out);
+    const starOutOppSide = leaderRuledOut(oppLeadersList, oppInj.out);
+    const hasKeyInjuryPicked = pickedInj.out.length > 0 || pickedInj.doubtful.length > 0;
+    const hasKeyInjuryOpp = oppInj.out.length > 0 || oppInj.doubtful.length > 0;
+    const signalsPartial: Omit<GameSignals, 'confirmingSignals'> = {
+      oddsAvailable: hasOdds,
+      winProbabilityGap: winProbGap,
+      atsCoverPct: weightedPickedAts ?? pickedAts?.coverPct ?? null,
+      atsCoverPctOpp: weightedOppAts ?? oppAts?.coverPct ?? null,
+      atsHomeAwayCoverPct: pickedAtsHA?.coverPct ?? null,
+      lineValueGap,
+      signalConflict,
+      recentFormStreak: pickedStreak,
+      keyInjuryOnPickSide: hasKeyInjuryPicked,
+      keyInjuryOnOppSide: hasKeyInjuryOpp,
+      spreadFavorable: mergedSpread !== null && Math.abs(mergedSpread) < 8,
+      noKeyInjuries: !hasKeyInjuryPicked && !hasKeyInjuryOpp,
+      sharpLineDetected: hasOdds && winProbGap > 10,
+      neutralSite: Boolean(comp.neutralSite),
+      dataQuality: dq,
+      pickedOddsAmerican: (() => {
+        const pml = side === 'home' ? mergedHomeML : mergedAwayML;
+        if (sportStyle !== 'na') return pml;
+        if (pml != null && pml >= -150 && pml <= 160) return pml;
+        if (mergedSpread !== null || mergedTotal !== null) return -110;
+        return pml;
+      })(),
+      sharpMoneyAligned: sharpIntel?.betting?.sharpFavors === side && (sharpIntel.betting.sharpConfidence ?? 0) >= 55,
+      reverseLineMovement: sharpIntel?.betting?.reverseLineMovement ?? false,
+      restAdvantage: sharpIntel?.rest?.restAdvantage === side && (sharpIntel.rest.restEdge ?? 0) >= 3,
+      oppOnB2B: side === 'home' ? (sharpIntel?.rest?.awayIsB2B ?? false) : (sharpIntel?.rest?.homeIsB2B ?? false),
+      weatherAlert: sharpIntel?.weather?.affectsPlay ?? false,
+      sharpScoreBonus: sharpIntel?.scoreBonus ?? 0,
+    };
+    return { signalsPartial, pickedInj, oppInj, pickedAts, oppAts, pickedAtsHA, pickedStreak, starOutPickSide, starOutOppSide, hasKeyInjuryPicked, hasKeyInjuryOpp };
   };
+
+  const homeEval = buildSideSignals('home');
+  const awayEval = buildSideSignals('away');
+  const homeScoreEval = scoreGame(homeEval.signalsPartial);
+  const awayScoreEval = scoreGame(awayEval.signalsPartial);
+  const pickedSideForSignals: 'home' | 'away' = homeScoreEval >= awayScoreEval ? 'home' : 'away';
+  const evalForPicked = pickedSideForSignals === 'home' ? homeEval : awayEval;
+  const { signalsPartial, pickedInj, oppInj, pickedAts, oppAts, pickedAtsHA, pickedStreak, starOutPickSide, starOutOppSide, hasKeyInjuryPicked, hasKeyInjuryOpp } = evalForPicked;
 
   const baseScore = scoreGame(signalsPartial);
   // Asleep bonus — boost confidence for lesser-watched leagues so they out-rank
