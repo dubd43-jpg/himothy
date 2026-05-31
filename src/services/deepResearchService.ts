@@ -34,6 +34,7 @@ import { getEtDateKey } from '@/lib/officialTracking';
 import { generateDeepExplanation } from '@/services/aiGenerator';
 import { getSharpIntel, type SharpIntelContext, type SharpFlag } from '@/services/sharpIntelService';
 import { getTeamTendencies, type TeamTendencies } from '@/services/tendenciesService';
+import { getGameProbables, type GameProbables } from '@/services/pitcherMatchupService';
 import { oddsBucket } from '@/lib/oddsBucket';
 
 // Module-level cache for odds-bucket stats — refreshed every 5 minutes during a slate
@@ -197,6 +198,20 @@ export interface GameSignals {
   tendencyF5TotalAvg: number;         // avg combined runs in F5 (MLB only; 0 otherwise)
   tendencyOppF5TotalAvg: number;
   tendencyFirstFrameSample: number;   // games used to compute tendencies (per side; 0 if unavailable)
+  // MLB probable pitcher matchup — the single most predictive MLB side-bet factor.
+  // Negative ERA = good (lower is better). 0 = no data, ignored in scoreGame.
+  pickedPitcherEraL5: number;         // ERA across our side's starter's last 5 starts (0 = no data)
+  oppPitcherEraL5: number;            // opposing starter's ERA last 5
+  pickedPitcherWhipL5: number;        // our starter's WHIP last 5
+  oppPitcherWhipL5: number;
+  pickedPitcherStarts: number;        // sample size for our starter (0 = no probable posted)
+  oppPitcherStarts: number;
+  // Streak-fragility check — owner directive: "how that streak probably can end. Will
+  // today be the day?" A +3 streak built on a 4-6 last-10 with negative avg margin is
+  // a brittle streak; a +3 streak on top of 8-2 L10 with +2.8 avg margin is real.
+  // pickedAvgMargin10 = team's avg game margin last 10 (positive = winning bigger).
+  pickedAvgMargin10: number;
+  oppAvgMargin10: number;
 }
 
 export interface DeepPickResult {
@@ -1384,11 +1399,26 @@ function scoreGame(signals: Omit<GameSignals, 'confirmingSignals'>): number {
   if (signals.lineValueGap >= 4) score += 7;
   else if (signals.lineValueGap >= 2) score += 4;
 
-  // Recent hot/cold form (±6 pts)
-  if (signals.recentFormStreak >= 4) score += 6;
-  else if (signals.recentFormStreak >= 2) score += 3;
-  else if (signals.recentFormStreak <= -3) score -= 6;
-  else if (signals.recentFormStreak <= -1) score -= 3;
+  // Recent hot/cold form — but STREAK-FRAGILITY GATED. Owner directive: "how that
+  // streak probably can end. Will today be the day?" A streak built on a winning L10
+  // with positive avg margin is REAL; a streak built on top of a losing skid with
+  // negative avg margin is FRAGILE — give it half (or none) of the bonus.
+  //
+  // Example: Mets +3 streak on 4-6 L10 with avg margin -1.2 → fragile, muted to +1.
+  // Example: Dodgers -1 streak on 8-2 L10 with avg margin +2.8 → no fade, even though
+  // streak number is negative, because the underlying form is elite.
+  const streakReal = signals.pickedAvgMargin10 > 0;       // they're actually outscoring opponents
+  const streakBrittle = signals.pickedAvgMargin10 < -0.5; // they're being outscored despite the streak
+  if (signals.recentFormStreak >= 4) {
+    score += streakBrittle ? 1 : (streakReal ? 6 : 3);
+  } else if (signals.recentFormStreak >= 2) {
+    score += streakBrittle ? 0 : (streakReal ? 3 : 1);
+  } else if (signals.recentFormStreak <= -3) {
+    // Losing streak fade — but if avgMargin is still positive (one bad week), only half fade
+    score += streakReal ? -3 : -6;
+  } else if (signals.recentFormStreak <= -1) {
+    score += streakReal ? 0 : -3;
+  }
 
   // Signal conflict penalty (−8 pts)
   // ATS and win-prob pointing opposite directions = no edge
@@ -1428,6 +1458,35 @@ function scoreGame(signals: Omit<GameSignals, 'confirmingSignals'>): number {
     else if (edge <= -15) score -= 10;
     else if (edge <= -8) score -= 6;
     else if (edge <= -3) score -= 3;
+  }
+
+  // MLB PROBABLE PITCHER MATCHUP — the single most predictive MLB side-bet factor.
+  // Compare our starter's L5 ERA vs the opposing starter's L5 ERA. Big delta in our
+  // favor (lower ERA) = real edge; big delta against = fade. Only fires with sample.
+  if (signals.pickedPitcherStarts >= 3 && signals.oppPitcherStarts >= 3) {
+    const ourEra = signals.pickedPitcherEraL5;
+    const oppEra = signals.oppPitcherEraL5;
+    if (ourEra > 0 && oppEra > 0) {
+      const eraDelta = oppEra - ourEra; // positive = our SP better
+      if (eraDelta >= 3.0) score += 10;      // commanding starter edge
+      else if (eraDelta >= 2.0) score += 7;  // strong edge
+      else if (eraDelta >= 1.0) score += 4;  // moderate edge
+      else if (eraDelta <= -3.0) score -= 10;
+      else if (eraDelta <= -2.0) score -= 7;
+      else if (eraDelta <= -1.0) score -= 4;
+    }
+    // Absolute starter quality boost — an elite starter (sub-3 ERA L5) is a major
+    // confidence anchor even if the opposing SP is also good. Inversely, a starter
+    // with an ERA above 6 in their last 5 is bleeding runs; dock confidence.
+    if (signals.pickedPitcherEraL5 > 0) {
+      if (signals.pickedPitcherEraL5 <= 2.5) score += 5;
+      else if (signals.pickedPitcherEraL5 <= 3.5) score += 2;
+      else if (signals.pickedPitcherEraL5 >= 6.0) score -= 6;
+      else if (signals.pickedPitcherEraL5 >= 5.0) score -= 3;
+    }
+    // Opponent's starter is awful → ride it
+    if (signals.oppPitcherEraL5 >= 6.0) score += 4;
+    else if (signals.oppPitcherEraL5 >= 5.0) score += 2;
   }
 
   // FIRST-FRAME TENDENCY — owner directive: "Are they better in the first quarter? Are
@@ -1934,23 +1993,28 @@ async function processGame(
     });
   } catch { /* non-blocking */ }
 
-  // Deep tendencies + odds-bucket hit rate — both fetched in parallel, both non-blocking.
-  // tendencies = 1st-frame scoring + F5 from ESPN linescores. bucketStats = our actual
-  // win rate by price band from the registry. The engine now factors both into scoreGame.
+  // Deep tendencies + odds-bucket hit rate + MLB pitcher matchup — all fetched in
+  // parallel, all non-blocking. tendencies = 1st-frame scoring + F5 from ESPN linescores.
+  // bucketStats = our actual win rate by price band from the registry. pitcher matchup =
+  // probable starter's L5 ERA/WHIP/handedness. The engine now factors all into scoreGame.
   const tendencyHomeId = String(homeRaw.team?.id || homeRaw.id || '');
   const tendencyAwayId = String(awayRaw.team?.id || awayRaw.id || '');
   let homeTendencies: TeamTendencies | null = null;
   let awayTendencies: TeamTendencies | null = null;
   let bucketStats: Record<string, { wins: number; losses: number; total: number }> = {};
+  let probables: GameProbables = { home: null, away: null };
+  const isMlb = league === 'MLB';
   try {
-    const [ht, at, bs] = await Promise.all([
+    const [ht, at, bs, pp] = await Promise.all([
       tendencyHomeId ? getTeamTendencies(league, tendencyHomeId).catch(() => null) : Promise.resolve(null),
       tendencyAwayId ? getTeamTendencies(league, tendencyAwayId).catch(() => null) : Promise.resolve(null),
       getCachedBucketStats().catch(() => ({})),
+      isMlb ? getGameProbables(gameId).catch(() => ({ home: null, away: null } as GameProbables)) : Promise.resolve({ home: null, away: null } as GameProbables),
     ]);
     homeTendencies = ht;
     awayTendencies = at;
     bucketStats = bs as any;
+    probables = pp;
   } catch { /* non-blocking */ }
 
   // OWNER RULE: don't anchor on the favorite. Score BOTH sides' tendencies and pick the side
@@ -2032,6 +2096,15 @@ async function processGame(
       tendencyF5TotalAvg: side === 'home' ? (homeTendencies?.avgF5Total ?? 0) : (awayTendencies?.avgF5Total ?? 0),
       tendencyOppF5TotalAvg: side === 'home' ? (awayTendencies?.avgF5Total ?? 0) : (homeTendencies?.avgF5Total ?? 0),
       tendencyFirstFrameSample: side === 'home' ? (homeTendencies?.sampleGames ?? 0) : (awayTendencies?.sampleGames ?? 0),
+      // Probable starter matchup — our side first, opponent second. 0 = no probable posted.
+      pickedPitcherEraL5: side === 'home' ? (probables.home?.eraL5 ?? 0) : (probables.away?.eraL5 ?? 0),
+      oppPitcherEraL5: side === 'home' ? (probables.away?.eraL5 ?? 0) : (probables.home?.eraL5 ?? 0),
+      pickedPitcherWhipL5: side === 'home' ? (probables.home?.whipL5 ?? 0) : (probables.away?.whipL5 ?? 0),
+      oppPitcherWhipL5: side === 'home' ? (probables.away?.whipL5 ?? 0) : (probables.home?.whipL5 ?? 0),
+      pickedPitcherStarts: side === 'home' ? (probables.home?.startsAnalyzed ?? 0) : (probables.away?.startsAnalyzed ?? 0),
+      oppPitcherStarts: side === 'home' ? (probables.away?.startsAnalyzed ?? 0) : (probables.home?.startsAnalyzed ?? 0),
+      pickedAvgMargin10: side === 'home' ? (homeForm?.avgMargin10 ?? 0) : (awayForm?.avgMargin10 ?? 0),
+      oppAvgMargin10: side === 'home' ? (awayForm?.avgMargin10 ?? 0) : (homeForm?.avgMargin10 ?? 0),
     };
     return { signalsPartial, pickedInj, oppInj, pickedAts, oppAts, pickedAtsHA, pickedStreak, starOutPickSide, starOutOppSide, hasKeyInjuryPicked, hasKeyInjuryOpp };
   };
