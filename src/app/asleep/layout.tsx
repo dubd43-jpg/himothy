@@ -1,7 +1,7 @@
 import { pageMeta } from '@/lib/seo';
 
 export const metadata = pageMeta({
-  title: "Asleep Picks Today — Quiet Markets, Real Edges",
+  title: "Sleeper Picks Today — Quiet Markets, Real Edges",
   description: "Tonight's softest-priced sports picks: NCAA Baseball, KBO, UFC, AFL, rugby, smaller soccer leagues. Games sharps watch and the public ignores.",
   path: "/asleep",
   keywords: [

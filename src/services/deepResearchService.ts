@@ -2493,8 +2493,9 @@ async function processGame(
   const reasonsFor: string[] = [];
   const reasonsAgainst: string[] = [];
 
-  if (homeWinPct !== null && awayWinPct !== null)
-    reasonsFor.push(`Win probability edge: ${home.abbreviation} ${homeWinPct.toFixed(1)}% vs ${away.abbreviation} ${awayWinPct.toFixed(1)}% — ${winProbGap.toFixed(1)}pt gap.`);
+  // Note: win-probability framing is added at the END of this section so the deeper
+  // case-for-pick reasons (pitcher matchup, bullpen state, line movement) lead the
+  // customer card. See the win-prob block lower down.
 
   if (pickedAts && pickedAts.coverPct >= 52) {
     const t = pickData.selectionSide === 'home' ? home : away;
@@ -2613,6 +2614,19 @@ async function processGame(
       reasonsFor.push(`${pickedTeam.abbreviation} starts fast — they avg ${signals.pickedAvgQ1Scored.toFixed(1)} in Q1 vs ${oppTeam.abbreviation}'s ${signals.oppAvgQ1Allowed.toFixed(1)} Q1 allowed, and lead after Q1 in ${Math.round(signals.pickedPctLeadAfterQ1)}% of games.`);
     } else if (signals.pickedPctLeadAfterH1 >= 65) {
       reasonsFor.push(`${pickedTeam.abbreviation} leads at the half in ${Math.round(signals.pickedPctLeadAfterH1)}% of recent games — they typically build their margin early.`);
+    }
+  }
+
+  // WIN-PROBABILITY framing — added LAST so the deeper case-for-pick reasons lead.
+  // Only included when win% actually supports the pick (or as a VALUE frame when we
+  // flipped to the underdog — never as a misleading "TB 60% vs DET 40%" contradiction).
+  if (homeWinPct !== null && awayWinPct !== null) {
+    const pickedWinPct = pickData.selectionSide === 'home' ? homeWinPct : awayWinPct;
+    const oppWinPct = pickData.selectionSide === 'home' ? awayWinPct : homeWinPct;
+    if (pickedWinPct > oppWinPct) {
+      reasonsFor.push(`Win probability edge: ${pickedTeam.abbreviation} ${pickedWinPct.toFixed(1)}% vs ${oppTeam.abbreviation} ${oppWinPct.toFixed(1)}% — ${winProbGap.toFixed(1)}pt gap.`);
+    } else if (pickData.marketType === 'moneyline' && oppWinPct - pickedWinPct >= 5) {
+      reasonsFor.push(`Value price: ${pickedTeam.abbreviation} is the underdog at ${pickedWinPct.toFixed(0)}% implied — our deeper signals (above) say the line is wrong.`);
     }
   }
 

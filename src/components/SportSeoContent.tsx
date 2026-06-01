@@ -12,7 +12,7 @@ function CrossLinks() {
     <div className="mt-6 flex flex-wrap gap-2 not-prose">
       <Link href="/edges" className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-[11px] font-black uppercase tracking-widest text-emerald-400 hover:bg-emerald-400/20 transition">Tonight's Edges</Link>
       <Link href="/trends" className="rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1 text-[11px] font-black uppercase tracking-widest text-amber-400 hover:bg-amber-400/20 transition">Hot Tendencies</Link>
-      <Link href="/asleep" className="rounded-full border border-orange-400/30 bg-orange-400/10 px-3 py-1 text-[11px] font-black uppercase tracking-widest text-orange-400 hover:bg-orange-400/20 transition">Asleep Picks</Link>
+      <Link href="/asleep" className="rounded-full border border-orange-400/30 bg-orange-400/10 px-3 py-1 text-[11px] font-black uppercase tracking-widest text-orange-400 hover:bg-orange-400/20 transition">Sleeper Picks</Link>
       <Link href="/value" className="rounded-full border border-sky-400/30 bg-sky-400/10 px-3 py-1 text-[11px] font-black uppercase tracking-widest text-sky-400 hover:bg-sky-400/20 transition">Value Plays</Link>
       <Link href="/stats" className="rounded-full border border-white/15 bg-white/[0.04] px-3 py-1 text-[11px] font-black uppercase tracking-widest text-white/60 hover:bg-white/[0.08] transition">Verified Record</Link>
     </div>
@@ -38,7 +38,7 @@ export function NbaSeoContent() {
         On every NBA pick page you'll see the alt-line ladder for points, rebounds, assists, and threes — multi-book best prices for each step. Sportsbooks price these soft, so the goal is to surface the cheapest line at the best book rather than just take the headline number. We also flag streaks (last-5 over/under counts) so you see whether a player is heating up before you bet the prop.
       </p>
       <p className="text-white/70 leading-relaxed">
-        Want the sharpest reads only? <Link href="/edges" className="text-primary underline">Tonight's Edges</Link> filters to picks with real positive expected value vs. the consensus true line. <Link href="/trends" className="text-primary underline">Hot Tendencies</Link> surfaces teams 7-3 or better against the spread or total over their last 10. <Link href="/asleep" className="text-primary underline">Asleep Picks</Link> covers WNBA + lesser leagues where books are softest.
+        Want the sharpest reads only? <Link href="/edges" className="text-primary underline">Tonight's Edges</Link> filters to picks with real positive expected value vs. the consensus true line. <Link href="/trends" className="text-primary underline">Hot Tendencies</Link> surfaces teams 7-3 or better against the spread or total over their last 10. <Link href="/asleep" className="text-primary underline">Sleeper Picks</Link> covers WNBA + lesser leagues where books are softest.
       </p>
       <CrossLinks />
     </article>
@@ -88,7 +88,7 @@ export function NcaaBasketballSeoContent() {
         Bracket play is where the public floods one side and softens the other. Public-money tracking, sharp-money signals, and the bigger home-court advantage in conference tournament games (when applicable) all feed into our model. The system never forces a pick — when the tendency math cancels out, we say <strong>stay away</strong> rather than guess.
       </p>
       <p className="text-white/70 leading-relaxed">
-        Looking for the quieter spots? <Link href="/asleep" className="text-orange-400 underline">Asleep Picks</Link> highlights mid-major and lesser-watched conference games where books are softest. <Link href="/trends" className="text-amber-400 underline">Hot Tendencies</Link> surfaces teams 7-3 or better ATS over their last 10.
+        Looking for the quieter spots? <Link href="/asleep" className="text-orange-400 underline">Sleeper Picks</Link> highlights mid-major and lesser-watched conference games where books are softest. <Link href="/trends" className="text-amber-400 underline">Hot Tendencies</Link> surfaces teams 7-3 or better ATS over their last 10.
       </p>
       <CrossLinks />
     </article>
@@ -138,7 +138,7 @@ export function WnbaPropsSeoContent() {
         Star WNBA players drive most prop interest. Clark&apos;s threes/assists ladders, Wilson&apos;s points/rebounds, Ionescu&apos;s threes — all are markets where the public hammers one side and the line moves accordingly. Our model uses last-5 game streak data (how many times the player has gone over/under recently), recent-form averages, and matchup-based pace adjustments to land on the alt-line step with the real edge.
       </p>
       <p className="text-white/70 leading-relaxed">
-        Browse <Link href="/picks?board=north-american" className="text-primary underline">tonight&apos;s WNBA picks</Link> alongside the NBA, NHL, MLB slate, or jump to <Link href="/asleep" className="text-orange-400 underline">Asleep Picks</Link> for the lesser-watched WNBA matchups where books are softest.
+        Browse <Link href="/picks?board=north-american" className="text-primary underline">tonight&apos;s WNBA picks</Link> alongside the NBA, NHL, MLB slate, or jump to <Link href="/asleep" className="text-orange-400 underline">Sleeper Picks</Link> for the lesser-watched WNBA matchups where books are softest.
       </p>
       <CrossLinks />
     </article>
@@ -161,7 +161,7 @@ export function KboSeoContent() {
         Heavy KBO favorites often price at -240 or worse on the moneyline — too steep for a straight bet (our system caps ML picks at -185). For those games we convert to the run line at standard -110, where the value lives. Same approach as MLB: avoid the juice trap, get paid for being right.
       </p>
       <p className="text-white/70 leading-relaxed">
-        KBO picks live in the <Link href="/asleep" className="text-orange-400 underline">Asleep Picks</Link> tile on the main board — quieter markets where edges are bigger. <Link href="/trends" className="text-amber-400 underline">Hot Tendencies</Link> surfaces KBO teams 7-3 or better against the spread or total over their last 10.
+        KBO picks live in the <Link href="/asleep" className="text-orange-400 underline">Sleeper Picks</Link> tile on the main board — quieter markets where edges are bigger. <Link href="/trends" className="text-amber-400 underline">Hot Tendencies</Link> surfaces KBO teams 7-3 or better against the spread or total over their last 10.
       </p>
       <CrossLinks />
     </article>
@@ -213,7 +213,7 @@ export function MissouriSeoContent() {
       </p>
       <h3 className="text-lg font-black text-white mt-5 mb-2">Free Missouri picks every day</h3>
       <p className="text-white/70 leading-relaxed mb-3">
-        Every pick on the daily board is free — no email signup, no paywall, no upsell. The Grand Slam, Pressure Pack, VIP 4-Pack, $10 Parlay Plan, and Asleep Picks are all viewable. Verified record at <Link href="/stats" className="text-primary underline">/stats</Link>.
+        Every pick on the daily board is free — no email signup, no paywall, no upsell. The Grand Slam, Pressure Pack, VIP 4-Pack, $10 Parlay Plan, and Sleeper Picks are all viewable. Verified record at <Link href="/stats" className="text-primary underline">/stats</Link>.
       </p>
       <p className="text-white/70 leading-relaxed">
         Browse <Link href="/picks" className="text-primary underline">tonight&apos;s full slate</Link>, or jump to a sport: <Link href="/mlb-picks" className="text-primary underline">MLB</Link>, <Link href="/nba-picks-today" className="text-primary underline">NBA</Link>, <Link href="/best-parlay-picks" className="text-primary underline">parlays</Link>.

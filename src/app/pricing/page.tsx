@@ -100,13 +100,13 @@ export default function PricingPage() {
           <div className="text-[10px] font-black uppercase tracking-[0.3em] text-primary mb-3">Pricing</div>
           <h1 className="text-4xl md:text-5xl font-black uppercase tracking-tight mb-4">Pick a plan. Cancel whenever.</h1>
           <p className="text-base md:text-lg text-white/55 leading-relaxed">
-            14-day free trial on every subscription. Cancel anytime in the billing portal — no charge if you cancel before day 15. Free tier always shows the daily $10 Parlay and per-matchup breakdowns. Research tools (Tonight&apos;s Edges, Hot Tendencies, Asleep Picks) come with any annual plan.
+            14-day free trial on every subscription. Cancel anytime in the billing portal — no charge if you cancel before day 15. Free tier always shows the daily $10 Parlay and per-matchup breakdowns. Research tools (Tonight&apos;s Edges, Hot Tendencies, Sleeper Picks) come with any annual plan.
           </p>
         </header>
 
         <div className="rounded-2xl border border-amber-400/25 bg-amber-400/[0.05] p-4 mb-8 text-center text-sm text-white/75 max-w-3xl mx-auto">
           <span className="font-black uppercase tracking-widest text-amber-400 mr-2">Annual perk:</span>
-          Yearly subscribers get Tonight&apos;s Edges, Hot Tendencies, and the Asleep Picks tile. Research tools are not included on monthly plans.
+          Yearly subscribers get Tonight&apos;s Edges, Hot Tendencies, and the Sleeper Picks tile. Research tools are not included on monthly plans.
         </div>
 
         <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/[0.04] p-4 mb-10 max-w-2xl mx-auto flex items-center justify-between gap-4">
@@ -202,7 +202,7 @@ export default function PricingPage() {
             <Sparkles className="w-6 h-6 text-sky-400 shrink-0 mt-0.5" />
             <div>
               <div className="text-xs font-black uppercase tracking-widest text-white/80">Free content stays free</div>
-              <p className="text-xs text-white/50 mt-1 leading-relaxed">$10 Parlay, Edges, Trends, Asleep Picks — always free, no email required.</p>
+              <p className="text-xs text-white/50 mt-1 leading-relaxed">$10 Parlay, Edges, Trends, Sleeper Picks — always free, no email required.</p>
             </div>
           </div>
         </div>

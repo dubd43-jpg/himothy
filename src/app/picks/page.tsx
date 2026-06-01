@@ -803,12 +803,25 @@ function DeepPickCard({ pick, variant, href, live, lateNewsNote }: { pick: DeepP
             </div>
           </div>
         )}
-        {/* WHY WE LIKE IT — top 2 reasons surface prominently (not behind a toggle). Customer
-            sees the case for the pick before deciding whether to bet it. */}
+        {/* WHY WE LIKE IT — top 4 reasons surface prominently. Customer sees the
+            FULL case for the pick before deciding. Especially important on dog flips
+            where the win-prob would seem to argue against — the pitcher matchup,
+            bullpen, line movement, and tendency reasons need to land FIRST. */}
         {pick.reasonsFor && pick.reasonsFor.length > 0 && (
-          <ul className="space-y-1.5 text-[12px] leading-relaxed text-white/70 border-t border-white/5 pt-3">
-            {pick.reasonsFor.slice(0, 2).map((r, i) => (
+          <ul className="space-y-1.5 text-[12px] leading-relaxed text-white/75 border-t border-white/5 pt-3">
+            {pick.reasonsFor.slice(0, 4).map((r, i) => (
               <li key={i} className="flex gap-2"><span className="text-emerald-400 shrink-0">✓</span><span>{r}</span></li>
+            ))}
+          </ul>
+        )}
+        {/* RISKS — surface key reasonsAgainst so the customer sees them too. Honest
+            picking shows both sides. Especially important on dog flips where the
+            losing streak / opp's hot hitting is real context. */}
+        {pick.reasonsAgainst && pick.reasonsAgainst.length > 0 && (
+          <ul className="space-y-1.5 text-[12px] leading-relaxed text-white/55 border-t border-white/5 pt-3">
+            <li className="text-[10px] font-black uppercase tracking-widest text-amber-400/70">Honest risks</li>
+            {pick.reasonsAgainst.slice(0, 2).map((r, i) => (
+              <li key={i} className="flex gap-2"><span className="text-amber-400/70 shrink-0">!</span><span>{r}</span></li>
             ))}
           </ul>
         )}
@@ -1342,7 +1355,7 @@ function DeepResearchSection({ board }: { board: string }) {
                 <FooterLink href="/value" icon={Target} title="Value Plays" count={data.valuePlays?.length ?? 0} />
               )}
               {(data.asleepPicks?.length ?? 0) > 0 && (
-                <FooterLink href="/asleep" icon={Flame} title="Asleep" count={data.asleepPicks?.length ?? 0} />
+                <FooterLink href="/asleep" icon={Flame} title="Sleeper Picks" count={data.asleepPicks?.length ?? 0} />
               )}
               <FooterLink href="/stats" icon={Trophy} title="Full Record" count={null} />
             </div>

@@ -14,7 +14,7 @@ import { organizationJsonLd, websiteJsonLd, faqJsonLd } from "@/lib/seo";
 const HOMEPAGE_FAQS = [
   {
     question: "Are HIMOTHY's picks free?",
-    answer: "Yes — every pick on the daily board is free to view, including the Grand Slam, Pressure Pack, VIP 4-Pack, $10 Parlay Plan, Power 20 stack, Asleep Picks, Tonight's Edges, and Hot Tendencies. Real plays, real reasons, no paywall on the picks themselves."
+    answer: "Yes — every pick on the daily board is free to view, including the Grand Slam, Pressure Pack, VIP 4-Pack, $10 Parlay Plan, Power 20 stack, Sleeper Picks, Tonight's Edges, and Hot Tendencies. Real plays, real reasons, no paywall on the picks themselves."
   },
   {
     question: "How does HIMOTHY pick games?",
@@ -247,7 +247,7 @@ export default function Home() {
                  <div className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30 mb-4 text-center">Edge Tools — Where the Sharp Money Lives</div>
                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     {[
-                      { label: "Asleep Picks", icon: Flame, href: "/asleep", sub: "Quiet markets" },
+                      { label: "Sleeper Picks", icon: Flame, href: "/asleep", sub: "Quiet markets" },
                       { label: "Tonight's Edges", icon: TrendingUp, href: "/edges", sub: "Top signals" },
                       { label: "Hot Tendencies", icon: Crosshair, href: "/trends", sub: "ATS & O/U" },
                       { label: "Value Plays", icon: Target, href: "/value", sub: "+EV vs true line" },
