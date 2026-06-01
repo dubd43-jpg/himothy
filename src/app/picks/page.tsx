@@ -700,7 +700,7 @@ function PublicMoneyBadge({ awayTeam, homeTeam, selectionSide, league }: {
 
 // Clean, clickable SUMMARY card. The full breakdown (win %, H2H, props, form, reasons)
 // lives on the breakdown page the card links to — the whole card is the click target.
-function DeepPickCard({ pick, variant, href, live }: { pick: DeepPick; variant: 'grand-slam' | 'pressure' | 'vip' | 'parlay'; href?: string; live?: LivePickState | null }) {
+function DeepPickCard({ pick, variant, href, live, lateNewsNote }: { pick: DeepPick; variant: 'grand-slam' | 'pressure' | 'vip' | 'parlay'; href?: string; live?: LivePickState | null; lateNewsNote?: string | null }) {
   const startTime = formatGameDateTimeET(pick.startTime) || TIME_TBD;
   const showLive = !!live && live.state !== 'pre';
   const liveClockStr = live ? [live.period, live.clock && live.clock !== '0:00' ? live.clock : null].filter(Boolean).join(' · ') : '';
@@ -791,6 +791,18 @@ function DeepPickCard({ pick, variant, href, live }: { pick: DeepPick; variant: 
         {/* CONFIDENCE BAND — owner directive: customers should see at a glance which picks
             are slam dunks vs strong vs solid-best-available. Sets expectations + builds trust. */}
         <ConfidenceBand score={pick.confidenceScore} />
+        {/* LATE NEWS warning — the cron flags this pick when an OUT/scratch happened
+            after morning publish. We WARN, never auto-pull. Customer sees "verify before betting." */}
+        {lateNewsNote && (
+          <div className="flex items-start gap-2 rounded-lg border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-xs">
+            <span className="text-amber-400 font-black shrink-0">⚠</span>
+            <div>
+              <div className="text-[10px] font-black uppercase tracking-widest text-amber-300">Late news</div>
+              <div className="text-amber-100/85 mt-0.5">{lateNewsNote}</div>
+              <div className="text-[10px] text-amber-200/60 mt-1">Verify lineup before betting.</div>
+            </div>
+          </div>
+        )}
         {/* WHY WE LIKE IT — top 2 reasons surface prominently (not behind a toggle). Customer
             sees the case for the pick before deciding whether to bet it. */}
         {pick.reasonsFor && pick.reasonsFor.length > 0 && (
@@ -1135,6 +1147,21 @@ function DeepResearchSection({ board }: { board: string }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const liveMap = useLiveScores();
+  // Late-news flags — fetched once on mount and refreshed every 5 min. Maps event_id →
+  // human-readable note ("Late news 22:45 UTC: Player X (OUT)"). Pick cards show a
+  // ⚠ badge + a warning line when a flag is present for their gameId.
+  const [lateNewsFlags, setLateNewsFlags] = useState<Record<string, string>>({});
+  useEffect(() => {
+    const loadLate = () => {
+      fetch('/api/picks/late-news', { cache: 'no-store' })
+        .then((r) => r.json())
+        .then((d) => { if (d?.success) setLateNewsFlags(d.flags || {}); })
+        .catch(() => {});
+    };
+    loadLate();
+    const iv = setInterval(loadLate, 5 * 60 * 1000);
+    return () => clearInterval(iv);
+  }, []);
   // Per-section stats (W-L, units, streak). Fetched from /api/records/summary, mapped to
   // each category tile so users see "Pressure Pack 12-5 (70%) +3.2u · 🔥 3W" inline.
   const [productStats, setProductStats] = useState<Record<string, TileStats>>({});
@@ -1330,7 +1357,7 @@ function DeepResearchSection({ board }: { board: string }) {
           </div>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {flatPicks.map((pick) => (
-              <DeepPickCard key={pick.gameId} pick={pick} variant="vip" href={`/pick/${pick.gameId}?board=${board}&from=/picks?board=${board}`} live={computeLiveState(pick, liveMap[pick.gameId])} />
+              <DeepPickCard key={pick.gameId} pick={pick} variant="vip" href={`/pick/${pick.gameId}?board=${board}&from=/picks?board=${board}`} live={computeLiveState(pick, liveMap[pick.gameId])} lateNewsNote={lateNewsFlags[pick.gameId] || null} />
             ))}
           </div>
         </section>
