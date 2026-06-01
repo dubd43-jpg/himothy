@@ -1902,13 +1902,56 @@ export async function buildMarketCandidates(pick: any, opts?: { includeProps?: b
     return adj;
   })();
 
-  // 1) FULL-GAME TOTAL — line from the scoreboard, projection from form + pitcher matchup.
+  // BASKETBALL PROJECTION ADJUSTMENT — owner directive: every sport needs its key
+  // defining factors. For basketball, the pitcher equivalent is PACE + REST + the
+  // OFF/DEF rating matchup. We have:
+  //   - PACE: avgTotal10 per team — when both teams play high-pace, total projects UP
+  //   - REST: sharpIntel.rest carries oppOnB2B + restAdvantage (already in scoring as boost)
+  //   - OFF/DEF rating: derive from avg margin + avg total (a team scoring 175 with +5
+  //     margin has a strong offense; scoring 165 with -3 margin has weak both ends)
+  // The basketball signal pickedAvgQ1Scored already tells us start-fast tendency; we
+  // use it here to inform totals projection too (fast-starting team typically plays
+  // fast all game).
+  const basketballAdjustment = (() => {
+    if (!parentSig) return 0;
+    // Basketball is identified when our Q1 scoring data is populated (engine only
+    // computes pickedAvgQ1Scored for NBA/WNBA leagues per tendenciesService).
+    if (!parentSig.pickedAvgQ1Scored || parentSig.pickedAvgQ1Scored <= 0) return 0;
+    let adj = 0;
+    // PACE check — both teams' Q1 scoring avg. High Q1 scoring is a pace proxy.
+    const ourQ1 = parentSig.pickedAvgQ1Scored || 0;
+    const oppQ1Scored = parentSig.oppAvgQ1Scored || 0;
+    const combinedQ1 = (ourQ1 + oppQ1Scored) / 2;
+    // Q1 scoring above ~25 is high-pace; below ~21 is slow. ±3 pts on total projection.
+    if (combinedQ1 >= 27) adj += 3.5;       // very high pace
+    else if (combinedQ1 >= 24) adj += 1.5;
+    else if (combinedQ1 <= 20) adj -= 3.0;  // grinding pace
+    else if (combinedQ1 <= 22) adj -= 1.5;
+    // OFF/DEF MATCHUP — when our team scores a lot in Q1 vs an opp that gives up a
+    // lot in Q1, the game shapes up high-scoring. Inverse for grind-it-out.
+    const oppQ1Allowed = parentSig.oppAvgQ1Allowed || 0;
+    const matchupDelta = (ourQ1 - oppQ1Allowed) + (oppQ1Scored - (parentSig.pickedAvgQ1Allowed || 0));
+    if (matchupDelta >= 6) adj += 2.0;       // fireworks predicted
+    else if (matchupDelta <= -6) adj -= 2.0; // defensive slugfest predicted
+    // REST signal — B2B opponent tends to push totals UP (tired legs = less defense
+    // late, more transition baskets) but caps at 2 points
+    if (parentSig.oppOnB2B) adj += 1.0;
+    return adj;
+  })();
+  // Combined non-pitcher adjustment — used wherever a totals projection runs for any sport.
+  const sportAdjustment = pitcherAdjustment + basketballAdjustment;
+
+  // 1) FULL-GAME TOTAL — line from the scoreboard, projection adjusted by sport-specific
+  //    key factors (MLB pitcher matchup, basketball pace/rest/matchup).
   if (pick?.total != null && homeTot != null && awayTot != null) {
     const rawProj = (homeTot + awayTot) / 2;
-    const proj = rawProj + pitcherAdjustment;
+    const proj = rawProj + sportAdjustment;
     const over = proj >= pick.total;
     const align = combinedOverRate != null ? (over ? combinedOverRate : 1 - combinedOverRate) : null;
-    const adjustNote = pitcherAdjustment !== 0 ? ` (pitcher adj ${pitcherAdjustment > 0 ? '+' : ''}${pitcherAdjustment.toFixed(1)})` : '';
+    const adjustParts: string[] = [];
+    if (pitcherAdjustment !== 0) adjustParts.push(`SP ${pitcherAdjustment > 0 ? '+' : ''}${pitcherAdjustment.toFixed(1)}`);
+    if (basketballAdjustment !== 0) adjustParts.push(`pace ${basketballAdjustment > 0 ? '+' : ''}${basketballAdjustment.toFixed(1)}`);
+    const adjustNote = adjustParts.length ? ` (${adjustParts.join(', ')})` : '';
     candidates.push({
       selection: `${over ? 'Over' : 'Under'} ${pick.total}`, marketType: 'total',
       selectionSide: over ? 'home' : 'away', odds: '-110', line: `${pick.total}`,
@@ -2837,6 +2880,38 @@ async function processGame(
       headline: 'FAST-START EDGE',
       detail: `${pickedTeam.abbreviation} averages ${signals.pickedAvgQ1Scored.toFixed(1)} pts in Q1 vs ${oppTeam.abbreviation}'s ${signals.oppAvgQ1Allowed.toFixed(1)} Q1 allowed. They lead after Q1 in ${Math.round(signals.pickedPctLeadAfterQ1)}% of games — game decided early.`,
     };
+  }
+  // 6b) BASKETBALL PACE / MATCHUP edge — when the basketball pace + Off/Def matchup
+  // math drives the pick (pace differential, scoring delta, B2B opponent). This is
+  // the pitcher-matchup equivalent for basketball.
+  else if (signals.pickedAvgQ1Scored > 0 && signals.oppAvgQ1Allowed > 0) {
+    const combinedPace = ((signals.pickedAvgQ1Scored + (signals.oppAvgQ1Scored || 0)) / 2);
+    const matchupEdge = (signals.pickedAvgQ1Scored - signals.oppAvgQ1Allowed) + ((signals.oppAvgQ1Scored || 0) - (signals.pickedAvgQ1Allowed || 0));
+    if (combinedPace >= 26) {
+      keyFactor = {
+        category: 'q1_h1',
+        headline: 'HIGH-PACE GAME',
+        detail: `Both teams average ${combinedPace.toFixed(1)} pts in Q1 — this is a track-meet pace. Totals stack up fast; ${pickedTeam.abbreviation} thrives in the up-tempo style.`,
+      };
+    } else if (combinedPace <= 21) {
+      keyFactor = {
+        category: 'q1_h1',
+        headline: 'GRIND-IT-OUT PACE',
+        detail: `Both teams average ${combinedPace.toFixed(1)} pts in Q1 — half-court grinders, low possessions. ${pickedTeam.abbreviation}'s style suits a slower, defensive game.`,
+      };
+    } else if (matchupEdge >= 5) {
+      keyFactor = {
+        category: 'q1_h1',
+        headline: 'MATCHUP MISMATCH',
+        detail: `${pickedTeam.abbreviation}'s offense vs ${oppTeam.abbreviation}'s defense produces a ${matchupEdge.toFixed(1)}-pt scoring edge by the math. We win the matchup on paper.`,
+      };
+    } else if (signals.oppOnB2B) {
+      keyFactor = {
+        category: 'q1_h1',
+        headline: 'OPPONENT B2B',
+        detail: `${oppTeam.abbreviation} is on a back-to-back. Tired legs late in basketball = defensive lapses, transition baskets for us, ATS edge of 4-6 pts historically.`,
+      };
+    }
   }
   // 7) Key injury on opponent
   else if (signals.keyInjuryOnOppSide && hasKeyInjuryOpp) {
