@@ -1741,6 +1741,105 @@ export async function buildBestMarketSwap(pick: any, opts?: { includeProps?: boo
   return all[0] ?? null;
 }
 
+// UNIFIED TENDENCY BOOST — owner directive: "Everything needs to work together." The deep
+// tendency stack (pitcher matchup, bullpen, 1st-inning %, line movement, streak fragility,
+// odds-bucket eyes) is wired into scoreGame() for the main side bets. But buildMarketCandidates
+// uses scoreTotalsConfidence + propEdge + period scores — which never see the tendency data.
+// This function bridges that gap: apply the tendency signals to EVERY market candidate so
+// totals, team totals, F5, periods, halves, and props get the same deep-data adjustment that
+// side picks get. Result: real 90+ candidates surface where the surface math saw 82.
+//
+// Signed: positive = boost (more confidence), negative = dock. Capped per-signal to avoid
+// any single tendency dominating; stacked signals can legitimately move a candidate +15.
+function boostByTendencies(candidate: BestMarketSwap, signals: Omit<import('./deepResearchService').GameSignals, 'confirmingSignals'> | any): number {
+  if (!signals) return 0;
+  let boost = 0;
+  const sel = candidate.selection.toLowerCase();
+  const mkt = candidate.marketType.toLowerCase();
+  const isOver = /\bover\b/.test(sel);
+  const isUnder = /\bunder\b/.test(sel);
+  const isF5 = mkt.includes('f5');
+  const isHalfOrQuarter = mkt.includes('1h_') || mkt.includes('2h_') || mkt.startsWith('q') || mkt.startsWith('p');
+  const isTeamTotal = mkt.includes('team_total');
+  const isFullTotal = mkt === 'total';
+
+  // PITCHER MATCHUP — applies to totals, F5, team totals, and prop K-counts
+  if (signals.pickedPitcherStarts >= 3 && signals.pickedPitcherEraL5 > 0) {
+    // Strong starter (sub-3 ERA L5) → favors UNDER on totals; F5 especially
+    if (signals.pickedPitcherEraL5 <= 2.5) {
+      if (isFullTotal && isUnder) boost += 5;
+      else if (isF5 && isUnder) boost += 7;
+      else if (isTeamTotal && isUnder) boost += 3;
+      else if ((isFullTotal || isF5) && isOver) boost -= 4;
+    } else if (signals.pickedPitcherEraL5 <= 3.5) {
+      if (isF5 && isUnder) boost += 3;
+    } else if (signals.pickedPitcherEraL5 >= 5.0) {
+      // Bad starter → favors OVER, especially F5
+      if (isF5 && isOver) boost += 7;
+      else if (isFullTotal && isOver) boost += 4;
+      else if (isTeamTotal && isOver) boost += 3;
+    }
+  }
+
+  // OPPONENT PITCHER — same logic mirrored; affects opponent's team total (their score)
+  if (signals.oppPitcherStarts >= 3 && signals.oppPitcherEraL5 > 0) {
+    if (signals.oppPitcherEraL5 >= 5.0 && isFullTotal && isOver) boost += 3;
+    if (signals.oppPitcherEraL5 <= 2.5 && isFullTotal && isUnder) boost += 3;
+  }
+
+  // BULLPEN — leaky bullpen = full-game over and late-inning over; lockdown = under
+  if (signals.tendencyFirstFrameSample >= 5) {
+    if (signals.pickedBullpenAllowed >= 2.5 && isFullTotal && isOver) boost += 4;
+    if (signals.oppBullpenAllowed >= 2.5 && isFullTotal && isOver) boost += 4;
+    if (signals.pickedBullpenAllowed <= 0.8 && isFullTotal && isUnder) boost += 3;
+    if (signals.oppBullpenAllowed <= 0.8 && isFullTotal && isUnder) boost += 3;
+  }
+
+  // 1ST-INNING TENDENCY (baseball-only via F5 data presence)
+  if (signals.tendencyFirstFrameSample >= 5 && signals.tendencyF5TotalAvg > 0) {
+    // Team scores in 1st 70%+ of games → F5 over boost; opp inverse
+    if (signals.tendencyFirstFrameScored >= 70 && isF5 && isOver) boost += 4;
+    if (signals.tendencyOppFirstFrameAllowed >= 70 && isF5 && isOver) boost += 4;
+    if (signals.tendencyFirstFrameScored <= 30 && isF5 && isUnder) boost += 3;
+    if (signals.tendencyOppFirstFrameAllowed <= 30 && isF5 && isUnder) boost += 3;
+  }
+
+  // BASKETBALL Q1/H1 TENDENCY — applies to 1Q, 1H markets
+  if (signals.pickedAvgQ1Scored > 0 && signals.oppAvgQ1Allowed > 0 && isHalfOrQuarter) {
+    const q1Edge = signals.pickedAvgQ1Scored - signals.oppAvgQ1Allowed;
+    if (q1Edge >= 4 && isOver) boost += 4;
+    else if (q1Edge <= -4 && isUnder) boost += 4;
+  }
+
+  // STREAK FRAGILITY — fragile streaks dock the side bet portions; real streaks boost
+  if (signals.recentFormStreak >= 3 && signals.pickedAvgMargin10 >= 1.5) {
+    // Real streak — boost team-total over and any side bet
+    if (isTeamTotal && isOver) boost += 3;
+  } else if (signals.recentFormStreak >= 3 && signals.pickedAvgMargin10 <= -0.5) {
+    // Fragile streak — dock team-total over and side bets
+    if (isTeamTotal && isOver) boost -= 3;
+  }
+
+  // LINE MOVEMENT — sharp action signal applies to any market on the side it favors
+  if (signals.hasOpeningLine) {
+    if (signals.mlMovementForSide >= 20) boost += 3;
+    else if (signals.mlMovementForSide >= 10) boost += 2;
+    else if (signals.mlMovementForSide <= -20) boost -= 3;
+    else if (signals.mlMovementForSide <= -10) boost -= 2;
+  }
+
+  // ODDS-BUCKET EYES — applies to whatever bucket this candidate's price falls into
+  if (signals.oddsBucketSample >= 5) {
+    if (signals.oddsBucketEdgePct >= 10) boost += 3;
+    else if (signals.oddsBucketEdgePct >= 5) boost += 1;
+    else if (signals.oddsBucketEdgePct <= -10) boost -= 3;
+    else if (signals.oddsBucketEdgePct <= -5) boost -= 1;
+  }
+
+  // Hard cap each direction so no single boost dominates the base score
+  return Math.max(-15, Math.min(15, boost));
+}
+
 // Returns ALL evaluated markets for a game (full total, team totals, halves, quarters,
 // periods, F5, and — when asked — player props), sorted strongest-first. Used by the Big
 // Games expansion to surface MULTIPLE plays per game.
@@ -1877,6 +1976,19 @@ export async function buildMarketCandidates(pick: any, opts?: { includeProps?: b
         }
       }
     } catch { /* non-blocking — props are an upgrade, never required */ }
+  }
+
+  // UNIFIED SCORING: apply the tendency boost to every candidate before returning.
+  // This is the single bridge that makes the deep tendency stack (pitcher matchup,
+  // bullpen state, 1st-inning %, line movement, streak fragility, odds-bucket eyes)
+  // affect EVERY market — totals, team totals, F5, periods, halves, props, alt lines.
+  // No caller has to remember to apply the boost; it's baked into the candidate score.
+  const parentSignals = (pick as any)?.signals;
+  if (parentSignals) {
+    for (const c of candidates) {
+      const boost = boostByTendencies(c, parentSignals);
+      c.confidence = Math.max(0, Math.min(100, c.confidence + boost));
+    }
   }
 
   candidates.sort((a, b) => b.confidence - a.confidence);
@@ -3035,6 +3147,7 @@ export async function runDailyDeepResearch(board: BoardType = 'north-american'):
       const digFinds: DeepPickResult[] = [];
       for (const batch of candidateBatches) {
         for (const { game, c } of batch) {
+          // Confidence is already tendency-boosted by buildMarketCandidates.
           if ((c.confidence ?? 0) < QUALITY_FLOOR) continue;
           digFinds.push({
             ...game,
@@ -3085,6 +3198,7 @@ export async function runDailyDeepResearch(board: BoardType = 'north-american'):
       const digFinds80: DeepPickResult[] = [];
       for (const batch of candidateBatches) {
         for (const { game, c } of batch) {
+          // Confidence is already tendency-boosted by buildMarketCandidates.
           if ((c.confidence ?? 0) < GLOBAL_FLOOR) continue;
           digFinds80.push({
             ...game,
