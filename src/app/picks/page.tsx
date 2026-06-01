@@ -1208,17 +1208,25 @@ function DeepResearchSection({ board }: { board: string }) {
             <CategoryTile href="/parlay-plan" icon={DollarSign} title="$10 Parlay Plan" count={data.parlayPlan.length} unit="leg" restingLabel="Not enough legs today" stats={statsFor('Parlay Center')} />
           </div>
 
-          {/* 3. FOOTER LINK STRIP — everything else, compact */}
+          {/* 3. FOOTER LINK STRIP — only products that actually have content tonight.
+              Empty/dead products (Value Plays, Period Plays, Big Games when no playoffs,
+              Trends) are hidden when count is 0 — no more "click for nothing" tiles. */}
           <div>
             <div className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30 mb-3 pl-1">More on tonight's board</div>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
               <FooterLink href="/himothy-picks" icon={Crown} title="HIMOTHY Personal Pick" count={1} />
-              <FooterLink href="/big-games" icon={Trophy} title="Big Games" count={data.marquee?.length ?? 0} />
-              <FooterLink href="/nrfi" icon={Radio} title="NRFI" count={data.nrfi?.length ?? 0} />
-              <FooterLink href="/value" icon={Target} title="Value Plays" count={data.valuePlays?.length ?? 0} />
-              {/* Edges & Tendencies are methodology (our edge) — back-end only now, not customer-facing. */}
-              <FooterLink href="/asleep" icon={Flame} title="Asleep" count={data.asleepPicks?.length ?? 0} />
-              <FooterLink href="/period-plays" icon={Radio} title="Period Plays" count={null} />
+              {(data.marquee?.length ?? 0) > 0 && (
+                <FooterLink href="/big-games" icon={Trophy} title="Big Games" count={data.marquee?.length ?? 0} />
+              )}
+              {(data.nrfi?.length ?? 0) > 0 && (
+                <FooterLink href="/nrfi" icon={Radio} title="NRFI" count={data.nrfi?.length ?? 0} />
+              )}
+              {(data.valuePlays?.length ?? 0) > 0 && (
+                <FooterLink href="/value" icon={Target} title="Value Plays" count={data.valuePlays?.length ?? 0} />
+              )}
+              {(data.asleepPicks?.length ?? 0) > 0 && (
+                <FooterLink href="/asleep" icon={Flame} title="Asleep" count={data.asleepPicks?.length ?? 0} />
+              )}
               <FooterLink href="/stats" icon={Trophy} title="Full Record" count={null} />
             </div>
           </div>
