@@ -4000,29 +4000,42 @@ async function buildOneSportParlay(sport: string, excluded: Set<string>): Promis
   // These don't contradict the main board's side picks, so they're fully eligible. The
   // main board scanned these too via dig-wider; we use the same buildMarketCandidates
   // engine so leg quality matches main-board quality.
+  //
+  // To make buildMarketCandidates work we need each game's full TEAM PROFILES (trends,
+  // avgMargin10, avgTotal10, etc.) which processGameForPower20 doesn't fetch. We pull
+  // these from the main board's allScored cache by gameId — that's already populated
+  // with the deep analysis for every MLB game tonight.
   const altLegs: SportParlayLeg[] = [];
-  for (const event of events) {
-    try {
-      const gp = await processGameForPower20(event, sport);
-      if (!gp) continue;
-      // Build a pick-shaped object so buildMarketCandidates can score it; pull from the
-      // game's team profiles (winProb/trends) the processGameForPower20 already fetched.
-      const cands = await buildMarketCandidates(gp as any, { includeProps: false });
-      for (const c of cands) {
-        // Skip side bets — already covered by gameLegs path.
-        if (c.marketType === 'moneyline' || c.marketType === 'spread' || c.marketType === 'runline') continue;
-        if ((c.confidence ?? 0) < 80) continue; // hard quality floor
-        if (isExcluded(gp.gameId, c.selection, c.marketType, c.selectionSide)) continue;
-        altLegs.push({
-          type: 'game', league: sport, gameId: gp.gameId, eventName: gp.eventName,
-          startTime: gp.startTime || event.date || null,
-          selection: c.selection, odds: c.odds || '-110', edgeScore: Math.round(c.confidence ?? 0),
-          detail: c.detail || `${c.confidence ?? 0} confidence`,
-          selectionSide: c.selectionSide, marketType: c.marketType,
-        });
-      }
-    } catch { /* per-game failures shouldn't stop the parlay */ }
-  }
+  try {
+    const { getCachedBoard } = await import('@/services/dailyBoardCache');
+    const mainBoard = getCachedBoard('north-american');
+    const mainBoardData: any = mainBoard?.data;
+    const allScored: any[] = mainBoardData?.allScored || [];
+    const byGameId = new Map<string, any>();
+    for (const p of allScored) byGameId.set(String(p.gameId), p);
+
+    for (const event of events) {
+      const eid = String(event.id);
+      const fullPick = byGameId.get(eid);
+      if (!fullPick) continue; // game wasn't deep-scored on the main board → skip
+      try {
+        const cands = await buildMarketCandidates(fullPick, { includeProps: false });
+        for (const c of cands) {
+          // Skip side bets — already covered by gameLegs path.
+          if (c.marketType === 'moneyline' || c.marketType === 'spread' || c.marketType === 'runline') continue;
+          if ((c.confidence ?? 0) < 80) continue; // hard quality floor
+          if (isExcluded(eid, c.selection, c.marketType, c.selectionSide)) continue;
+          altLegs.push({
+            type: 'game', league: sport, gameId: eid, eventName: fullPick.eventName || event.name || '',
+            startTime: fullPick.startTime || event.date || null,
+            selection: c.selection, odds: c.odds || '-110', edgeScore: Math.round(c.confidence ?? 0),
+            detail: c.detail || `${(c.confidence ?? 0).toFixed(0)} confidence`,
+            selectionSide: c.selectionSide, marketType: c.marketType,
+          });
+        }
+      } catch { /* per-game failures shouldn't stop the parlay */ }
+    }
+  } catch { /* missing cache shouldn't block — props path still runs */ }
   altLegs.sort((a, b) => b.edgeScore - a.edgeScore);
 
   // 2. If gameLegs + altLegs already give us 4+, take top 4 — no props needed.
