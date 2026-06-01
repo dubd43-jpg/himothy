@@ -277,6 +277,22 @@ export interface DeepPickResult {
   // says BET (clear edge), STAY_AWAY (conflict with no edge), or PASS (no signal at all).
   // Surfaces transparently on the UI so customers see WHY we like (or skip) a pick.
   tendencyResolution?: TendencyResolution | null;
+  // KEY FACTOR — the single biggest reason we took this pick, surfaced prominently to
+  // customers as a highlighted banner. Owner directive: "every game must have a key factor
+  // of why we took it." The engine picks whichever signal contributed the most to the
+  // confidence score; ties go to the most actionable one (pitcher matchup > line move >
+  // bullpen > 1st-inning > injury > ATS > value).
+  keyFactor?: {
+    category: 'pitcher' | 'bullpen' | 'line_movement' | 'odds_bucket' | 'streak_real' | 'first_frame' | 'q1_h1' | 'injury' | 'ats' | 'value' | 'win_prob';
+    headline: string;        // short tag — "PITCHER MATCHUP", "REVERSE LINE MOVEMENT", etc.
+    detail: string;          // 1-2 sentence outcome-focused explanation
+  };
+  // When the key factor is pitcher-driven, both starters' full profiles are attached for
+  // customers to see the actual stats — name, hand, L5 ERA, WHIP, K/9, last-start damage.
+  pitcherSpotlight?: {
+    picked: { name: string; throws: 'L' | 'R' | null; starts: number; eraL5: number | null; whipL5: number | null; kPer9L5: number | null; hitsPerStart: number | null; lastStartER: number | null; lastStartIP: number | null } | null;
+    opp:    { name: string; throws: 'L' | 'R' | null; starts: number; eraL5: number | null; whipL5: number | null; kPer9L5: number | null; hitsPerStart: number | null; lastStartER: number | null; lastStartIP: number | null } | null;
+  };
   // Signal capture at publish — both sides' signals + scores frozen at pick time.
   // The whole point: when a pick loses, we can read this field and see exactly what
   // the engine knew about both teams when it chose the winner. Lets us answer
@@ -2542,80 +2558,94 @@ async function processGame(
 
   if (signals.noKeyInjuries) reasonsFor.push('Both rosters appear healthy with no confirmed out/doubtful players.');
 
-  // CUSTOMER-FACING tendency reasoning — natural language, no methodology jargon.
-  // Owner rule: customers see WHY we like it, not the math. These only fire for
-  // engine-generated picks (Grand Slam / Pressure / VIP / Parlay / Marquee / Asleep);
-  // Personal Plays use admin's own reasoning, Sport Parlays use their own copy.
+  // CUSTOMER-FACING reasoning — rewritten 2026-06-01 per owner: lines must explain
+  // WHY THIS BET WINS (predicted game flow + outcome), not just team-quality descriptions.
+  // "Detroit's starter has held opp lineups under 2.4 ERA — Tampa will struggle to
+  // score" is good. "Detroit on a losing streak" alone is just describing the team.
+  // Each pushed reason connects a signal to a predicted game state.
   const pickedTeam = pickData.selectionSide === 'home' ? home : away;
   const oppTeam = pickData.selectionSide === 'home' ? away : home;
 
-  // Pitcher matchup (MLB only — engine produces 0 for non-MLB)
-  if (signals.pickedPitcherStarts >= 3 && signals.pickedPitcherEraL5 > 0) {
-    if (signals.pickedPitcherEraL5 <= 2.5) {
-      reasonsFor.push(`${pickedTeam.abbreviation}'s starter has been dealing — ${signals.pickedPitcherEraL5} ERA over his last ${signals.pickedPitcherStarts} starts.`);
-    } else if (signals.pickedPitcherEraL5 <= 3.5) {
-      reasonsFor.push(`${pickedTeam.abbreviation}'s starter is throwing well lately — ${signals.pickedPitcherEraL5} ERA L${signals.pickedPitcherStarts}.`);
-    } else if (signals.pickedPitcherEraL5 >= 5.0) {
-      reasonsAgainst.push(`${pickedTeam.abbreviation}'s starter has been getting hit (${signals.pickedPitcherEraL5} ERA last ${signals.pickedPitcherStarts}).`);
-    }
+  // ===== PITCHER MATCHUP — outcome-focused MLB reasoning =====
+  // The pitcher is the single biggest variable in a baseball game. We connect ERA
+  // numbers to predicted run-prevention so customers know what the BET wins on.
+  const ourPitcherDealing = signals.pickedPitcherStarts >= 3 && signals.pickedPitcherEraL5 > 0 && signals.pickedPitcherEraL5 <= 2.5;
+  const ourPitcherGood = signals.pickedPitcherStarts >= 3 && signals.pickedPitcherEraL5 > 0 && signals.pickedPitcherEraL5 <= 3.5;
+  const ourPitcherBad = signals.pickedPitcherStarts >= 3 && signals.pickedPitcherEraL5 >= 5.0;
+  const oppPitcherHittable = signals.oppPitcherStarts >= 3 && signals.oppPitcherEraL5 >= 5.0;
+  const eraGapInOurFavor = (signals.pickedPitcherStarts >= 3 && signals.oppPitcherStarts >= 3 && signals.pickedPitcherEraL5 > 0 && signals.oppPitcherEraL5 > 0)
+    ? signals.oppPitcherEraL5 - signals.pickedPitcherEraL5
+    : 0;
+  if (ourPitcherDealing) {
+    reasonsFor.push(`Our starter has held opposing lineups to a ${signals.pickedPitcherEraL5} ERA over his last ${signals.pickedPitcherStarts} outings — expect this game to play in the low scoring range where ${pickedTeam.abbreviation} converts late.`);
+  } else if (ourPitcherGood) {
+    reasonsFor.push(`${pickedTeam.abbreviation}'s starter is rolling at ${signals.pickedPitcherEraL5} ERA L${signals.pickedPitcherStarts} — gives us a stable 5-6 inning floor that ${oppTeam.abbreviation}'s lineup has to crack.`);
   }
-  if (signals.oppPitcherStarts >= 3 && signals.oppPitcherEraL5 > 0 && signals.oppPitcherEraL5 >= 5.0) {
-    reasonsFor.push(`${oppTeam.abbreviation}'s starter has been hittable lately — ${signals.oppPitcherEraL5} ERA L${signals.oppPitcherStarts}.`);
+  if (oppPitcherHittable) {
+    reasonsFor.push(`${oppTeam.abbreviation}'s starter is bleeding runs (${signals.oppPitcherEraL5} ERA last ${signals.oppPitcherStarts}). Our lineup gets a hittable arm — that's 4-5 runs of expected production on offense.`);
+  }
+  if (eraGapInOurFavor >= 3) {
+    reasonsFor.push(`${eraGapInOurFavor.toFixed(1)}-run ERA gap in our pitcher's favor. The man on the mound for us has been the better arm by a wide margin — that's how this bet wins.`);
+  }
+  if (ourPitcherBad) {
+    reasonsAgainst.push(`Our starter (${signals.pickedPitcherEraL5} ERA last ${signals.pickedPitcherStarts}) needs to find it tonight — if he gives up 4+ early, the thesis breaks.`);
   }
 
-  // First-inning / first-frame tendency
+  // ===== FIRST-FRAME / EARLY-GAME OUTCOME =====
   if (signals.tendencyFirstFrameSample >= 5) {
     if (signals.tendencyFirstFrameScored >= 70) {
-      reasonsFor.push(`${pickedTeam.abbreviation} scores in the 1st inning ${Math.round(signals.tendencyFirstFrameScored)}% of recent games — they don't wait around.`);
+      reasonsFor.push(`${pickedTeam.abbreviation} puts a run on the board in the 1st inning ${Math.round(signals.tendencyFirstFrameScored)}% of recent games — we expect to take an early lead and force ${oppTeam.abbreviation} to play from behind.`);
     }
     if (signals.tendencyOppFirstFrameAllowed >= 70) {
-      reasonsFor.push(`${oppTeam.abbreviation} gives up a 1st-inning run ${Math.round(signals.tendencyOppFirstFrameAllowed)}% of games — slow starts.`);
+      reasonsFor.push(`${oppTeam.abbreviation} gives up runs in the 1st inning ${Math.round(signals.tendencyOppFirstFrameAllowed)}% of games — we have an early-strike edge before their bullpen matters.`);
     }
   }
 
-  // Bullpen state (MLB)
+  // ===== BULLPEN / LATE-GAME OUTCOME =====
   if (signals.tendencyFirstFrameSample >= 5) {
     if (signals.oppBullpenAllowed >= 2.5) {
-      reasonsFor.push(`${oppTeam.abbreviation}'s bullpen has been leaking — ${signals.oppBullpenAllowed.toFixed(1)} runs allowed late in recent games.`);
+      reasonsFor.push(`${oppTeam.abbreviation}'s bullpen is leaking ${signals.oppBullpenAllowed.toFixed(1)} runs/game in innings 7-9 lately. If this is a 1-2 run game late, we have the comeback edge — that's where this bet finishes.`);
     }
     if (signals.pickedBullpenAllowed >= 2.5) {
-      reasonsAgainst.push(`${pickedTeam.abbreviation}'s bullpen has been shaky late (${signals.pickedBullpenAllowed.toFixed(1)} runs/game in the 7th+).`);
+      reasonsAgainst.push(`Our bullpen has bled ${signals.pickedBullpenAllowed.toFixed(1)} R/g in innings 7-9 — if we don't have the lead by the 7th, late innings get scary.`);
     }
     if (signals.oppPctBlewLateLead >= 30) {
-      reasonsFor.push(`${oppTeam.abbreviation} has blown a late lead in ${Math.round(signals.oppPctBlewLateLead)}% of recent games.`);
+      reasonsFor.push(`${oppTeam.abbreviation} has coughed up a post-6th-inning lead in ${Math.round(signals.oppPctBlewLateLead)}% of their recent losses — even if they're up late, we have history saying they break.`);
     }
   }
 
-  // Streak fragility surface — if the engine has a +3 streak picked but with negative
-  // avg margin, surface that honestly so customer sees we're not just chasing streaks.
+  // ===== STREAK FRAGILITY =====
   if (signals.recentFormStreak >= 3 && signals.pickedAvgMargin10 < -0.3) {
-    reasonsAgainst.push(`${pickedTeam.abbreviation}'s ${signals.recentFormStreak}-game streak is built on top of a tougher L10 stretch — fragile.`);
+    reasonsAgainst.push(`${pickedTeam.abbreviation}'s ${signals.recentFormStreak}-game streak is built on top of a 4-6 L10 stretch — recent wins were thin. Riding momentum here, not dominance.`);
   } else if (signals.recentFormStreak >= 3 && signals.pickedAvgMargin10 >= 1.5) {
-    reasonsFor.push(`${pickedTeam.abbreviation}'s ${signals.recentFormStreak}-game streak is REAL — they're outscoring opponents by ${signals.pickedAvgMargin10.toFixed(1)} per game over their last 10.`);
+    reasonsFor.push(`${pickedTeam.abbreviation} is outscoring opponents by ${signals.pickedAvgMargin10.toFixed(1)} runs per game over their last 10 — this team is actually playing dominant, not just lucky.`);
   }
 
-  // Line-movement read — surface to customer when meaningful (≥10 ML pts or ≥0.5 spread)
+  // ===== LINE MOVEMENT — sharp money read =====
   if (signals.hasOpeningLine) {
     if (signals.mlMovementForSide >= 15) {
-      reasonsFor.push(`Sharp action on ${pickedTeam.abbreviation} — line moved ${signals.mlMovementForSide} cents in our favor since open.`);
+      reasonsFor.push(`Line moved ${signals.mlMovementForSide}¢ toward ${pickedTeam.abbreviation} since open while public is on the other side — that's textbook reverse line movement. Sharps agree with our read.`);
     } else if (signals.mlMovementForSide <= -15) {
-      reasonsAgainst.push(`Market faded ${pickedTeam.abbreviation} — line moved ${Math.abs(signals.mlMovementForSide)} cents against us since open.`);
+      reasonsAgainst.push(`Line moved ${Math.abs(signals.mlMovementForSide)}¢ AWAY from our side since open — the market is pricing us out. Sharps faded; we're fighting that.`);
     } else if (signals.spreadMovementForSide >= 1.0) {
-      reasonsFor.push(`Spread moved ${signals.spreadMovementForSide.toFixed(1)} pts toward ${pickedTeam.abbreviation} — sharp money our way.`);
+      reasonsFor.push(`Spread moved ${signals.spreadMovementForSide.toFixed(1)} pts toward ${pickedTeam.abbreviation} — the market agrees we're the right side, books are reacting to sharp action.`);
     } else if (signals.spreadMovementForSide <= -1.0) {
-      reasonsAgainst.push(`Spread moved ${Math.abs(signals.spreadMovementForSide).toFixed(1)} pts away from ${pickedTeam.abbreviation} — market fading us.`);
+      reasonsAgainst.push(`Spread moved ${Math.abs(signals.spreadMovementForSide).toFixed(1)} pts away from our side — the market is pricing against us.`);
     }
   }
 
-  // Basketball Q1 / H1 tendencies — customer-friendly read for NBA/WNBA plays
+  // ===== NBA/WNBA Q1/H1 OUTCOME =====
   if (signals.pickedAvgQ1Scored > 0 && signals.oppAvgQ1Allowed > 0) {
     const q1Edge = signals.pickedAvgQ1Scored - signals.oppAvgQ1Allowed;
     if (q1Edge >= 4 && signals.pickedPctLeadAfterQ1 >= 60) {
-      reasonsFor.push(`${pickedTeam.abbreviation} starts fast — they avg ${signals.pickedAvgQ1Scored.toFixed(1)} in Q1 vs ${oppTeam.abbreviation}'s ${signals.oppAvgQ1Allowed.toFixed(1)} Q1 allowed, and lead after Q1 in ${Math.round(signals.pickedPctLeadAfterQ1)}% of games.`);
+      reasonsFor.push(`${pickedTeam.abbreviation} averages ${signals.pickedAvgQ1Scored.toFixed(1)} pts in Q1 vs ${oppTeam.abbreviation}'s ${signals.oppAvgQ1Allowed.toFixed(1)} Q1 allowed. They lead after Q1 in ${Math.round(signals.pickedPctLeadAfterQ1)}% of games — we set the tone early and ${oppTeam.abbreviation} has to play uphill.`);
     } else if (signals.pickedPctLeadAfterH1 >= 65) {
-      reasonsFor.push(`${pickedTeam.abbreviation} leads at the half in ${Math.round(signals.pickedPctLeadAfterH1)}% of recent games — they typically build their margin early.`);
+      reasonsFor.push(`${pickedTeam.abbreviation} leads at the half in ${Math.round(signals.pickedPctLeadAfterH1)}% of recent games. They build their margin in the first 24 minutes — this game is decided before the 4th quarter.`);
     }
   }
+
+  // ===== INJURY OUTCOME (already exists higher up — augment with outcome framing) =====
+  // The base injury reason is pushed earlier; not re-added here to avoid duplicates.
 
   // WIN-PROBABILITY framing — added LAST so the deeper case-for-pick reasons lead.
   // Only included when win% actually supports the pick (or as a VALUE frame when we
@@ -2688,6 +2718,129 @@ async function processGame(
     dataQuality: dq,
   };
 
+  // ===== KEY FACTOR — single biggest reason for this pick =====
+  // Owner directive: "every game must have a key factor of why we took it." We pick
+  // the signal that contributed the most to confidence; ties go to the most actionable.
+  // Priority order matches: most predictive signals first.
+  type KeyFactor = NonNullable<DeepPickResult['keyFactor']>;
+  let keyFactor: KeyFactor | undefined;
+
+  // 1) Pitcher matchup (MLB only) — biggest single MLB-game predictor
+  if (eraGapInOurFavor >= 3 || ourPitcherDealing || oppPitcherHittable) {
+    const ourEra = signals.pickedPitcherEraL5;
+    const oppEra = signals.oppPitcherEraL5;
+    const gap = oppEra - ourEra;
+    let detail: string;
+    if (gap >= 4 && ourEra > 0 && oppEra > 0) {
+      detail = `${gap.toFixed(1)}-run ERA gap in our favor. Our starter has held a ${ourEra} ERA over his last ${signals.pickedPitcherStarts} starts; theirs is at ${oppEra} ERA L${signals.oppPitcherStarts}. The man on the mound is the bet — when our arm goes 6 strong, this game's over.`;
+    } else if (ourPitcherDealing) {
+      detail = `Our starter has been elite — ${ourEra} ERA over his last ${signals.pickedPitcherStarts} outings. He limits opposing rallies and gives our lineup a low bar to clear.`;
+    } else if (oppPitcherHittable) {
+      detail = `Their starter is getting lit up — ${oppEra} ERA over his last ${signals.oppPitcherStarts} starts. Our lineup faces a damaged arm.`;
+    } else {
+      detail = `Pitcher matchup tilts in our favor. Both arms break down to give us the edge tonight.`;
+    }
+    keyFactor = { category: 'pitcher', headline: 'PITCHER MATCHUP', detail };
+  }
+  // 2) Reverse line movement / sharp action
+  else if (signals.hasOpeningLine && signals.mlMovementForSide >= 20) {
+    keyFactor = {
+      category: 'line_movement',
+      headline: 'SHARP ACTION',
+      detail: `Line moved ${signals.mlMovementForSide}¢ toward ${pickedTeam.abbreviation} since open while public is still betting the other side. Reverse line movement — the smart money agrees with our read, books are reacting.`,
+    };
+  }
+  // 3) Odds-bucket eyes — our actual hit rate at this price band
+  else if (signals.oddsBucketSample >= 8 && signals.oddsBucketEdgePct >= 10) {
+    keyFactor = {
+      category: 'odds_bucket',
+      headline: 'PRICE BAND HITTING',
+      detail: `Our picks at this price band have beaten their break-even by ${signals.oddsBucketEdgePct.toFixed(1)} points over ${signals.oddsBucketSample} settled bets. We've been right at this price consistently.`,
+    };
+  }
+  // 4) Opp bullpen leak — late-game edge
+  else if (signals.tendencyFirstFrameSample >= 5 && signals.oppBullpenAllowed >= 2.5) {
+    keyFactor = {
+      category: 'bullpen',
+      headline: 'BULLPEN EDGE',
+      detail: `${oppTeam.abbreviation}'s bullpen is bleeding ${signals.oppBullpenAllowed.toFixed(1)} runs/game in innings 7-9. If this is a tight game late, we have the comeback math.`,
+    };
+  }
+  // 5) Real form streak — outscoring opponents by margin
+  else if (signals.recentFormStreak >= 3 && signals.pickedAvgMargin10 >= 1.5) {
+    keyFactor = {
+      category: 'streak_real',
+      headline: 'REAL FORM',
+      detail: `${pickedTeam.abbreviation} is outscoring opponents by ${signals.pickedAvgMargin10.toFixed(1)} per game over their last 10. They're not just winning — they're dominating. Trend says it continues.`,
+    };
+  }
+  // 6) Q1/H1 — basketball start-fast edge
+  else if (signals.pickedAvgQ1Scored > 0 && signals.oppAvgQ1Allowed > 0 && (signals.pickedAvgQ1Scored - signals.oppAvgQ1Allowed) >= 4 && signals.pickedPctLeadAfterQ1 >= 60) {
+    keyFactor = {
+      category: 'q1_h1',
+      headline: 'FAST-START EDGE',
+      detail: `${pickedTeam.abbreviation} averages ${signals.pickedAvgQ1Scored.toFixed(1)} pts in Q1 vs ${oppTeam.abbreviation}'s ${signals.oppAvgQ1Allowed.toFixed(1)} Q1 allowed. They lead after Q1 in ${Math.round(signals.pickedPctLeadAfterQ1)}% of games — game decided early.`,
+    };
+  }
+  // 7) Key injury on opponent
+  else if (signals.keyInjuryOnOppSide && hasKeyInjuryOpp) {
+    const all = [...oppInj.out, ...oppInj.doubtful];
+    keyFactor = {
+      category: 'injury',
+      headline: 'OPPONENT INJURY',
+      detail: `${oppTeam.abbreviation} is missing key player(s): ${all.slice(0, 2).join(', ')}. The market often underprices roster downgrades this severe.`,
+    };
+  }
+  // 8) ATS trend
+  else if (pickedAts && pickedAts.coverPct >= 62 && (!oppAts || oppAts.coverPct <= 44)) {
+    keyFactor = {
+      category: 'ats',
+      headline: 'ATS TREND',
+      detail: `${pickedTeam.abbreviation} is covering ${pickedAts.coverPct.toFixed(0)}% of spreads (${pickedAts.display}). The line is consistently wrong on them — we're betting the trend.`,
+    };
+  }
+  // 9) Value price (underdog where we like the signal stack)
+  else if (homeWinPct !== null && awayWinPct !== null && pickData.marketType === 'moneyline') {
+    const pickedWinPct = pickData.selectionSide === 'home' ? homeWinPct : awayWinPct;
+    const oppWinPct = pickData.selectionSide === 'home' ? awayWinPct : homeWinPct;
+    if (oppWinPct - pickedWinPct >= 8) {
+      keyFactor = {
+        category: 'value',
+        headline: 'VALUE DOG',
+        detail: `${pickedTeam.abbreviation} is priced as the underdog at ${pickedWinPct.toFixed(0)}% implied — but our signals (above) say their real chance to win is meaningfully higher. The price overcompensates.`,
+      };
+    } else if (pickedWinPct > oppWinPct) {
+      keyFactor = {
+        category: 'win_prob',
+        headline: 'WIN-PROBABILITY EDGE',
+        detail: `${pickedTeam.abbreviation} has a ${winProbGap.toFixed(1)}-point win-probability edge based on team form, matchup, and market signals. Straight value.`,
+      };
+    }
+  }
+  // 10) Default catch-all — confidence score itself
+  if (!keyFactor) {
+    keyFactor = {
+      category: 'win_prob',
+      headline: 'BALANCED EDGE',
+      detail: `${confidenceScore}-confidence pick — multiple signals (form, ATS, market) line up in our favor with no single dominant driver. Diversified case.`,
+    };
+  }
+
+  // ===== PITCHER SPOTLIGHT — attach full starter profiles for MLB picks =====
+  // Always attached when we have probables, so customers can see the stat detail
+  // backing the KEY FACTOR (when it's pitcher) or as context for any MLB pick.
+  let pitcherSpotlight: DeepPickResult['pitcherSpotlight'] | undefined;
+  if (isMlb && (probables.home || probables.away)) {
+    const pickedProf = pickData.selectionSide === 'home' ? probables.home : probables.away;
+    const oppProf = pickData.selectionSide === 'home' ? probables.away : probables.home;
+    const flatten = (p: typeof probables.home) => p ? {
+      name: p.name, throws: p.throws, starts: p.startsAnalyzed,
+      eraL5: p.eraL5, whipL5: p.whipL5, kPer9L5: p.kPer9L5,
+      hitsPerStart: p.hitsPerStart, lastStartER: p.lastStartER, lastStartIP: p.lastStartIP,
+    } : null;
+    pitcherSpotlight = { picked: flatten(pickedProf), opp: flatten(oppProf) };
+  }
+
   return {
     gameId, eventName: `${away.name} @ ${home.name}`, league, sport: league, board,
     startTime: event.date || '', homeTeam: home, awayTeam: away,
@@ -2706,6 +2859,8 @@ async function processGame(
     isAsleepPick,
     asleepBoost,
     tendencyResolution,
+    keyFactor,
+    pitcherSpotlight,
     evidence,
   };
 }

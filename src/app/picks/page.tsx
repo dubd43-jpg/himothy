@@ -92,6 +92,12 @@ interface DeepPick {
   sharpFlags?: SharpFlag[];
   sharpIntel?: { betting: any; weather: any; rest: any; sharpScore: number; } | null;
   bigGameLabel?: string | null;
+  // Highlighted single-biggest-reason banner + deep pitcher stats for MLB picks
+  keyFactor?: { category: string; headline: string; detail: string };
+  pitcherSpotlight?: {
+    picked: { name: string; throws: 'L' | 'R' | null; starts: number; eraL5: number | null; whipL5: number | null; kPer9L5: number | null; hitsPerStart: number | null; lastStartER: number | null; lastStartIP: number | null } | null;
+    opp:    { name: string; throws: 'L' | 'R' | null; starts: number; eraL5: number | null; whipL5: number | null; kPer9L5: number | null; hitsPerStart: number | null; lastStartER: number | null; lastStartIP: number | null } | null;
+  };
 }
 interface NrfiPlay {
   gameId: string; eventName: string; league: string; startTime: string;
@@ -791,6 +797,17 @@ function DeepPickCard({ pick, variant, href, live, lateNewsNote }: { pick: DeepP
         {/* CONFIDENCE BAND — owner directive: customers should see at a glance which picks
             are slam dunks vs strong vs solid-best-available. Sets expectations + builds trust. */}
         <ConfidenceBand score={pick.confidenceScore} />
+
+        {/* KEY FACTOR — owner directive: every pick must show the SINGLE BIGGEST reason
+            we took it, highlighted prominently. Customer sees this BEFORE anything else
+            so they immediately know "we like this because of X." */}
+        {pick.keyFactor && <KeyFactorBanner factor={pick.keyFactor} />}
+
+        {/* PITCHER SPOTLIGHT — for MLB picks, show both starters' full L5 stats. Critical
+            when the KEY FACTOR is the pitcher matchup; useful context for any MLB pick. */}
+        {pick.pitcherSpotlight && (pick.pitcherSpotlight.picked || pick.pitcherSpotlight.opp) && (
+          <PitcherSpotlight spotlight={pick.pitcherSpotlight} pickedAbbr={pick.homeTeam.abbreviation === pick.selection.split(' ')[0] ? pick.homeTeam.abbreviation : pick.awayTeam.abbreviation} oppAbbr={pick.homeTeam.abbreviation === pick.selection.split(' ')[0] ? pick.awayTeam.abbreviation : pick.homeTeam.abbreviation} highlight={pick.keyFactor?.category === 'pitcher'} />
+        )}
         {/* LATE NEWS warning — the cron flags this pick when an OUT/scratch happened
             after morning publish. We WARN, never auto-pull. Customer sees "verify before betting." */}
         {lateNewsNote && (
@@ -871,6 +888,93 @@ function ConfidenceBand({ score }: { score: number }) {
         <span className="text-[10px] text-white/40 hidden sm:inline">· {blurb}</span>
       </div>
       <span className={`text-[10px] font-black tabular-nums ${textCls}`}>{score.toFixed(0)}</span>
+    </div>
+  );
+}
+
+// KEY FACTOR BANNER — the single biggest reason we took this pick, surfaced
+// prominently above all other reasoning. Owner directive: every pick MUST show
+// a clear key-factor explanation so customers immediately know why.
+function KeyFactorBanner({ factor }: { factor: { category: string; headline: string; detail: string } }) {
+  // Category-driven color (so the bar tells the customer at a glance what kind of edge)
+  const stylesByCategory: Record<string, { ring: string; bg: string; iconBg: string; iconColor: string; emoji: string }> = {
+    pitcher:        { ring: "border-emerald-400/50", bg: "from-emerald-500/15 to-emerald-500/5", iconBg: "bg-emerald-500/25", iconColor: "text-emerald-300", emoji: "⚾" },
+    bullpen:        { ring: "border-amber-400/50",   bg: "from-amber-500/15 to-amber-500/5",     iconBg: "bg-amber-500/25",   iconColor: "text-amber-300",   emoji: "🔥" },
+    line_movement:  { ring: "border-sky-400/50",     bg: "from-sky-500/15 to-sky-500/5",         iconBg: "bg-sky-500/25",     iconColor: "text-sky-300",     emoji: "📈" },
+    odds_bucket:    { ring: "border-purple-400/50",  bg: "from-purple-500/15 to-purple-500/5",   iconBg: "bg-purple-500/25",  iconColor: "text-purple-300",  emoji: "👁" },
+    streak_real:    { ring: "border-rose-400/50",    bg: "from-rose-500/15 to-rose-500/5",       iconBg: "bg-rose-500/25",    iconColor: "text-rose-300",    emoji: "🔥" },
+    first_frame:    { ring: "border-cyan-400/50",    bg: "from-cyan-500/15 to-cyan-500/5",       iconBg: "bg-cyan-500/25",    iconColor: "text-cyan-300",    emoji: "⚡" },
+    q1_h1:          { ring: "border-cyan-400/50",    bg: "from-cyan-500/15 to-cyan-500/5",       iconBg: "bg-cyan-500/25",    iconColor: "text-cyan-300",    emoji: "⚡" },
+    injury:         { ring: "border-red-400/50",     bg: "from-red-500/15 to-red-500/5",         iconBg: "bg-red-500/25",     iconColor: "text-red-300",     emoji: "🏥" },
+    ats:            { ring: "border-lime-400/50",    bg: "from-lime-500/15 to-lime-500/5",       iconBg: "bg-lime-500/25",    iconColor: "text-lime-300",    emoji: "📊" },
+    value:          { ring: "border-yellow-400/50",  bg: "from-yellow-500/15 to-yellow-500/5",   iconBg: "bg-yellow-500/25",  iconColor: "text-yellow-300",  emoji: "💎" },
+    win_prob:       { ring: "border-white/20",       bg: "from-white/[0.05] to-white/[0.01]",    iconBg: "bg-white/10",       iconColor: "text-white/70",    emoji: "🎯" },
+  };
+  const style = stylesByCategory[factor.category] || stylesByCategory.win_prob;
+  return (
+    <div className={`rounded-xl border-2 ${style.ring} bg-gradient-to-br ${style.bg} p-3 space-y-2`}>
+      <div className="flex items-center gap-2">
+        <div className={`flex items-center justify-center h-7 w-7 rounded-lg ${style.iconBg} text-sm`}>{style.emoji}</div>
+        <div className="flex flex-col leading-tight">
+          <span className="text-[9px] font-black uppercase tracking-[0.2em] text-white/40">Key Factor</span>
+          <span className={`text-[12px] font-black uppercase tracking-wider ${style.iconColor}`}>{factor.headline}</span>
+        </div>
+      </div>
+      <div className="text-[12px] leading-relaxed text-white/85">{factor.detail}</div>
+    </div>
+  );
+}
+
+// PITCHER SPOTLIGHT — both starters' deep L5 stats. Highlighted when the KEY FACTOR
+// is the pitcher matchup (the whole point of this block for those picks).
+function PitcherSpotlight({ spotlight, pickedAbbr, oppAbbr, highlight }: {
+  spotlight: NonNullable<DeepPick['pitcherSpotlight']>;
+  pickedAbbr: string;
+  oppAbbr: string;
+  highlight: boolean;
+}) {
+  const cell = (p: NonNullable<NonNullable<DeepPick['pitcherSpotlight']>['picked']>, label: string, ourSide: boolean) => {
+    const eraTone = p.eraL5 == null ? 'text-white/30' : p.eraL5 <= 2.5 ? 'text-emerald-400' : p.eraL5 <= 3.5 ? 'text-sky-400' : p.eraL5 <= 4.5 ? 'text-white/70' : 'text-red-400';
+    return (
+      <div className={`flex-1 min-w-0 ${ourSide ? '' : 'opacity-90'}`}>
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="text-[9px] font-black uppercase tracking-widest text-white/40">{label}</span>
+          <span className="text-[9px] font-bold text-white/30">{p.throws ? `${p.throws}HP` : ''}</span>
+        </div>
+        <div className="text-sm font-black text-white truncate mt-0.5">{p.name}</div>
+        <div className="grid grid-cols-3 gap-1 mt-1.5 text-[10px]">
+          <div className="rounded bg-white/[0.04] px-1.5 py-1">
+            <div className="text-[8px] text-white/30 uppercase">ERA L{p.starts}</div>
+            <div className={`font-black tabular-nums ${eraTone}`}>{p.eraL5?.toFixed(2) ?? '—'}</div>
+          </div>
+          <div className="rounded bg-white/[0.04] px-1.5 py-1">
+            <div className="text-[8px] text-white/30 uppercase">WHIP</div>
+            <div className="font-black tabular-nums text-white/80">{p.whipL5?.toFixed(2) ?? '—'}</div>
+          </div>
+          <div className="rounded bg-white/[0.04] px-1.5 py-1">
+            <div className="text-[8px] text-white/30 uppercase">K/9</div>
+            <div className="font-black tabular-nums text-white/80">{p.kPer9L5?.toFixed(1) ?? '—'}</div>
+          </div>
+        </div>
+        {p.lastStartER != null && p.lastStartIP != null && (
+          <div className="mt-1 text-[10px] text-white/40">
+            Last start: <span className="font-bold text-white/65">{p.lastStartER} ER / {p.lastStartIP.toFixed(1)} IP</span>
+          </div>
+        )}
+      </div>
+    );
+  };
+  if (!spotlight.picked && !spotlight.opp) return null;
+  return (
+    <div className={`rounded-xl border ${highlight ? 'border-emerald-400/40 bg-emerald-500/[0.04]' : 'border-white/10 bg-white/[0.02]'} p-3 space-y-2`}>
+      <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-white/50">
+        <span>⚾ Pitcher Matchup</span>
+        {highlight && <span className="text-emerald-300/70 text-[9px]">· this is why we picked it</span>}
+      </div>
+      <div className="flex items-stretch gap-3 divide-x divide-white/8">
+        {spotlight.picked && cell(spotlight.picked, `${pickedAbbr} (us)`, true)}
+        {spotlight.opp && <div className="pl-3">{cell(spotlight.opp, oppAbbr, false)}</div>}
+      </div>
     </div>
   );
 }
