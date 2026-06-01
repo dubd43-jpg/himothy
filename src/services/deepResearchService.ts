@@ -3936,27 +3936,56 @@ async function buildOneSportParlay(sport: string, excluded: Set<string>): Promis
   const events = await flattenTournamentEvents(result.events, sport);
   if (events.length === 0) return null;
 
-  // GAME-LEVEL DEDUP (changed 2026-06-01 per owner):
-  // Was: exclude only if main board has the EXACT same selection on this gameId.
-  // Now: exclude the ENTIRE game if main board picked ANY side on it.
-  // Reason: Sport Parlays uses raw ML win-prob (chalk-first); main board uses the
-  // tendency-weighted scoreGame() which can flip to the underdog. Same game would
-  // ship with OPPOSITE sides across products — a credibility-killing contradiction.
-  // Sport Parlays now plays only on games the main board left alone.
-  const isExcluded = (gameId: string, _selection: string) =>
-    excluded.has(`game:${gameId}`) ||
-    Array.from(excluded).some((k) => k.startsWith(`${gameId}|`));
+  // SMART DEDUP (revised 2026-06-01 per owner):
+  // The contradiction we must prevent is the OPPOSITE SIDE on the SAME SIDE-BET.
+  // Same game, DIFFERENT MARKET (total, team total, F5, period, prop) is FINE —
+  // those bets don't contradict each other. Detroit ML + Over 8.5 + Detroit team
+  // total over 4 + a player prop are all legitimately distinct angles on one game.
+  // Exclude only when:
+  //   1. Exact same pick (gameId + selection match)
+  //   2. Side bet (ML/spread) with OPPOSITE selectionSide vs a main-board side bet
+  //      on the same game (the actual contradiction case)
+  const conflictsWith = (gameId: string, selection: string, marketType: string, selectionSide: 'home' | 'away'): boolean => {
+    const normalize = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+    const norm = normalize(selection);
+    if (excluded.has(`${gameId}|${norm}`)) return true; // exact duplicate
+    // Only side bets (ML, spread, runline) can produce the "opposite side" contradiction.
+    // Totals, team totals, F5, periods, and props are independent of which team wins.
+    const isSideBet = marketType === 'moneyline' || marketType === 'spread' || marketType === 'runline';
+    if (!isSideBet) return false;
+    // Look for any main-board PICK on this game whose stored selectionSide is the OPPOSITE
+    // of this leg's. Excluded keys are stored as "gameId|selection" — we don't have side
+    // info in the Set, so we have to consult main board picks separately. The check is:
+    // if main board picked the home team's ML/spread, exclude an away ML/spread leg.
+    for (const key of Array.from(excluded)) {
+      if (!key.startsWith(`${gameId}|`)) continue;
+      const mainSel = normalize(key.split('|')[1] || '');
+      // Heuristic: if BOTH selections include the same team-name fragment, they're the
+      // same side (allowed, same bet). If they include DIFFERENT team-name fragments
+      // AND both look like side bets, that's the opposite-side contradiction.
+      const isMainSideBet = !/over|under|nrfi|yrfi|prop|1q|q1|1h|h1|2h|h2|f5|first 5/i.test(mainSel);
+      if (!isMainSideBet) continue;
+      // Compare the leading word/team identifier. Different teams on side bets → conflict.
+      const mainTeamHead = mainSel.split(/\s+(ml|-|\+|\d)/)[0].trim();
+      const newTeamHead = norm.split(/\s+(ml|-|\+|\d)/)[0].trim();
+      if (mainTeamHead && newTeamHead && mainTeamHead !== newTeamHead) {
+        // Different teams on side bets on the same game = opposite sides
+        return true;
+      }
+    }
+    return false;
+  };
+  const isExcluded = (gameId: string, selection: string, marketType: string = 'moneyline', selectionSide: 'home' | 'away' = 'home') =>
+    conflictsWith(gameId, selection, marketType, selectionSide);
 
   // 1. GAME-LEVEL legs first (fast). A real favorite = winProbability >= 55.
+  // Excludes any leg that contradicts a main-board side bet on the same game.
   const gameLegs: SportParlayLeg[] = [];
   for (const event of events) {
     const gp = await processGameForPower20(event, sport);
     if (!gp || gp.winProbability < 55) continue;
-    // Per user: sport-parlay legs cap at -185 (the single-pick floor), NOT the -450
-    // generic parlay-leg floor. No heavy chalk in these single-sport parlays.
     if (isHeavyChalkML(gp, SINGLE_PICK_ML_FLOOR)) continue;
-    // Don't repeat a main-board pick — find different picks for the sport parlay.
-    if (isExcluded(gp.gameId, gp.selection)) continue;
+    if (isExcluded(gp.gameId, gp.selection, gp.marketType || 'moneyline', gp.selectionSide || 'home')) continue;
     gameLegs.push({
       type: 'game', league: sport, gameId: gp.gameId, eventName: gp.eventName,
       startTime: gp.startTime || event.date || null,
@@ -3967,9 +3996,49 @@ async function buildOneSportParlay(sport: string, excluded: Set<string>): Promis
   }
   gameLegs.sort((a, b) => b.edgeScore - a.edgeScore);
 
-  // 2. If 4+ game legs, take the top 4 — no props needed.
-  if (gameLegs.length >= 4) {
-    return assembleSportParlay(sport, gameLegs.slice(0, 4), false);
+  // 1b. DIG WIDER — scan TOTALS, TEAM TOTALS, F5, PERIODS on every game (not just side bets).
+  // These don't contradict the main board's side picks, so they're fully eligible. The
+  // main board scanned these too via dig-wider; we use the same buildMarketCandidates
+  // engine so leg quality matches main-board quality.
+  const altLegs: SportParlayLeg[] = [];
+  for (const event of events) {
+    try {
+      const gp = await processGameForPower20(event, sport);
+      if (!gp) continue;
+      // Build a pick-shaped object so buildMarketCandidates can score it; pull from the
+      // game's team profiles (winProb/trends) the processGameForPower20 already fetched.
+      const cands = await buildMarketCandidates(gp as any, { includeProps: false });
+      for (const c of cands) {
+        // Skip side bets — already covered by gameLegs path.
+        if (c.marketType === 'moneyline' || c.marketType === 'spread' || c.marketType === 'runline') continue;
+        if ((c.confidence ?? 0) < 80) continue; // hard quality floor
+        if (isExcluded(gp.gameId, c.selection, c.marketType, c.selectionSide)) continue;
+        altLegs.push({
+          type: 'game', league: sport, gameId: gp.gameId, eventName: gp.eventName,
+          startTime: gp.startTime || event.date || null,
+          selection: c.selection, odds: c.odds || '-110', edgeScore: Math.round(c.confidence ?? 0),
+          detail: c.detail || `${c.confidence ?? 0} confidence`,
+          selectionSide: c.selectionSide, marketType: c.marketType,
+        });
+      }
+    } catch { /* per-game failures shouldn't stop the parlay */ }
+  }
+  altLegs.sort((a, b) => b.edgeScore - a.edgeScore);
+
+  // 2. If gameLegs + altLegs already give us 4+, take top 4 — no props needed.
+  const combinedTop = [...gameLegs, ...altLegs].sort((a, b) => b.edgeScore - a.edgeScore);
+  if (combinedTop.length >= 4) {
+    // Dedupe by (gameId|selection) to avoid the same leg twice
+    const seen = new Set<string>();
+    const top4: SportParlayLeg[] = [];
+    for (const l of combinedTop) {
+      const key = `${l.gameId}|${l.selection.toLowerCase()}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      top4.push(l);
+      if (top4.length >= 4) break;
+    }
+    if (top4.length >= 4) return assembleSportParlay(sport, top4, new Set(top4.map((l) => l.gameId)).size === 1);
   }
 
   // 3. Otherwise, fill remaining slots with PROP legs from the sport's games (real value
@@ -3991,7 +4060,8 @@ async function buildOneSportParlay(sport: string, excluded: Set<string>): Promis
           ? (p.marketUnderPrice != null ? `${p.marketUnderPrice > 0 ? '+' : ''}${p.marketUnderPrice}` : '-110')
           : (p.marketOverPrice != null ? `${p.marketOverPrice > 0 ? '+' : ''}${p.marketOverPrice}` : '-110');
         const detail = `proj ${p.projection.toFixed(1)}${p.marketLine != null ? ` vs line ${p.marketLine}` : ''}, L10 ${p.l10Avg ?? '—'}`;
-        if (isExcluded(String(event.id), selection)) continue;
+        // Props never contradict main board side bets — always allowed unless exact dup.
+        if (isExcluded(String(event.id), selection, 'player_prop', 'home')) continue;
         propLegs.push({
           type: 'prop', league: sport, gameId: String(event.id), eventName: event.name || '',
           startTime: event.date || null,
@@ -4004,9 +4074,9 @@ async function buildOneSportParlay(sport: string, excluded: Set<string>): Promis
   }
   propLegs.sort((a, b) => b.edgeScore - a.edgeScore);
 
-  // Combine game legs + prop legs, dedupe by selection + by player (avoid stacking the
-  // same player in 2 legs). Take the top 4 by edge.
-  const combined = [...gameLegs, ...propLegs];
+  // Combine game legs + alt-market legs + prop legs, dedupe by selection + by player.
+  // Take the top 4 by edge.
+  const combined = [...gameLegs, ...altLegs, ...propLegs].sort((a, b) => b.edgeScore - a.edgeScore);
   const legs: SportParlayLeg[] = [];
   const seenSelections = new Set<string>();
   const seenPlayers = new Set<string>();
