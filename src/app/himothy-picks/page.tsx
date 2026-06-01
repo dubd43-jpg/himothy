@@ -117,7 +117,7 @@ export default function HimothyPersonalPickPage() {
             </p>
           </div>
         ) : (
-          <Link href={`/pick/${top.gameId}?from=/himothy-picks`} className="block">
+          <Link href={`/pick/${top.gameId}?from=/himothy-picks&selection=${encodeURIComponent(`${top.playerName} ${top.recommended === 'over' ? 'Over' : 'Under'} ${top.marketLine ?? ''}`.trim())}`} className="block">
           <article className="rounded-3xl border-2 border-primary/40 bg-gradient-to-br from-primary/[0.08] to-transparent p-6 md:p-8 space-y-6 hover:border-primary/70 transition-all">
             <div className="flex items-center justify-between gap-3 text-[10px] font-black uppercase tracking-widest text-white/40">
               <span className="min-w-0">
@@ -193,7 +193,7 @@ export default function HimothyPersonalPickPage() {
             <div className="text-[10px] font-black uppercase tracking-widest text-white/40">Also strong today</div>
             <div className="space-y-2">
               {data.runnerUps.map((r) => (
-                <Link key={`${r.athleteId}-${r.market}`} href={`/pick/${r.gameId}?from=/himothy-picks`} className="block">
+                <Link key={`${r.athleteId}-${r.market}`} href={`/pick/${r.gameId}?from=/himothy-picks&selection=${encodeURIComponent(`${r.playerName} ${r.recommended === 'over' ? 'Over' : 'Under'} ${r.marketLine ?? ''}`.trim())}`} className="block">
                 <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.02] px-4 py-3 hover:border-primary/40 transition-all">
                   <div className="min-w-0">
                     <div className="text-sm font-black truncate">{r.playerName} · {MARKET_LABELS[r.market] || r.market}</div>

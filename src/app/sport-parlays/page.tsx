@@ -180,7 +180,9 @@ export default function SportParlaysPage() {
                         </div>
                       );
                       return leg.type === "game" ? (
-                        <Link key={`${leg.gameId}-${leg.selection}-${i}`} href={`/pick/${leg.gameId}?from=/sport-parlays`} className="block">{legContent}</Link>
+                        // Pass ?selection= so /pick/[gameId] resolves to the Sport Parlays
+                        // side (not the main board's opposite-side pick on the same game).
+                        <Link key={`${leg.gameId}-${leg.selection}-${i}`} href={`/pick/${leg.gameId}?from=/sport-parlays&selection=${encodeURIComponent(leg.selection)}`} className="block">{legContent}</Link>
                       ) : (
                         <div key={`${leg.gameId}-${leg.selection}-${i}`}>{legContent}</div>
                       );

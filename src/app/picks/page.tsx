@@ -1048,7 +1048,7 @@ function Power20Leg({ pick, index, live }: { pick: Power20Pick; index: number; l
 
   // Wrap in Link so every Power 20 leg is clickable to the detail view.
   return (
-    <Link href={`/pick/${pick.gameId}?from=power20`} className="block">
+    <Link href={`/pick/${pick.gameId}?from=power20&selection=${encodeURIComponent(pick.selection)}`} className="block">
       <div className={`flex items-center gap-3 rounded-xl border-2 p-3 transition-all hover:bg-white/[0.06] ${accent}`}>
         <div className="w-6 h-6 shrink-0 rounded-full bg-white/5 flex items-center justify-center text-[10px] font-black text-white/40">
           {index + 1}
@@ -1474,7 +1474,7 @@ function DeepResearchSection({ board }: { board: string }) {
           </div>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {flatPicks.map((pick) => (
-              <DeepPickCard key={pick.gameId} pick={pick} variant="vip" href={`/pick/${pick.gameId}?board=${board}&from=/picks?board=${board}`} live={computeLiveState(pick, liveMap[pick.gameId])} lateNewsNote={lateNewsFlags[pick.gameId] || null} />
+              <DeepPickCard key={pick.gameId} pick={pick} variant="vip" href={`/pick/${pick.gameId}?board=${board}&from=/picks?board=${board}&selection=${encodeURIComponent(pick.selection)}`} live={computeLiveState(pick, liveMap[pick.gameId])} lateNewsNote={lateNewsFlags[pick.gameId] || null} />
             ))}
           </div>
         </section>

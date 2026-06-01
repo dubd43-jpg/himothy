@@ -80,7 +80,7 @@ export default function PeriodPlaysPage() {
         ) : (
           <div className="space-y-3">
             {plays.map((p, i) => (
-              <Link key={`${p.gameId}-${p.period}-${p.selection}-${i}`} href={`/pick/${p.gameId}?from=/period-plays`} className="block">
+              <Link key={`${p.gameId}-${p.period}-${p.selection}-${i}`} href={`/pick/${p.gameId}?from=/period-plays&selection=${encodeURIComponent(p.selection)}`} className="block">
               <article className="rounded-2xl border-2 border-white/10 bg-gradient-to-br from-white/[0.04] to-white/[0.01] p-5 hover:border-primary/40 transition-all">
                 <div className="flex items-center justify-between gap-3 text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">
                   <span>{p.league} · {p.awayTeam} @ {p.homeTeam}</span>

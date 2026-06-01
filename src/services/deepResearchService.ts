@@ -3936,8 +3936,16 @@ async function buildOneSportParlay(sport: string, excluded: Set<string>): Promis
   const events = await flattenTournamentEvents(result.events, sport);
   if (events.length === 0) return null;
 
-  const isExcluded = (gameId: string, selection: string) =>
-    excluded.has(`${gameId}|${selection.toLowerCase().replace(/\s+/g, ' ').trim()}`);
+  // GAME-LEVEL DEDUP (changed 2026-06-01 per owner):
+  // Was: exclude only if main board has the EXACT same selection on this gameId.
+  // Now: exclude the ENTIRE game if main board picked ANY side on it.
+  // Reason: Sport Parlays uses raw ML win-prob (chalk-first); main board uses the
+  // tendency-weighted scoreGame() which can flip to the underdog. Same game would
+  // ship with OPPOSITE sides across products — a credibility-killing contradiction.
+  // Sport Parlays now plays only on games the main board left alone.
+  const isExcluded = (gameId: string, _selection: string) =>
+    excluded.has(`game:${gameId}`) ||
+    Array.from(excluded).some((k) => k.startsWith(`${gameId}|`));
 
   // 1. GAME-LEVEL legs first (fast). A real favorite = winProbability >= 55.
   const gameLegs: SportParlayLeg[] = [];

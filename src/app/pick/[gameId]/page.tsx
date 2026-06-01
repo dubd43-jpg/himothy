@@ -22,6 +22,14 @@ export default function PickPage({ params }: { params: { gameId: string } }) {
   const backHref = typeof window !== "undefined"
     ? (new URLSearchParams(window.location.search).get("from") || "/picks")
     : "/picks";
+  // When a deep link carries ?selection=..., we MUST match by selection too — not just
+  // by gameId. Same game can have OPPOSITE picks across products (main board picks
+  // Detroit ML, Sport Parlays picks Tampa ML — same gameId, different sides). Without
+  // this filter, clicking the Sport Parlays Tampa leg would show the main board's
+  // Detroit pick. Bug found 2026-06-01.
+  const targetSelection = typeof window !== "undefined"
+    ? new URLSearchParams(window.location.search).get("selection")
+    : null;
 
   useEffect(() => {
     let mounted = true;
@@ -66,12 +74,22 @@ export default function PickPage({ params }: { params: { gameId: string } }) {
         aiExplanation: null,
       } as any;
     };
+    // Match function: when ?selection=... is in the URL, the pick MUST match that
+     // selection (not just the gameId). Otherwise the same game's opposite-side pick
+     // from a different product would resolve incorrectly.
+    const matchPick = (p: any): boolean => {
+      if (String(p.gameId) !== String(params.gameId)) return false;
+      if (!targetSelection) return true;
+      // Case-insensitive trim match — selections can have slight formatting variance
+      return String(p.selection || '').trim().toLowerCase() === targetSelection.trim().toLowerCase();
+    };
+
     const load = async () => {
       try {
         // First, try the board from the URL — fast path, hits the warm cache.
         const res = await fetch(`/api/research/daily-picks?board=${encodeURIComponent(board)}`, { cache: "no-store" });
         const d = await res.json();
-        let found = flattenBoard(d).find((p) => p.gameId === params.gameId) || null;
+        let found = flattenBoard(d).find(matchPick) || null;
 
         // Fallback — scan every board in parallel until we find the pick. Lets a link
         // copied from /picks?board=combat still resolve when reopened later.
@@ -81,9 +99,44 @@ export default function PickPage({ params }: { params: { gameId: string } }) {
             fetch(`/api/research/daily-picks?board=${b}`, { cache: 'no-store' }).then((r) => r.json()).catch(() => null),
           ));
           for (const data of results) {
-            const hit = flattenBoard(data).find((p) => p.gameId === params.gameId);
+            const hit = flattenBoard(data).find(matchPick);
             if (hit) { found = hit; break; }
           }
+        }
+
+        // Sport Parlays fallback — leg's gameId matches an event but with a DIFFERENT
+        // selection than any main-board pick. Pull from sport-parlays endpoint and
+        // synthesize a DeepPick for that exact leg.
+        if (!found && targetSelection) {
+          try {
+            const sp = await fetch('/api/research/sport-parlays', { cache: 'no-store' }).then((r) => r.json()).catch(() => null);
+            const legs: any[] = [];
+            for (const parlay of (sp?.parlays || [])) {
+              if (parlay?.legs) legs.push(...parlay.legs);
+            }
+            const leg = legs.find((l) =>
+              String(l.gameId) === params.gameId &&
+              String(l.selection || '').trim().toLowerCase() === targetSelection.trim().toLowerCase(),
+            );
+            if (leg) {
+              // Synthesize a DeepPick-shaped object from the Sport Parlays leg.
+              const eventParts = String(leg.eventName || '').split(' @ ');
+              found = {
+                gameId: String(leg.gameId), eventName: leg.eventName || '', league: leg.league || '', sport: leg.league || '',
+                startTime: leg.startTime || '',
+                homeTeam: { id: '', name: eventParts[1] || 'Home', abbreviation: (eventParts[1] || 'HOME').slice(0, 3).toUpperCase() } as any,
+                awayTeam: { id: '', name: eventParts[0] || 'Away', abbreviation: (eventParts[0] || 'AWAY').slice(0, 3).toUpperCase() } as any,
+                spread: null, total: null,
+                selection: leg.selection, selectionSide: leg.selectionSide || 'home', marketType: leg.marketType || 'moneyline',
+                odds: leg.odds, line: null,
+                confidenceScore: leg.edgeScore ?? 70, tier: 'SPORT_PARLAY',
+                reasonsFor: [leg.detail || `${leg.edgeScore ?? 70}% win probability — heavy favorite leg in tonight's ${leg.league} parlay.`],
+                reasonsAgainst: [],
+                signals: { winProbabilityGap: 0, atsCoverPct: null, atsCoverPctOpp: null, dataQuality: 65 },
+                aiExplanation: null,
+              } as any;
+            }
+          } catch { /* ignore */ }
         }
 
         // Power 20 fallback — if the gameId came from a Power 20 leg, /api/research/power20
@@ -97,7 +150,10 @@ export default function PickPage({ params }: { params: { gameId: string } }) {
               if (parlay?.power10?.legs) legs.push(...parlay.power10.legs);
               if (parlay?.powerOfParlays?.legs) legs.push(...parlay.powerOfParlays.legs);
             }
-            const leg = legs.find((l) => String(l.gameId) === params.gameId);
+            const leg = legs.find((l) =>
+              String(l.gameId) === params.gameId &&
+              (!targetSelection || String(l.selection || '').trim().toLowerCase() === targetSelection.trim().toLowerCase()),
+            );
             if (leg) found = power20ToDeepPick(leg);
           } catch { /* ignore */ }
         }
@@ -113,7 +169,7 @@ export default function PickPage({ params }: { params: { gameId: string } }) {
     // Keep the single pick live too — it can change up to ~15 min before game time.
     const i = setInterval(load, 120000);
     return () => { mounted = false; clearInterval(i); };
-  }, [params.gameId, board]);
+  }, [params.gameId, board, targetSelection]);
 
   return (
     <div className="min-h-screen bg-background text-white pb-24">

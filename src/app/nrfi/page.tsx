@@ -117,7 +117,7 @@ export default function NrfiPage() {
               const startTime = formatGameDateTimeET(play.startTime) || TIME_TBD;
               const showLive = play.state !== "pre";
               return (
-              <Link key={play.gameId} href={`/pick/${play.gameId}?from=/nrfi`} className="block">
+              <Link key={play.gameId} href={`/pick/${play.gameId}?from=/nrfi&selection=${encodeURIComponent(`NRFI — ${play.eventName}`)}`} className="block">
               <article className="rounded-2xl border border-white/10 bg-white/[0.02] p-4 space-y-3 hover:border-primary/40 transition-all">
                 <div className="flex items-start justify-between gap-2">
                   <div>
