@@ -218,6 +218,20 @@ export interface GameSignals {
   oppBullpenAllowed: number;
   pickedPctBlewLateLead: number;     // % of games team gave up a post-6th lead
   oppPctBlewLateLead: number;
+  // NBA/WNBA 1Q + H1 tendency — owner directive: "Are they better in the first
+  // quarter? Are they better in the first half?" Absolute Q1/H1 averages so we can
+  // compute scoring DELTAS between teams (e.g., LV Aces avg Q1 23.4 vs GSV avg
+  // Q1 18.2 → Aces have a fast-start edge).
+  pickedAvgQ1Scored: number;          // avg points scored in Q1 last 10 games (0 = non-basketball or no data)
+  pickedAvgQ1Allowed: number;
+  oppAvgQ1Scored: number;
+  oppAvgQ1Allowed: number;
+  pickedAvgH1Scored: number;
+  pickedAvgH1Allowed: number;
+  oppAvgH1Scored: number;
+  oppAvgH1Allowed: number;
+  pickedPctLeadAfterQ1: number;       // % of games leading after Q1
+  pickedPctLeadAfterH1: number;
 }
 
 export interface DeepPickResult {
@@ -1496,12 +1510,12 @@ function scoreGame(signals: Omit<GameSignals, 'confirmingSignals'>): number {
   }
 
   // FIRST-FRAME TENDENCY — owner directive: "Are they better in the first quarter? Are
-  // they better in the first half?" For MLB, this is 1st-inning scoring. For NBA/WNBA,
-  // Q1. A team that scores in the 1st 65%+ of games gives confidence to first-half/F5
-  // unders/overs and to backing them on the runline (they're not waiting around). A
-  // team that ALLOWS in the 1st 60%+ of games is the inverse — fade their early lines.
-  // Only fires when we have a real sample (min 5 games tracked).
-  if (signals.tendencyFirstFrameSample >= 5) {
+  // they better in the first half?" MLB-ONLY logic: 1st-inning scoring % (a team
+  // scoring in the 1st 70%+ of games doesn't wait around). Gated on isBaseball
+  // because basketball teams ALWAYS score in Q1 — for basketball, this signal is
+  // useless and the proper Q1 logic lives below.
+  const isBaseballByData = signals.tendencyF5TotalAvg > 0; // MLB picks have F5 data populated
+  if (signals.tendencyFirstFrameSample >= 5 && isBaseballByData) {
     if (signals.tendencyFirstFrameScored >= 70) score += 4;
     else if (signals.tendencyFirstFrameScored >= 60) score += 2;
     if (signals.tendencyFirstFrameAllowed >= 70) score -= 4;
@@ -1509,6 +1523,34 @@ function scoreGame(signals: Omit<GameSignals, 'confirmingSignals'>): number {
     // Opponent inverse — they bleed in the 1st = boost us
     if (signals.tendencyOppFirstFrameAllowed >= 70) score += 3;
     if (signals.tendencyOppFirstFrameScored <= 30) score += 2;
+  }
+
+  // NBA/WNBA 1Q + H1 TENDENCY — basketball equivalent of the 1st-inning signal. Uses
+  // absolute scoring averages (not percentages, since teams always score in Q1). The
+  // key insight: when one team's avg Q1 scoring meaningfully outpaces the opponent's
+  // avg Q1 ALLOWED, they have a fast-start edge that compounds across the game.
+  // Fires when we have a basketball sample (pickedAvgQ1Scored > 0 = basketball league).
+  if (signals.pickedAvgQ1Scored > 0 && signals.oppAvgQ1Allowed > 0 && signals.tendencyFirstFrameSample >= 5) {
+    // Fast-start delta — we score more in Q1 than opp typically gives up
+    const q1Edge = signals.pickedAvgQ1Scored - signals.oppAvgQ1Allowed;
+    if (q1Edge >= 6) score += 5;       // commanding Q1 edge
+    else if (q1Edge >= 3) score += 3;
+    else if (q1Edge <= -6) score -= 5;
+    else if (q1Edge <= -3) score -= 3;
+    // Lead-after-Q1 history — teams that lead Q1 60%+ of games are reliable fast starters
+    if (signals.pickedPctLeadAfterQ1 >= 65) score += 3;
+    else if (signals.pickedPctLeadAfterQ1 <= 35) score -= 2;
+    // H1 scoring edge — broader read; useful for 1H spread/total picks too
+    if (signals.pickedAvgH1Scored > 0 && signals.oppAvgH1Allowed > 0) {
+      const h1Edge = signals.pickedAvgH1Scored - signals.oppAvgH1Allowed;
+      if (h1Edge >= 8) score += 4;
+      else if (h1Edge >= 4) score += 2;
+      else if (h1Edge <= -8) score -= 4;
+      else if (h1Edge <= -4) score -= 2;
+    }
+    // Lead-after-H1 history — teams that lead H1 65%+ rarely lose those games
+    if (signals.pickedPctLeadAfterH1 >= 65) score += 4;
+    else if (signals.pickedPctLeadAfterH1 <= 35) score -= 3;
   }
 
   // F5 TOTAL DIVERGENCE — when our team's F5 avg is well above the opponent's, we're
@@ -2138,6 +2180,16 @@ async function processGame(
       oppBullpenAllowed: side === 'home' ? (awayTendencies?.avgBullpenAllowed ?? 0) : (homeTendencies?.avgBullpenAllowed ?? 0),
       pickedPctBlewLateLead: side === 'home' ? (homeTendencies?.pctBlewLateLead ?? 0) : (awayTendencies?.pctBlewLateLead ?? 0),
       oppPctBlewLateLead: side === 'home' ? (awayTendencies?.pctBlewLateLead ?? 0) : (homeTendencies?.pctBlewLateLead ?? 0),
+      pickedAvgQ1Scored: side === 'home' ? (homeTendencies?.avgQ1Scored ?? 0) : (awayTendencies?.avgQ1Scored ?? 0),
+      pickedAvgQ1Allowed: side === 'home' ? (homeTendencies?.avgQ1Allowed ?? 0) : (awayTendencies?.avgQ1Allowed ?? 0),
+      oppAvgQ1Scored: side === 'home' ? (awayTendencies?.avgQ1Scored ?? 0) : (homeTendencies?.avgQ1Scored ?? 0),
+      oppAvgQ1Allowed: side === 'home' ? (awayTendencies?.avgQ1Allowed ?? 0) : (homeTendencies?.avgQ1Allowed ?? 0),
+      pickedAvgH1Scored: side === 'home' ? (homeTendencies?.avgH1Scored ?? 0) : (awayTendencies?.avgH1Scored ?? 0),
+      pickedAvgH1Allowed: side === 'home' ? (homeTendencies?.avgH1Allowed ?? 0) : (awayTendencies?.avgH1Allowed ?? 0),
+      oppAvgH1Scored: side === 'home' ? (awayTendencies?.avgH1Scored ?? 0) : (homeTendencies?.avgH1Scored ?? 0),
+      oppAvgH1Allowed: side === 'home' ? (awayTendencies?.avgH1Allowed ?? 0) : (homeTendencies?.avgH1Allowed ?? 0),
+      pickedPctLeadAfterQ1: side === 'home' ? (homeTendencies?.pctLeadAfterQ1 ?? 0) : (awayTendencies?.pctLeadAfterQ1 ?? 0),
+      pickedPctLeadAfterH1: side === 'home' ? (homeTendencies?.pctLeadAfterH1 ?? 0) : (awayTendencies?.pctLeadAfterH1 ?? 0),
     };
     return { signalsPartial, pickedInj, oppInj, pickedAts, oppAts, pickedAtsHA, pickedStreak, starOutPickSide, starOutOppSide, hasKeyInjuryPicked, hasKeyInjuryOpp };
   };
@@ -2373,6 +2425,16 @@ async function processGame(
     reasonsAgainst.push(`${pickedTeam.abbreviation}'s ${signals.recentFormStreak}-game streak is built on top of a tougher L10 stretch — fragile.`);
   } else if (signals.recentFormStreak >= 3 && signals.pickedAvgMargin10 >= 1.5) {
     reasonsFor.push(`${pickedTeam.abbreviation}'s ${signals.recentFormStreak}-game streak is REAL — they're outscoring opponents by ${signals.pickedAvgMargin10.toFixed(1)} per game over their last 10.`);
+  }
+
+  // Basketball Q1 / H1 tendencies — customer-friendly read for NBA/WNBA plays
+  if (signals.pickedAvgQ1Scored > 0 && signals.oppAvgQ1Allowed > 0) {
+    const q1Edge = signals.pickedAvgQ1Scored - signals.oppAvgQ1Allowed;
+    if (q1Edge >= 4 && signals.pickedPctLeadAfterQ1 >= 60) {
+      reasonsFor.push(`${pickedTeam.abbreviation} starts fast — they avg ${signals.pickedAvgQ1Scored.toFixed(1)} in Q1 vs ${oppTeam.abbreviation}'s ${signals.oppAvgQ1Allowed.toFixed(1)} Q1 allowed, and lead after Q1 in ${Math.round(signals.pickedPctLeadAfterQ1)}% of games.`);
+    } else if (signals.pickedPctLeadAfterH1 >= 65) {
+      reasonsFor.push(`${pickedTeam.abbreviation} leads at the half in ${Math.round(signals.pickedPctLeadAfterH1)}% of recent games — they typically build their margin early.`);
+    }
   }
 
   // Tendency resolver — produces a per-pick math read on whether the line is fair.

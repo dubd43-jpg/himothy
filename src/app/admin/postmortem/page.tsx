@@ -233,6 +233,21 @@ function SignalBlock({ title, data, injuries }: { title: string; data: any; inju
           {data.pickedPitcherWhipL5 > 0 && <SignalRow label="SP WHIP L5" value={data.pickedPitcherWhipL5?.toFixed(2)} />}
         </>
       )}
+      {data.pickedBullpenAllowed > 0 && (
+        <SignalRow label="Bullpen 7+ R/g" value={data.pickedBullpenAllowed?.toFixed(1)} />
+      )}
+      {data.pickedPctBlewLateLead > 0 && (
+        <SignalRow label="Blew late lead %" value={`${Math.round(data.pickedPctBlewLateLead)}%`} />
+      )}
+      {data.pickedAvgQ1Scored > 0 && (
+        <>
+          <SignalRow label="Q1 scored avg" value={data.pickedAvgQ1Scored?.toFixed(1)} />
+          <SignalRow label="Q1 allowed avg" value={data.pickedAvgQ1Allowed?.toFixed(1)} />
+          <SignalRow label="Lead-after-Q1 %" value={`${Math.round(data.pickedPctLeadAfterQ1)}%`} />
+          <SignalRow label="H1 scored avg" value={data.pickedAvgH1Scored?.toFixed(1)} />
+          <SignalRow label="Lead-after-H1 %" value={`${Math.round(data.pickedPctLeadAfterH1)}%`} />
+        </>
+      )}
       {injuries && (injuries.out?.length || injuries.doubtful?.length) ? (
         <div className="mt-1 text-[11px] text-red-300">
           OUT: {injuries.out?.join(", ") || "—"} · DOUBTFUL: {injuries.doubtful?.join(", ") || "—"}
