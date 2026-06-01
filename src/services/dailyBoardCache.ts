@@ -149,7 +149,14 @@ export async function getFrozenDaily(key: string, compute: () => Promise<any>, f
   }
   const data = await compute();
   boardCache.set(memKey, { data, generatedAt: Date.now() });
-  await writePersistedSlate(SLATE_RULES_VERSION, etDate, key, data);
+  // When force=true, OVERWRITE the persisted slate (admin-triggered refresh path).
+  // Without this, writePersistedSlate's ON CONFLICT DO NOTHING silently kept the old
+  // row and the refresh appeared to do nothing. Fixed 2026-06-01.
+  if (force) {
+    await adminOverwritePersistedSlate(etDate, key, data);
+  } else {
+    await writePersistedSlate(SLATE_RULES_VERSION, etDate, key, data);
+  }
   return data;
 }
 
