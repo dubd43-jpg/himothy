@@ -3956,7 +3956,7 @@ export async function runPower20Research(excludedKeys: Set<string> = new Set()):
 //     guessing. A single playoff game can yield: favorite ML + game total + 2 player
 //     props = a legit 4-leg correlated parlay.
 
-const SPORT_PARLAY_LEAGUES = ['MLB', 'NBA', 'NFL', 'NHL', 'WNBA', 'NCAA Basketball'];
+const SPORT_PARLAY_LEAGUES = ['MLB', 'NBA', 'NFL', 'NHL', 'WNBA', 'NCAA Basketball', 'NCAA Baseball', 'College Football', 'NCAA Football'];
 
 export interface SportParlayLeg {
   type: 'game' | 'prop';
