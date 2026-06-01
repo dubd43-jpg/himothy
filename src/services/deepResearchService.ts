@@ -2966,20 +2966,22 @@ export async function runDailyDeepResearch(board: BoardType = 'north-american'):
     if (pressurePack.length === 2 && vip4Pack.length === 4 && parlayPlan.length === 6) break;
   }
 
-  // DIG-WIDER BACKFILL: instead of slot-filling with PASS-tier garbage or chalk extras,
-  // when Pressure / VIP / Parlay can't fill from the main routing, we scan EVERY market
-  // on every game (full-game total, F5, team totals, periods, props) for an 85+ play
-  // that the routing missed. If after digging that wide we still can't find an 85+, the
-  // slot ships EMPTY. Honest > forced.
+  // STRUCTURAL FILL — Pressure ALWAYS ships 2, VIP ALWAYS ships 4, $10 Parlay ALWAYS
+  // ships 4. The user is explicit: the structure is non-negotiable. The job is to FIND
+  // 2 quality Pressure picks every night — not to ship short when the slate looks thin.
   //
-  // Quality floor across products:
-  //   Pressure Pack: 85+, no heavy chalk ML, must clear isGrandSlamEligible-style guards
-  //   VIP 4-Pack:    85+, no heavy chalk ML (-145 cap consistent with Pressure)
-  //   $10 Parlay:    85+, no heavy chalk ML (no more -250 backfill)
+  // Strategy (in order):
+  //   Stage 1: leftover non-PASS picks at 85+ — pure quality leftovers from main routing
+  //   Stage 2: asleep-reserved 85+ — quiet markets we reserved away from main
+  //   Stage 3: DIG-WIDER — scan every market on every scored game (F5, team totals,
+  //            periods, alt lines) for 85+ candidates the engine missed
+  //   Stage 4: step-down to 80-84 from the same quality pool — never PASS-tier (sub-80),
+  //            never chalk-extras. Picks here are GOOD-but-not-great; honest about it.
   //
-  // Removed: the old T1/T2/T3 cascade that dipped into PASS-tier picks (sub-80), the
-  // -185-to-250 parlay-chalk-extras pool, and the "PARLAY_PLAN MUST always be 4 picks"
-  // guarantee. Sport Parlays' discipline philosophy applied: ship empty before garbage.
+  // The 80 GLOBAL_FLOOR is the hard line — we will never ship a sub-80 confidence pick
+  // even to hit a slot count. If we somehow can't fill at 80+, the slot stays short
+  // (this should be extremely rare given ~20 MLB games × 5+ markets each = 100+
+  // candidates per night).
   const promote = (target: DeepPickResult[], cap: number, tierTag: ProductTier, pool: DeepPickResult[]) => {
     while (target.length < cap && pool.length > 0) {
       const p = pool.shift()!;
@@ -2988,64 +2990,115 @@ export async function runDailyDeepResearch(board: BoardType = 'north-american'):
       target.push({ ...p, tier: tierTag }); usedPicks.add(pickKey(p)); usedGames.add(p.gameId);
     }
   };
-  // Pressure quality bar: same -145 cap, plus the engine's quality floor at 85.
-  const pressureOk = (p: DeepPickResult) => !isHeavyMlForPremium(p) && p.confidenceScore >= QUALITY_FLOOR;
-  const vipOk = (p: DeepPickResult) => !isHeavyMlForPremium(p) && p.confidenceScore >= QUALITY_FLOOR;
-  const parlayOk = (p: DeepPickResult) => p.confidenceScore >= QUALITY_FLOOR && p.tier !== 'PASS';
+  // Quality gates at each tier — same -145 cap for Pressure + VIP, no PASS for Parlay.
+  const pressureOk85 = (p: DeepPickResult) => !isHeavyMlForPremium(p) && p.confidenceScore >= QUALITY_FLOOR;
+  const vipOk85 = (p: DeepPickResult) => !isHeavyMlForPremium(p) && p.confidenceScore >= QUALITY_FLOOR;
+  const parlayOk85 = (p: DeepPickResult) => p.confidenceScore >= QUALITY_FLOOR && p.tier !== 'PASS';
+  // Step-down gates — same chalk caps + 80 (GLOBAL_FLOOR) — never PASS-tier.
+  const pressureOk80 = (p: DeepPickResult) => !isHeavyMlForPremium(p) && p.confidenceScore >= GLOBAL_FLOOR && p.tier !== 'PASS';
+  const vipOk80 = (p: DeepPickResult) => !isHeavyMlForPremium(p) && p.confidenceScore >= GLOBAL_FLOOR && p.tier !== 'PASS';
+  const parlayOk80 = (p: DeepPickResult) => p.confidenceScore >= GLOBAL_FLOOR && p.tier !== 'PASS';
 
-  // Stage 1: leftover non-PASS picks that aren't asleep-reserved. Real quality, not chalk.
+  // Stage 1: leftover non-PASS picks at 85+ that aren't asleep-reserved.
   const stage1 = picksExpanded.filter((p) => !usedPicks.has(pickKey(p)) && !asleepReserved.has(p.gameId) && p.tier !== 'PASS');
-  promote(pressurePack, 2, 'PRESSURE_PACK', stage1.filter(pressureOk));
-  promote(vip4Pack, 4, 'VIP_4_PACK', stage1.filter(vipOk));
-  promote(parlayPlan, 6, 'PARLAY_PLAN', stage1.filter(parlayOk));
+  promote(pressurePack, 2, 'PRESSURE_PACK', stage1.filter(pressureOk85));
+  promote(vip4Pack, 4, 'VIP_4_PACK', stage1.filter(vipOk85));
+  promote(parlayPlan, 6, 'PARLAY_PLAN', stage1.filter(parlayOk85));
 
-  // Stage 2: asleep-reserved picks at 85+ — they were reserved away from the main board,
-  // but on a genuinely thin night we'd rather use a 90-conf NCAA Baseball game than ship
-  // empty. Still respects the quality floor.
+  // Stage 2: asleep-reserved picks at 85+ if still short.
   if (vip4Pack.length < 4 || parlayPlan.length < 4 || pressurePack.length < 2) {
     const stage2 = picksExpanded.filter((p) => !usedPicks.has(pickKey(p)) && asleepReserved.has(p.gameId) && p.tier !== 'PASS');
-    promote(pressurePack, 2, 'PRESSURE_PACK', stage2.filter(pressureOk));
-    promote(vip4Pack, 4, 'VIP_4_PACK', stage2.filter(vipOk));
-    promote(parlayPlan, 6, 'PARLAY_PLAN', stage2.filter(parlayOk));
+    promote(pressurePack, 2, 'PRESSURE_PACK', stage2.filter(pressureOk85));
+    promote(vip4Pack, 4, 'VIP_4_PACK', stage2.filter(vipOk85));
+    promote(parlayPlan, 6, 'PARLAY_PLAN', stage2.filter(parlayOk85));
     for (const p of stage2) if (usedGames.has(p.gameId)) asleepReserved.delete(p.gameId);
   }
 
-  // Stage 3 (DIG-WIDER): for every still-unused scored game, run buildMarketCandidates
-  // to score F5 + team totals + periods + alt lines. If any market scores 85+, eligible
-  // as fill. This is the answer to "the engine only scored 2 markets per game."
+  // Stage 3 (EXHAUSTIVE DIG-WIDER): scan EVERY market on EVERY scored game for 85+
+  // candidates. Owner's directive: "every game has something — totals, team totals,
+  // halves, F5, NRFI, props, alt lines. If you really do your job, every category
+  // has 90+ available." So we scan all games, include props, and run in parallel.
+  // No cap of 20 games; if there are 25 games tonight, scan all 25.
   if (pressurePack.length < 2 || vip4Pack.length < 4 || parlayPlan.length < 4) {
     try {
       const unusedScored = allScoredRaw.filter((p) => !usedGames.has(p.gameId));
+      // Score EVERY market on EVERY unused game in parallel. Each call returns up to ~10
+      // candidates (side, total, F5, team totals, period markets, alt lines, props).
+      const candidateBatches = await Promise.all(
+        unusedScored.map(async (game) => {
+          try {
+            const cands = await buildMarketCandidates(game, { includeProps: true });
+            return cands.map((c) => ({ game, c }));
+          } catch { return []; }
+        }),
+      );
       const digFinds: DeepPickResult[] = [];
-      // Cap to top 20 unused games by base confidence to keep wall-time reasonable.
-      const digPool = unusedScored.sort((a, b) => (b.confidenceScore || 0) - (a.confidenceScore || 0)).slice(0, 20);
-      for (const game of digPool) {
-        let cands: any[] = [];
-        try { cands = await buildMarketCandidates(game, { includeProps: false }); } catch { cands = []; }
-        for (const c of cands) {
+      for (const batch of candidateBatches) {
+        for (const { game, c } of batch) {
           if ((c.confidence ?? 0) < QUALITY_FLOOR) continue;
           digFinds.push({
             ...game,
-            selection: c.selection,
-            marketType: c.marketType,
-            selectionSide: c.selectionSide,
-            odds: c.odds,
-            line: c.line,
-            confidenceScore: c.confidence,
-            // Re-evaluate against ML chalk cap on the candidate's own price
+            selection: c.selection, marketType: c.marketType, selectionSide: c.selectionSide,
+            odds: c.odds, line: c.line, confidenceScore: c.confidence,
           } as DeepPickResult);
         }
       }
-      // Sort dig-finds by confidence desc and promote.
       digFinds.sort((a, b) => (b.confidenceScore || 0) - (a.confidenceScore || 0));
-      promote(pressurePack, 2, 'PRESSURE_PACK', digFinds.filter(pressureOk));
-      promote(vip4Pack, 4, 'VIP_4_PACK', digFinds.filter(vipOk));
-      promote(parlayPlan, 6, 'PARLAY_PLAN', digFinds.filter(parlayOk));
-    } catch { /* non-blocking — empty slot ships honest */ }
+      promote(pressurePack, 2, 'PRESSURE_PACK', digFinds.filter(pressureOk85));
+      promote(vip4Pack, 4, 'VIP_4_PACK', digFinds.filter(vipOk85));
+      promote(parlayPlan, 6, 'PARLAY_PLAN', digFinds.filter(parlayOk85));
+    } catch { /* non-blocking */ }
   }
 
-  // If after Stages 1-3 a product is still short, it ships short. No PASS-tier backfill,
-  // no -250 chalk extras pool. Honest > forced. (parlayChalkExtras is no longer used.)
+  // Stage 4 (STEP-DOWN to 80-84): structural counts are non-negotiable. If after the
+  // 85+ scans we still don't have 2 Pressure / 4 VIP / 4 Parlay, drop to the 80-84 band
+  // (GLOBAL_FLOOR is 80 — we never go below). Picks here are honest "best available
+  // tonight" — not slot-fill garbage. Per-product step-down stages so a quality 82
+  // gets considered rather than a 79.
+  if (pressurePack.length < 2 || vip4Pack.length < 4 || parlayPlan.length < 4) {
+    const stage4a = picksExpanded.filter((p) => !usedPicks.has(pickKey(p)) && !asleepReserved.has(p.gameId) && p.tier !== 'PASS');
+    promote(pressurePack, 2, 'PRESSURE_PACK', stage4a.filter(pressureOk80));
+    promote(vip4Pack, 4, 'VIP_4_PACK', stage4a.filter(vipOk80));
+    promote(parlayPlan, 6, 'PARLAY_PLAN', stage4a.filter(parlayOk80));
+  }
+  // Stage 4b: asleep-reserved 80+ if still short.
+  if (pressurePack.length < 2 || vip4Pack.length < 4 || parlayPlan.length < 4) {
+    const stage4b = picksExpanded.filter((p) => !usedPicks.has(pickKey(p)) && asleepReserved.has(p.gameId) && p.tier !== 'PASS');
+    promote(pressurePack, 2, 'PRESSURE_PACK', stage4b.filter(pressureOk80));
+    promote(vip4Pack, 4, 'VIP_4_PACK', stage4b.filter(vipOk80));
+    promote(parlayPlan, 6, 'PARLAY_PLAN', stage4b.filter(parlayOk80));
+  }
+  // Stage 4c (exhaustive 80+ dig): same parallel scan, all games + props, 80+ floor.
+  // This is the LAST resort before slots ship short. With ~15-25 games × ~10 markets
+  // each + props, we should always find quality fills here on any normal night.
+  if (pressurePack.length < 2 || vip4Pack.length < 4 || parlayPlan.length < 4) {
+    try {
+      const unusedScored = allScoredRaw.filter((p) => !usedGames.has(p.gameId));
+      const candidateBatches = await Promise.all(
+        unusedScored.map(async (game) => {
+          try {
+            const cands = await buildMarketCandidates(game, { includeProps: true });
+            return cands.map((c) => ({ game, c }));
+          } catch { return []; }
+        }),
+      );
+      const digFinds80: DeepPickResult[] = [];
+      for (const batch of candidateBatches) {
+        for (const { game, c } of batch) {
+          if ((c.confidence ?? 0) < GLOBAL_FLOOR) continue;
+          digFinds80.push({
+            ...game,
+            selection: c.selection, marketType: c.marketType, selectionSide: c.selectionSide,
+            odds: c.odds, line: c.line, confidenceScore: c.confidence,
+          } as DeepPickResult);
+        }
+      }
+      digFinds80.sort((a, b) => (b.confidenceScore || 0) - (a.confidenceScore || 0));
+      promote(pressurePack, 2, 'PRESSURE_PACK', digFinds80.filter(pressureOk80));
+      promote(vip4Pack, 4, 'VIP_4_PACK', digFinds80.filter(vipOk80));
+      promote(parlayPlan, 6, 'PARLAY_PLAN', digFinds80.filter(parlayOk80));
+    } catch { /* non-blocking */ }
+  }
 
   // THIN-SLATE PARLAY FILL: when the straights have eaten the few quality games and the
   // parlay is short, top it up to PARLAY_TARGET_LEGS with real-value PROP / game TOTAL legs
