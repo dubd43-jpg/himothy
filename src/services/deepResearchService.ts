@@ -2878,12 +2878,11 @@ export async function runDailyDeepResearch(board: BoardType = 'north-american'):
   }
   picksExpanded.sort((a, b) => b.confidenceScore - a.confidenceScore);
 
-  // $10 PARLAY-ONLY CHALK: picks excluded from straights for being -185 to -250 chalk are
-  // still legal $10-Parlay legs (cap -250 per user). These never appear as a straight pick;
-  // they only backfill the Parlay Plan. Anything heavier than -250 is dropped entirely.
-  const parlayChalkExtras: DeepPickResult[] = allScoredRaw.filter(
-    (p) => isHeavyChalkML(p, SINGLE_PICK_ML_FLOOR) && !isHeavyChalkML(p, PARLAY_PLAN_ML_FLOOR),
-  );
+  // (Removed 2026-05-31: the -185-to-250 parlayChalkExtras pool. It was the routing path
+  //  that let $10 Parlay take chalk legs that were too heavy to be straights — exactly
+  //  the "forced chalk leg" mechanic that made $10 Parlay lose. The Parlay product now
+  //  follows the same -145 cap + 85 quality floor as Pressure + VIP. If a slate can't
+  //  produce 4 quality legs after dig-wider, the product ships short. Honest > forced.)
 
   // Assign tiers with hard caps. Dedup is per-PICK (game+market+selection) so one game can
   // appear in multiple products with DIFFERENT bets, but the exact same pick never repeats.
@@ -3169,13 +3168,15 @@ export async function runDailyDeepResearch(board: BoardType = 'north-american'):
 
 const ALL_POWER20_LEAGUES = Object.values(BOARD_LEAGUES).flat();
 
-// Hard caps on moneyline odds — anything steeper pays too little to be worth surfacing.
-// Single picks: -185 (per user: "There shall not be any single plays higher than 185").
-// Power 20/10 parlay legs: -450 (per user: "the highest leg on a 20 — nothing higher
-// than -450"). Heavier chalk than that drags the parlay payout to nothing.
+// Hard caps on moneyline odds — coherent across products per the 2026-05-31 audit:
+// Premium tier (Grand Slam / Pressure / VIP): -145 (PREMIUM_ML_FLOOR, defined elsewhere)
+// All other singles + $10 Parlay legs + props: -185 (per user: "no single plays steeper than -185")
+// Power 20/10 parlay legs: -450 (capacity products — chalk is the product)
+// Removed 2026-05-31: $10 Parlay used to take -185 to -250 chalk via parlayChalkExtras pool.
+// That pool was the engine forcing chalk legs into the parlay to hit 4. Killed entirely.
 const SINGLE_PICK_ML_FLOOR = -185;
-const PARLAY_PLAN_ML_FLOOR = -250;   // $10 Parlay Plan legs may go up to -250 (heavier than straights, lighter than Power 20/10)
-const PARLAY_LEG_ML_FLOOR = -450;    // Power of Parlays / Power 10 moonshot legs
+const PARLAY_PLAN_ML_FLOOR = -185;   // unified — $10 Parlay legs follow the same single-pick cap
+const PARLAY_LEG_ML_FLOOR = -450;    // Power of Parlays / Power 10 moonshot legs (capacity product exception)
 
 function parseAmericanOdds(s: string | null | undefined): number | null {
   if (!s) return null;

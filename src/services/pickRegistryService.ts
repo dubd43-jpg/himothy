@@ -504,11 +504,14 @@ export function aggregateToBetResults(picks: RegistryPickRow[]): BetResult[] {
   const parlayByTicket = new Map<string, RegistryPickRow[]>();
 
   for (const p of picks) {
-    if (isParlayProductLine(p.productLine)) {
-      const id = p.parlayTicketId || `${p.boardDate}|${p.productLine}`;
-      const arr = parlayByTicket.get(id);
+    if (isParlayProductLine(p.productLine) && p.parlayTicketId) {
+      // Only group legs that have a REAL ticketId. Legacy / orphaned legs without a
+      // ticketId used to be virtual-grouped by date+productLine; that collapsed mixed
+      // results (3W + 1L + 1 push → 1 loss) and silently erased pushes from totals.
+      // Treat ticket-less parlay legs as singles so every result counts honestly.
+      const arr = parlayByTicket.get(p.parlayTicketId);
       if (arr) arr.push(p);
-      else parlayByTicket.set(id, [p]);
+      else parlayByTicket.set(p.parlayTicketId, [p]);
     } else {
       singles.push({
         result: p.result,
