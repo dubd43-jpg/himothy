@@ -2106,6 +2106,16 @@ export async function buildMarketCandidates(pick: any, opts?: { includeProps?: b
     }
   }
 
+  // NCAA Baseball / College Baseball cap — owner directive: these are not plus-tier
+  // picks because we don't have probable pitcher data. Cap every candidate from these
+  // leagues at 88 so they can't crown a 100-conf pick through dig-wider either.
+  const leagueForCap = (pick as any)?.league || '';
+  if (leagueForCap === 'NCAA Baseball' || leagueForCap === 'College Baseball' || leagueForCap === 'NCAA Softball') {
+    for (const c of candidates) {
+      c.confidence = Math.min(88, c.confidence);
+    }
+  }
+
   candidates.sort((a, b) => b.confidence - a.confidence);
   return candidates;
 }
