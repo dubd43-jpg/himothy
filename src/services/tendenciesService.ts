@@ -61,6 +61,13 @@ export interface TeamTendencies {
   avgLateGameMargin: number;
   // % of last-N games decided by 3 runs / 7 points or fewer (close-game cohort)
   pctCloseGames: number;
+  // BULLPEN PROXY (MLB) — avg runs allowed in innings 7+, last 10. Higher = bullpen
+  // is bleeding late. A team with avgBullpenAllowed > 1.8 has a gassed/bad bullpen;
+  // their early-game cover is suspect, and late-game props (under 7.5 in F5 + over
+  // for full game, e.g.) gain juice.
+  avgBullpenAllowed: number;
+  // % of last-N games where team blew a 7th-inning lead (lost after leading)
+  pctBlewLateLead: number;
 }
 
 function dateToYYYYMMDD(d: Date): string {
@@ -132,6 +139,7 @@ export async function getTeamTendencies(league: string, teamId: string, lookback
     avgQ1Scored: 0, avgQ1Allowed: 0, avgH1Scored: 0, avgH1Allowed: 0,
     pctLeadAfterQ1: 0, pctLeadAfterH1: 0,
     avgLateGameMargin: 0, pctCloseGames: 0,
+    avgBullpenAllowed: 0, pctBlewLateLead: 0,
   };
   if (!recent.length) return out;
 
@@ -164,6 +172,8 @@ export async function getTeamTendencies(league: string, teamId: string, lookback
   let leadQ1 = 0, leadH1 = 0;
   let closeGames = 0;
   let sumLateMargin = 0;
+  let sumBullpenAllowed = 0;
+  let blewLateLead = 0;
 
   const isBaseball = league.toLowerCase().includes('baseball') || league.toUpperCase() === 'MLB';
   const isBasketball = ['NBA', 'WNBA'].includes(league.toUpperCase()) || league.toLowerCase().includes('basketball');
@@ -190,6 +200,18 @@ export async function getTeamTendencies(league: string, teamId: string, lookback
       sumF5Scored += f5Me;
       sumF5Allowed += f5Op;
       sumF5Total += f5Me + f5Op;
+      // Bullpen proxy: runs allowed in innings 7-9 (the bullpen's territory). A team's
+      // late-game runs-allowed average is the closest free signal to "is their bullpen
+      // gassed?" without paid bullpen ERA data.
+      const bullpenAllowed = opp.slice(6, 9).reduce((a, b) => a + b, 0);
+      sumBullpenAllowed += bullpenAllowed;
+      // Blown late lead: team was leading after 6th but lost. Approximates "bullpen
+      // gave it away" — the late-inning trauma indicator.
+      const after6Me = mine.slice(0, 6).reduce((a, b) => a + b, 0);
+      const after6Op = opp.slice(0, 6).reduce((a, b) => a + b, 0);
+      const finalMe = mine.reduce((a, b) => a + b, 0);
+      const finalOp = opp.reduce((a, b) => a + b, 0);
+      if (after6Me > after6Op && finalMe < finalOp) blewLateLead += 1;
     }
 
     if (isBasketball) {
@@ -229,6 +251,8 @@ export async function getTeamTendencies(league: string, teamId: string, lookback
       out.avgF5Total = sumF5Total / sample;
       out.avgF5Scored = sumF5Scored / sample;
       out.avgF5Allowed = sumF5Allowed / sample;
+      out.avgBullpenAllowed = sumBullpenAllowed / sample;
+      out.pctBlewLateLead = (blewLateLead / sample) * 100;
     }
     if (isBasketball) {
       out.avgQ1Scored = sumQ1Scored / sample;

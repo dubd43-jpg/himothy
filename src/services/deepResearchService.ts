@@ -212,6 +212,12 @@ export interface GameSignals {
   // pickedAvgMargin10 = team's avg game margin last 10 (positive = winning bigger).
   pickedAvgMargin10: number;
   oppAvgMargin10: number;
+  // Bullpen proxy (MLB) — avg runs allowed in innings 7-9 over last 10 games. Higher
+  // = bullpen leaking late. opp = the bullpen we're hoping to ride against.
+  pickedBullpenAllowed: number;
+  oppBullpenAllowed: number;
+  pickedPctBlewLateLead: number;     // % of games team gave up a post-6th lead
+  oppPctBlewLateLead: number;
 }
 
 export interface DeepPickResult {
@@ -1513,6 +1519,21 @@ function scoreGame(signals: Omit<GameSignals, 'confirmingSignals'>): number {
     else if (f5Delta <= -2.5) score -= 3;
   }
 
+  // BULLPEN STATE (MLB) — owner asked about bullpen. We don't have paid bullpen ERA,
+  // but late-inning (7-9) runs allowed over last 10 games is the cleanest proxy.
+  // High allowed = OUR bullpen leaks late (fade us); low opponent bullpen-allowed =
+  // they shut games down (fade us). Inverse: opp's leaky bullpen = we ride to win.
+  if (signals.tendencyFirstFrameSample >= 5) {
+    if (signals.pickedBullpenAllowed >= 2.5) score -= 5;     // our bullpen is bad
+    else if (signals.pickedBullpenAllowed <= 0.8) score += 3; // our bullpen is lockdown
+    if (signals.oppBullpenAllowed >= 2.5) score += 5;        // their bullpen is bad
+    else if (signals.oppBullpenAllowed <= 0.8) score -= 3;   // their bullpen is lockdown
+    // Blown-lead trauma — a team that's coughed up a post-6th lead in 30%+ of recent
+    // games has a chronic late-game problem
+    if (signals.pickedPctBlewLateLead >= 30) score -= 4;
+    if (signals.oppPctBlewLateLead >= 30) score += 4;
+  }
+
   // Data quality floor
   const dq = signals.dataQuality;
   if (dq < 30) score = Math.min(score, 52);
@@ -2113,6 +2134,10 @@ async function processGame(
       oppPitcherStarts: side === 'home' ? (probables.away?.startsAnalyzed ?? 0) : (probables.home?.startsAnalyzed ?? 0),
       pickedAvgMargin10: side === 'home' ? (homeForm?.avgMargin10 ?? 0) : (awayForm?.avgMargin10 ?? 0),
       oppAvgMargin10: side === 'home' ? (awayForm?.avgMargin10 ?? 0) : (homeForm?.avgMargin10 ?? 0),
+      pickedBullpenAllowed: side === 'home' ? (homeTendencies?.avgBullpenAllowed ?? 0) : (awayTendencies?.avgBullpenAllowed ?? 0),
+      oppBullpenAllowed: side === 'home' ? (awayTendencies?.avgBullpenAllowed ?? 0) : (homeTendencies?.avgBullpenAllowed ?? 0),
+      pickedPctBlewLateLead: side === 'home' ? (homeTendencies?.pctBlewLateLead ?? 0) : (awayTendencies?.pctBlewLateLead ?? 0),
+      oppPctBlewLateLead: side === 'home' ? (awayTendencies?.pctBlewLateLead ?? 0) : (homeTendencies?.pctBlewLateLead ?? 0),
     };
     return { signalsPartial, pickedInj, oppInj, pickedAts, oppAts, pickedAtsHA, pickedStreak, starOutPickSide, starOutOppSide, hasKeyInjuryPicked, hasKeyInjuryOpp };
   };
@@ -2297,6 +2322,58 @@ async function processGame(
   if (starOutOppSide) reasonsFor.push(`${starOutOppSide} — a key player for the opponent — is OUT, which boosts this side.`);
 
   if (signals.noKeyInjuries) reasonsFor.push('Both rosters appear healthy with no confirmed out/doubtful players.');
+
+  // CUSTOMER-FACING tendency reasoning — natural language, no methodology jargon.
+  // Owner rule: customers see WHY we like it, not the math. These only fire for
+  // engine-generated picks (Grand Slam / Pressure / VIP / Parlay / Marquee / Asleep);
+  // Personal Plays use admin's own reasoning, Sport Parlays use their own copy.
+  const pickedTeam = pickData.selectionSide === 'home' ? home : away;
+  const oppTeam = pickData.selectionSide === 'home' ? away : home;
+
+  // Pitcher matchup (MLB only — engine produces 0 for non-MLB)
+  if (signals.pickedPitcherStarts >= 3 && signals.pickedPitcherEraL5 > 0) {
+    if (signals.pickedPitcherEraL5 <= 2.5) {
+      reasonsFor.push(`${pickedTeam.abbreviation}'s starter has been dealing — ${signals.pickedPitcherEraL5} ERA over his last ${signals.pickedPitcherStarts} starts.`);
+    } else if (signals.pickedPitcherEraL5 <= 3.5) {
+      reasonsFor.push(`${pickedTeam.abbreviation}'s starter is throwing well lately — ${signals.pickedPitcherEraL5} ERA L${signals.pickedPitcherStarts}.`);
+    } else if (signals.pickedPitcherEraL5 >= 5.0) {
+      reasonsAgainst.push(`${pickedTeam.abbreviation}'s starter has been getting hit (${signals.pickedPitcherEraL5} ERA last ${signals.pickedPitcherStarts}).`);
+    }
+  }
+  if (signals.oppPitcherStarts >= 3 && signals.oppPitcherEraL5 > 0 && signals.oppPitcherEraL5 >= 5.0) {
+    reasonsFor.push(`${oppTeam.abbreviation}'s starter has been hittable lately — ${signals.oppPitcherEraL5} ERA L${signals.oppPitcherStarts}.`);
+  }
+
+  // First-inning / first-frame tendency
+  if (signals.tendencyFirstFrameSample >= 5) {
+    if (signals.tendencyFirstFrameScored >= 70) {
+      reasonsFor.push(`${pickedTeam.abbreviation} scores in the 1st inning ${Math.round(signals.tendencyFirstFrameScored)}% of recent games — they don't wait around.`);
+    }
+    if (signals.tendencyOppFirstFrameAllowed >= 70) {
+      reasonsFor.push(`${oppTeam.abbreviation} gives up a 1st-inning run ${Math.round(signals.tendencyOppFirstFrameAllowed)}% of games — slow starts.`);
+    }
+  }
+
+  // Bullpen state (MLB)
+  if (signals.tendencyFirstFrameSample >= 5) {
+    if (signals.oppBullpenAllowed >= 2.5) {
+      reasonsFor.push(`${oppTeam.abbreviation}'s bullpen has been leaking — ${signals.oppBullpenAllowed.toFixed(1)} runs allowed late in recent games.`);
+    }
+    if (signals.pickedBullpenAllowed >= 2.5) {
+      reasonsAgainst.push(`${pickedTeam.abbreviation}'s bullpen has been shaky late (${signals.pickedBullpenAllowed.toFixed(1)} runs/game in the 7th+).`);
+    }
+    if (signals.oppPctBlewLateLead >= 30) {
+      reasonsFor.push(`${oppTeam.abbreviation} has blown a late lead in ${Math.round(signals.oppPctBlewLateLead)}% of recent games.`);
+    }
+  }
+
+  // Streak fragility surface — if the engine has a +3 streak picked but with negative
+  // avg margin, surface that honestly so customer sees we're not just chasing streaks.
+  if (signals.recentFormStreak >= 3 && signals.pickedAvgMargin10 < -0.3) {
+    reasonsAgainst.push(`${pickedTeam.abbreviation}'s ${signals.recentFormStreak}-game streak is built on top of a tougher L10 stretch — fragile.`);
+  } else if (signals.recentFormStreak >= 3 && signals.pickedAvgMargin10 >= 1.5) {
+    reasonsFor.push(`${pickedTeam.abbreviation}'s ${signals.recentFormStreak}-game streak is REAL — they're outscoring opponents by ${signals.pickedAvgMargin10.toFixed(1)} per game over their last 10.`);
+  }
 
   // Tendency resolver — produces a per-pick math read on whether the line is fair.
   // For totals: 'home' is shoehorned to mean Over (matches how we encode total picks
