@@ -24,6 +24,7 @@ import {
   CheckCircle2,
   XCircle,
   Radio,
+  Search,
   Target,
   Flame,
   DollarSign,
@@ -1282,6 +1283,8 @@ function DeepResearchSection({ board }: { board: string }) {
   // Per-section stats (W-L, units, streak). Fetched from /api/records/summary, mapped to
   // each category tile so users see "Pressure Pack 12-5 (70%) +3.2u · 🔥 3W" inline.
   const [productStats, setProductStats] = useState<Record<string, TileStats>>({});
+  const [searchTerm, setSearchTerm] = useState("");
+  const [marketFilter, setMarketFilter] = useState<'all' | 'moneyline' | 'spread' | 'total'>('all');
 
   useEffect(() => {
     const loadStats = () => {
@@ -1307,6 +1310,37 @@ function DeepResearchSection({ board }: { board: string }) {
     const i = setInterval(loadStats, 60_000);
     return () => clearInterval(i);
   }, []);
+
+  const searchablePicks = useMemo(() => {
+    if (!data) return [] as DeepPick[];
+    const picks: DeepPick[] = [
+      data.grandSlam,
+      ...(data.pressurePack || []),
+      ...(data.vip4Pack || []),
+      ...(data.parlayPlan || []),
+      ...(data.asleepPicks || []),
+      ...(data.valuePlays || []),
+    ].filter((p): p is DeepPick => Boolean(p));
+    const term = searchTerm.trim().toLowerCase();
+
+    return picks.filter((pick) => {
+      if (marketFilter !== 'all' && pick.marketType !== marketFilter) return false;
+      if (!term) return true;
+      const haystack = [
+        pick.eventName,
+        pick.league,
+        pick.selection,
+        pick.homeTeam?.name,
+        pick.awayTeam?.name,
+        pick.tier,
+        pick.marketType,
+        pick.aiExplanation?.shortReason || '',
+      ].join(' ').toLowerCase();
+      return haystack.includes(term);
+    });
+  }, [data, marketFilter, searchTerm]);
+
+  const showSearchResults = searchTerm.trim().length > 0 || marketFilter !== 'all';
 
   // Map registry product-line name → CategoryTile title. The registry uses the productLine
   // we wrote when recording the pick (see recordBoardService.ts). Keep this lookup table
@@ -1411,6 +1445,78 @@ function DeepResearchSection({ board }: { board: string }) {
           <RefreshCw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} /> Refresh
         </button>
       </div>
+
+      <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-4 grid gap-4 md:grid-cols-[1fr_auto]">
+        <div className="space-y-2">
+          <div className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30">Search / filter picks</div>
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
+            <input
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              placeholder="Search team, league, market, tier..."
+              className="w-full rounded-2xl border border-white/10 bg-black/10 py-3 pl-10 pr-4 text-sm text-white placeholder:text-white/30 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+            />
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {['all', 'moneyline', 'spread', 'total'].map((type) => (
+            <button
+              key={type}
+              type="button"
+              onClick={() => setMarketFilter(type as 'all' | 'moneyline' | 'spread' | 'total')}
+              className={`rounded-full border px-3 py-2 text-[10px] font-black uppercase tracking-[0.25em] transition-all ${
+                marketFilter === type
+                  ? 'border-white bg-white text-black'
+                  : 'border-white/10 bg-white/5 text-white/60 hover:border-white/30 hover:text-white'
+              }`}
+            >
+              {type === 'all' ? 'All markets' : type}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {showSearchResults && (
+        <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-4 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30">Search results</div>
+              <p className="text-sm text-white/70">
+                Showing {searchablePicks.length} matching picks{marketFilter !== 'all' ? ` · ${marketFilter}` : ''}.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setSearchTerm('');
+                setMarketFilter('all');
+              }}
+              className="text-[10px] font-black uppercase tracking-[0.3em] text-primary hover:text-white"
+            >
+              Clear filters
+            </button>
+          </div>
+          {searchablePicks.length > 0 ? (
+            <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+              {searchablePicks.map((pick) => (
+                <DeepPickCard
+                  key={`${pick.gameId}-${pick.selection}`}
+                  pick={pick}
+                  variant="vip"
+                  href={`/pick/${pick.gameId}?board=${board}&from=/picks?board=${board}&selection=${encodeURIComponent(pick.selection)}`}
+                  live={computeLiveState(pick, liveMap[pick.gameId])}
+                  lateNewsNote={lateNewsFlags[pick.gameId] || null}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-white/10 bg-black/10 p-6 text-sm text-white/50">
+              No picks match that search or market filter. Try a different team name, league, tier, or reset the filters.
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Main board layout:
           1. 3 BIG HERO TILES — Grand Slam, Pressure Pack, VIP 4-Pack (the flagship straights)

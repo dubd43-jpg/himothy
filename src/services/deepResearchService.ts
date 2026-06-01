@@ -2522,6 +2522,21 @@ async function processGame(
       }
     }
   }
+  // NCAA BASEBALL CONFIDENCE CAP — owner directive 2026-06-01: NCAA baseball games
+  // are NOT plus-tier picks. We don't have probable pitcher data for college baseball
+  // (ESPN doesn't expose it reliably), so the engine is running on bullpen tendency +
+  // ATS + form alone — missing the single biggest predictor. These picks cannot reach
+  // the same conviction tier as MLB picks where we know who's pitching.
+  //
+  // Cap at 88 (STRONG tier max, just below SLAM DUNK). Engine still surfaces them when
+  // signals genuinely support it, but never crowns them at 100 conf when we're missing
+  // the most important variable.
+  const isCollegeBaseballOrSimilarThinData =
+    league === 'NCAA Baseball' || league === 'College Baseball' || league === 'NCAA Softball';
+  if (isCollegeBaseballOrSimilarThinData) {
+    confidenceScore = Math.min(88, confidenceScore);
+  }
+
   // CAP AT 100. Confidence is a 0-100 conviction score — it must never read above 100. The
   // asleep-league boost is a MULTIPLIER on the base score, which could push it to 110+; that's
   // nonsensical to show ("110% sure") so we clamp it. 100 = our maximum conviction, not a
