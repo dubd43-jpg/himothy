@@ -117,7 +117,8 @@ export default function NrfiPage() {
               const startTime = formatGameDateTimeET(play.startTime) || TIME_TBD;
               const showLive = play.state !== "pre";
               return (
-              <article key={play.gameId} className="rounded-2xl border border-white/10 bg-white/[0.02] p-4 space-y-3">
+              <Link key={play.gameId} href={`/pick/${play.gameId}?from=/nrfi`} className="block">
+              <article className="rounded-2xl border border-white/10 bg-white/[0.02] p-4 space-y-3 hover:border-primary/40 transition-all">
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <div className="text-[10px] font-semibold text-white/40">{play.eventName}</div>
@@ -159,6 +160,7 @@ export default function NrfiPage() {
                 </div>
                 <p className="text-xs text-white/55 leading-relaxed">{play.reason}</p>
               </article>
+              </Link>
               );
             })}
           </div>

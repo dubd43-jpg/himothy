@@ -36,6 +36,19 @@ export const LEAGUE_TO_SPORT: Record<string, string> = {
   'Tennis - ATP': 'tennis_atp_french_open',
   'Tennis - WTA': 'tennis_wta_french_open',
   Tennis: 'tennis_atp_french_open',
+  // Added 2026-05-31 — the engine fetches ESPN events for these leagues but had no
+  // Odds API mapping, so processGame returned null and the global/soccer boards
+  // shipped empty even when 5-7 events existed. Now they get real pricing.
+  'Soccer - Brazil Serie A': 'soccer_brazil_campeonato',
+  'Soccer - Argentina': 'soccer_argentina_primera_division',
+  'Soccer - MLS': 'soccer_usa_mls',
+  'Soccer - Liga MX': 'soccer_mexico_ligamx',
+  AFL: 'aussierules_afl',
+  'Australian Football': 'aussierules_afl',
+  'Rugby - NRL': 'rugbyleague_nrl',
+  'Rugby - Premiership': 'rugbyunion_six_nations',
+  Cricket: 'cricket_international_t20',
+  'Cricket - IPL': 'cricket_ipl',
 };
 
 // Cache of currently-active tennis sport keys from The Odds API /sports endpoint.

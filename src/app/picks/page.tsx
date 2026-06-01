@@ -878,31 +878,76 @@ function WinProbBadge({ pct }: { pct: number }) {
   );
 }
 
-function Power20Leg({ pick, index }: { pick: Power20Pick; index: number }) {
+// Compute per-leg state from live scores — Power20 had no per-leg display, customer
+// couldn't tell which leg killed a parlay. Now every leg shows live/final + win/loss.
+function gradePower20Leg(leg: Power20Pick, liveMap: Record<string, any>): 'won' | 'lost' | 'push' | 'live' | 'pre' {
+  const g = liveMap[leg.gameId];
+  if (!g) return 'pre';
+  if (!g.isFinal && g.isLive) return 'live';
+  if (!g.isFinal) return 'pre';
+  if (g.homeScore === g.awayScore) return 'push';
+  if (leg.selectionSide !== 'home' && leg.selectionSide !== 'away') return 'pre';
+  const ourSideWon = leg.selectionSide === 'home' ? g.homeScore > g.awayScore : g.awayScore > g.homeScore;
+  return ourSideWon ? 'won' : 'lost';
+}
+
+function Power20Leg({ pick, index, live }: { pick: Power20Pick; index: number; live?: any }) {
   const oddsPos = pick.odds.startsWith('+');
-  const mktColor = pick.marketType === 'runline' ? 'text-amber-400' : pick.marketType === 'spread' ? 'text-sky-400' : 'text-white/60';
+  const result: 'won' | 'lost' | 'push' | 'live' | 'pre' = live ? gradePower20Leg(pick, { [pick.gameId]: live }) : 'pre';
+  // Per-leg accent based on outcome — customer immediately sees which leg lost.
+  let accent = 'border-white/8 bg-white/[0.02]';
+  let badge: { txt: string; cls: string } | null = null;
+  if (result === 'won') {
+    accent = 'border-emerald-400/60 bg-emerald-500/[0.08]';
+    badge = { txt: 'W', cls: 'bg-emerald-500 text-black' };
+  } else if (result === 'lost') {
+    accent = 'border-red-500/60 bg-red-500/[0.08]';
+    badge = { txt: 'L', cls: 'bg-red-500 text-white' };
+  } else if (result === 'push') {
+    accent = 'border-white/15 bg-white/[0.04]';
+    badge = { txt: 'PUSH', cls: 'bg-white/20 text-white/70' };
+  } else if (result === 'live') {
+    accent = 'border-amber-400/40 bg-amber-500/[0.05]';
+    badge = { txt: 'LIVE', cls: 'bg-amber-500 text-black' };
+  }
+  const scoreLine = live && (live.isLive || live.isFinal)
+    ? `${pick.underdogName?.split(' ').pop() || 'AWAY'} ${live.awayScore ?? 0}–${live.homeScore ?? 0}`
+    : null;
+  // Build a short why-we-like-it from the data we have — Power20Pick doesn't carry
+  // reasonsFor, but we can synthesize one from winProbability + market + injury status.
+  const whyLine = `${pick.winProbability.toFixed(0)}% implied win probability${!pick.isInjuryClear && pick.injuryNote ? ` · ${pick.injuryNote}` : ''}`;
+
+  // Wrap in Link so every Power 20 leg is clickable to the detail view.
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-white/8 bg-white/[0.02] p-3 hover:bg-white/[0.04] transition-all">
-      <div className="w-6 h-6 shrink-0 rounded-full bg-white/5 flex items-center justify-center text-[10px] font-black text-white/40">
-        {index + 1}
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="text-xs font-bold text-white truncate">{pick.selection}</div>
-        <div className="flex items-center gap-1.5 mt-0.5">
-          <span className="text-[10px] text-white/30 truncate">{pick.underdogName} · {pick.league}</span>
-          {!pick.isInjuryClear && (
-            <span className="text-[9px] text-amber-400/70 font-bold shrink-0">⚠ INJ</span>
-          )}
+    <Link href={`/pick/${pick.gameId}?from=power20`} className="block">
+      <div className={`flex items-center gap-3 rounded-xl border-2 p-3 transition-all hover:bg-white/[0.06] ${accent}`}>
+        <div className="w-6 h-6 shrink-0 rounded-full bg-white/5 flex items-center justify-center text-[10px] font-black text-white/40">
+          {index + 1}
         </div>
-        {formatGameDateTimeET(pick.startTime) && (
-          <div className="text-[10px] text-white/30 truncate">{formatGameDateTimeET(pick.startTime)}</div>
-        )}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <div className="text-xs font-bold text-white truncate">{pick.selection}</div>
+            {badge && <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black ${badge.cls}`}>{badge.txt}</span>}
+          </div>
+          <div className="flex items-center gap-1.5 mt-0.5">
+            <span className="text-[10px] text-white/30 truncate">{pick.underdogName} · {pick.league}</span>
+            {!pick.isInjuryClear && (
+              <span className="text-[9px] text-amber-400/70 font-bold shrink-0">⚠ INJ</span>
+            )}
+          </div>
+          {scoreLine ? (
+            <div className="text-[10px] text-white/50 truncate font-mono">{scoreLine}</div>
+          ) : formatGameDateTimeET(pick.startTime) && (
+            <div className="text-[10px] text-white/30 truncate">{formatGameDateTimeET(pick.startTime)}</div>
+          )}
+          <div className="text-[10px] text-white/40 mt-1 truncate">{whyLine}</div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <WinProbBadge pct={pick.winProbability} />
+          <span className={`text-sm font-black tabular-nums ${oddsPos ? 'text-emerald-400' : 'text-white/60'}`}>{pick.odds}</span>
+        </div>
       </div>
-      <div className="flex items-center gap-2 shrink-0">
-        <WinProbBadge pct={pick.winProbability} />
-        <span className={`text-sm font-black tabular-nums ${oddsPos ? 'text-emerald-400' : 'text-white/60'}`}>{pick.odds}</span>
-      </div>
-    </div>
+    </Link>
   );
 }
 
@@ -1071,7 +1116,7 @@ function Power20Section() {
               </div>
               <div className="relative space-y-2">
                 {activeParlay.legs.map((leg, i) => (
-                  <Power20Leg key={leg.gameId + leg.selection} pick={leg} index={i} />
+                  <Power20Leg key={leg.gameId + leg.selection} pick={leg} index={i} live={liveMap[leg.gameId]} />
                 ))}
               </div>
               <div className="relative pt-2 border-t border-white/5 text-[10px] text-white/30 font-semibold leading-relaxed">
@@ -1293,8 +1338,13 @@ function DeepResearchSection({ board }: { board: string }) {
         /* Individual (golf) / Racing — show outright tournament contenders */
         <OutrightTournaments tournaments={data.outrights} />
       ) : (
-        <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-8 text-center text-white/30 text-sm font-semibold">
-          No picks on this board today. Check back once more games are scheduled.
+        <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-8 text-center space-y-2">
+          <div className="text-white/50 text-sm font-bold">
+            {(data as any)?.emptyReason || 'No picks on this board today.'}
+          </div>
+          <div className="text-white/30 text-xs">
+            We only ship when the data is there. Check back once more games are scheduled.
+          </div>
         </div>
       )}
     </div>

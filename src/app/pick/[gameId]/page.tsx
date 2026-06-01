@@ -28,10 +28,43 @@ export default function PickPage({ params }: { params: { gameId: string } }) {
     // Pull every bucket on the board (was missing asleepPicks — fix). Then if the pick
     // still isn't found (deep link from a different board, or board param mismatched),
     // fall back to scanning every board so the breakdown page never dead-ends.
+    // Include EVERY array on the board so deep links from any product (Power 20, NRFI,
+     // Value Plays, Marquee, etc.) all resolve. Was missing valuePlays + nrfi + power20
+     // before — those would dead-end to "Pick not available."
     const flattenBoard = (d: any): DeepPick[] => {
       if (!d) return [];
-      return [d.grandSlam, ...(d.pressurePack || []), ...(d.vip4Pack || []), ...(d.parlayPlan || []), ...(d.marquee || []), ...(d.asleepPicks || [])]
-        .filter(Boolean) as DeepPick[];
+      return [
+        d.grandSlam,
+        ...(d.pressurePack || []),
+        ...(d.vip4Pack || []),
+        ...(d.parlayPlan || []),
+        ...(d.marquee || []),
+        ...(d.asleepPicks || []),
+        ...(d.valuePlays || []),
+        ...(d.allScored || []),  // catch-all for any pick the engine scored on this board
+      ].filter(Boolean) as DeepPick[];
+    };
+    // Synthesize a DeepPick-shaped object from a Power 20 leg. Power 20 picks live on
+    // their own endpoint with a lighter schema; map the fields the breakdown page reads.
+    const power20ToDeepPick = (leg: any): DeepPick | null => {
+      if (!leg || !leg.gameId) return null;
+      return {
+        gameId: String(leg.gameId), eventName: leg.eventName || '', league: leg.league || '', sport: leg.league || '',
+        startTime: leg.startTime || '',
+        homeTeam: { id: '', name: leg.favoriteName || leg.eventName?.split(' @ ')?.[1] || 'Home', abbreviation: leg.favoriteAbbr || 'HOME' } as any,
+        awayTeam: { id: '', name: leg.underdogName || leg.eventName?.split(' @ ')?.[0] || 'Away', abbreviation: '' } as any,
+        spread: null, total: null,
+        selection: leg.selection, selectionSide: leg.selectionSide || 'home', marketType: leg.marketType || 'moneyline',
+        odds: leg.odds, line: null,
+        confidenceScore: leg.winProbability ?? 70, tier: 'POWER_20',
+        reasonsFor: [
+          `${(leg.winProbability ?? 70).toFixed(0)}% implied win probability — heavy favorite anchor`,
+          leg.injuryNote ? `Injury note: ${leg.injuryNote}` : `Clear injury status going into ${leg.league}`,
+        ],
+        reasonsAgainst: [],
+        signals: { winProbabilityGap: 0, atsCoverPct: null, atsCoverPctOpp: null, dataQuality: 65 },
+        aiExplanation: null,
+      } as any;
     };
     const load = async () => {
       try {
@@ -51,6 +84,22 @@ export default function PickPage({ params }: { params: { gameId: string } }) {
             const hit = flattenBoard(data).find((p) => p.gameId === params.gameId);
             if (hit) { found = hit; break; }
           }
+        }
+
+        // Power 20 fallback — if the gameId came from a Power 20 leg, /api/research/power20
+        // owns it. Pull it and synthesize a DeepPick so the breakdown page renders.
+        if (!found) {
+          try {
+            const p20 = await fetch('/api/research/power20', { cache: 'no-store' }).then((r) => r.json()).catch(() => null);
+            const legs: any[] = [];
+            for (const parlay of (p20?.parlays || [p20])) {
+              if (parlay?.legs) legs.push(...parlay.legs);
+              if (parlay?.power10?.legs) legs.push(...parlay.power10.legs);
+              if (parlay?.powerOfParlays?.legs) legs.push(...parlay.powerOfParlays.legs);
+            }
+            const leg = legs.find((l) => String(l.gameId) === params.gameId);
+            if (leg) found = power20ToDeepPick(leg);
+          } catch { /* ignore */ }
         }
 
         if (mounted) setPick(found);
