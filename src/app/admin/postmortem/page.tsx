@@ -220,6 +220,17 @@ function SignalBlock({ title, data, injuries }: { title: string; data: any; inju
       {data.oddsBucketSample > 0 && (
         <SignalRow label={`Bucket edge (${data.oddsBucketSample}g)`} value={`${data.oddsBucketEdgePct > 0 ? '+' : ''}${data.oddsBucketEdgePct?.toFixed(1)}pp`} />
       )}
+      {data.hasOpeningLine && (
+        <>
+          <SignalRow label="ML move toward us" value={`${data.mlMovementForSide > 0 ? '+' : ''}${data.mlMovementForSide}c`} />
+          {data.spreadMovementForSide !== 0 && (
+            <SignalRow label="Spread move toward us" value={`${data.spreadMovementForSide > 0 ? '+' : ''}${data.spreadMovementForSide?.toFixed(1)}`} />
+          )}
+          {data.totalMovement !== 0 && (
+            <SignalRow label="Total move" value={`${data.totalMovement > 0 ? '+' : ''}${data.totalMovement?.toFixed(1)}`} />
+          )}
+        </>
+      )}
       {data.tendencyFirstFrameSample > 0 && (
         <>
           <SignalRow label="1st-inn scored %" value={data.tendencyFirstFrameScored?.toFixed(0)} />

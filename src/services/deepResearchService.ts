@@ -35,6 +35,7 @@ import { generateDeepExplanation } from '@/services/aiGenerator';
 import { getSharpIntel, type SharpIntelContext, type SharpFlag } from '@/services/sharpIntelService';
 import { getTeamTendencies, type TeamTendencies } from '@/services/tendenciesService';
 import { getGameProbables, type GameProbables } from '@/services/pitcherMatchupService';
+import { captureOpeningOdds, getOpeningOdds, computeMovement, type LineMovement, type OddsSnapshot } from '@/services/lineMovementService';
 import { oddsBucket } from '@/lib/oddsBucket';
 
 // Module-level cache for odds-bucket stats — refreshed every 5 minutes during a slate
@@ -232,6 +233,13 @@ export interface GameSignals {
   oppAvgH1Allowed: number;
   pickedPctLeadAfterQ1: number;       // % of games leading after Q1
   pickedPctLeadAfterH1: number;
+  // Line movement — closest free proxy to "where's the money?" Captured by storing
+  // opening odds the first time we see a game, then comparing to current odds.
+  // Positive = line moved TOWARD picked side (sharps agreeing); negative = AWAY.
+  mlMovementForSide: number;           // American-odds points toward our ML (0 = no opening)
+  spreadMovementForSide: number;       // line moved by this many points toward our spread side
+  totalMovement: number;               // positive = total moved UP (over getting steam)
+  hasOpeningLine: boolean;             // false = first time seeing this game (no signal)
 }
 
 export interface DeepPickResult {
@@ -1465,6 +1473,25 @@ function scoreGame(signals: Omit<GameSignals, 'confirmingSignals'>): number {
   // Odds available boost
   if (signals.oddsAvailable) score += 4;
 
+  // LINE MOVEMENT — closest free proxy to "where's the money?" If the line moved TOWARD
+  // our side since opening, the market is correcting in our favor (sharps agreeing).
+  // If it moved AWAY, public is on the other side or sharps are fading us. Only fires
+  // when we have an opening line captured (skipped on first-ever view of a game).
+  if (signals.hasOpeningLine) {
+    // ML movement: 15+ pts of American odds in our favor = clear sharp action
+    if (signals.mlMovementForSide >= 20) score += 7;
+    else if (signals.mlMovementForSide >= 10) score += 4;
+    else if (signals.mlMovementForSide >= 5) score += 2;
+    else if (signals.mlMovementForSide <= -20) score -= 7;
+    else if (signals.mlMovementForSide <= -10) score -= 4;
+    else if (signals.mlMovementForSide <= -5) score -= 2;
+    // Spread movement: 1+ point in our favor is meaningful
+    if (signals.spreadMovementForSide >= 1.0) score += 3;
+    else if (signals.spreadMovementForSide >= 0.5) score += 1;
+    else if (signals.spreadMovementForSide <= -1.0) score -= 3;
+    else if (signals.spreadMovementForSide <= -0.5) score -= 1;
+  }
+
   // ODDS-BUCKET HIT-RATE ("eyes" tendency) — owner directive: track how each price band
   // is actually performing in OUR record. A -135 bucket that's gone 1-7 since 5/27 is
   // overpaying chalk; dock confidence so we stop slot-filling there. A +105 bucket
@@ -2088,6 +2115,19 @@ async function processGame(
     probables = pp;
   } catch { /* non-blocking */ }
 
+  // Line movement — capture opening odds the first time we see this game (no-op if
+  // already captured), then compute movement from opening to current. Non-blocking.
+  const currentOddsSnap: OddsSnapshot = {
+    homeML: mergedHomeML, awayML: mergedAwayML, spread: mergedSpread, total: mergedTotal,
+  };
+  let opening: OddsSnapshot | null = null;
+  try {
+    [opening] = await Promise.all([
+      getOpeningOdds(gameId).catch(() => null),
+      captureOpeningOdds(gameId, league, currentOddsSnap).catch(() => undefined),
+    ]);
+  } catch { /* non-blocking */ }
+
   // OWNER RULE: don't anchor on the favorite. Score BOTH sides' tendencies and pick the side
   // whose signals are actually stronger — an underdog with better ATS, a hot streak, opponent
   // on a B2B, or a key injury on the favorite can be the play (and gets +money on the ML).
@@ -2190,6 +2230,20 @@ async function processGame(
       oppAvgH1Allowed: side === 'home' ? (awayTendencies?.avgH1Allowed ?? 0) : (homeTendencies?.avgH1Allowed ?? 0),
       pickedPctLeadAfterQ1: side === 'home' ? (homeTendencies?.pctLeadAfterQ1 ?? 0) : (awayTendencies?.pctLeadAfterQ1 ?? 0),
       pickedPctLeadAfterH1: side === 'home' ? (homeTendencies?.pctLeadAfterH1 ?? 0) : (awayTendencies?.pctLeadAfterH1 ?? 0),
+      // Line movement — computed per side so each side's "movement toward me" is signed correctly.
+      mlMovementForSide: (() => {
+        const mv = computeMovement(opening, currentOddsSnap, side);
+        return mv.mlMovementForSide;
+      })(),
+      spreadMovementForSide: (() => {
+        const mv = computeMovement(opening, currentOddsSnap, side);
+        return mv.spreadMovementForSide;
+      })(),
+      totalMovement: (() => {
+        const mv = computeMovement(opening, currentOddsSnap, side);
+        return mv.totalMovement;
+      })(),
+      hasOpeningLine: opening !== null,
     };
     return { signalsPartial, pickedInj, oppInj, pickedAts, oppAts, pickedAtsHA, pickedStreak, starOutPickSide, starOutOppSide, hasKeyInjuryPicked, hasKeyInjuryOpp };
   };
@@ -2425,6 +2479,19 @@ async function processGame(
     reasonsAgainst.push(`${pickedTeam.abbreviation}'s ${signals.recentFormStreak}-game streak is built on top of a tougher L10 stretch — fragile.`);
   } else if (signals.recentFormStreak >= 3 && signals.pickedAvgMargin10 >= 1.5) {
     reasonsFor.push(`${pickedTeam.abbreviation}'s ${signals.recentFormStreak}-game streak is REAL — they're outscoring opponents by ${signals.pickedAvgMargin10.toFixed(1)} per game over their last 10.`);
+  }
+
+  // Line-movement read — surface to customer when meaningful (≥10 ML pts or ≥0.5 spread)
+  if (signals.hasOpeningLine) {
+    if (signals.mlMovementForSide >= 15) {
+      reasonsFor.push(`Sharp action on ${pickedTeam.abbreviation} — line moved ${signals.mlMovementForSide} cents in our favor since open.`);
+    } else if (signals.mlMovementForSide <= -15) {
+      reasonsAgainst.push(`Market faded ${pickedTeam.abbreviation} — line moved ${Math.abs(signals.mlMovementForSide)} cents against us since open.`);
+    } else if (signals.spreadMovementForSide >= 1.0) {
+      reasonsFor.push(`Spread moved ${signals.spreadMovementForSide.toFixed(1)} pts toward ${pickedTeam.abbreviation} — sharp money our way.`);
+    } else if (signals.spreadMovementForSide <= -1.0) {
+      reasonsAgainst.push(`Spread moved ${Math.abs(signals.spreadMovementForSide).toFixed(1)} pts away from ${pickedTeam.abbreviation} — market fading us.`);
+    }
   }
 
   // Basketball Q1 / H1 tendencies — customer-friendly read for NBA/WNBA plays
