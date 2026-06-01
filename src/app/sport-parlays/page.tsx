@@ -114,7 +114,7 @@ export default function SportParlaysPage() {
           <div className="rounded-2xl border-2 border-dashed border-white/10 bg-white/[0.02] py-10 text-center px-6">
             <h3 className="text-lg font-black uppercase tracking-tight">No Sport Parlays Today</h3>
             <p className="mx-auto mt-2 max-w-md text-sm text-white/45 leading-relaxed">
-              No sport had 4 quality legs available. We only build a parlay when there's real value — no padding.
+              The main board covered every game tonight — no extras left to parlay. We never recommend the OPPOSITE side of a game we already picked, even if Vegas would let us. Check back tomorrow.
             </p>
           </div>
         ) : (
