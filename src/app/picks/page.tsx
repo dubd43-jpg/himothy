@@ -788,6 +788,18 @@ function DeepPickCard({ pick, variant, href, live }: { pick: DeepPick; variant: 
             )}
           </div>
         )}
+        {/* CONFIDENCE BAND — owner directive: customers should see at a glance which picks
+            are slam dunks vs strong vs solid-best-available. Sets expectations + builds trust. */}
+        <ConfidenceBand score={pick.confidenceScore} />
+        {/* WHY WE LIKE IT — top 2 reasons surface prominently (not behind a toggle). Customer
+            sees the case for the pick before deciding whether to bet it. */}
+        {pick.reasonsFor && pick.reasonsFor.length > 0 && (
+          <ul className="space-y-1.5 text-[12px] leading-relaxed text-white/70 border-t border-white/5 pt-3">
+            {pick.reasonsFor.slice(0, 2).map((r, i) => (
+              <li key={i} className="flex gap-2"><span className="text-emerald-400 shrink-0">✓</span><span>{r}</span></li>
+            ))}
+          </ul>
+        )}
         {/* Sharp-signal badges are methodology (our edge) — back-end only, hidden from customers. */}
         {href && (
           <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-primary/70 group-hover:text-primary transition-colors">
@@ -804,6 +816,39 @@ function DeepPickCard({ pick, variant, href, live }: { pick: DeepPick; variant: 
     : <Link href={href} className="block">{inner}</Link>;
 }
 
+
+// CONFIDENCE BAND — three-tier label customers see on every pick card. Sets
+// expectations honestly: SLAM DUNK is a 96+ "highest conviction", STRONG is 88-95
+// "real edge", SOLID is 80-87 "best available — proceed at your conviction." This
+// is what customers ASKED for: not every pick is a lock, and we tell them which is which.
+function ConfidenceBand({ score }: { score: number }) {
+  let label: string, bgCls: string, textCls: string, blurb: string;
+  if (score >= 96) {
+    label = 'SLAM DUNK';
+    bgCls = 'bg-gradient-to-r from-amber-400/20 to-amber-500/10 border-amber-400/40';
+    textCls = 'text-amber-300';
+    blurb = 'Highest conviction tonight';
+  } else if (score >= 88) {
+    label = 'STRONG';
+    bgCls = 'bg-gradient-to-r from-emerald-500/15 to-emerald-500/5 border-emerald-500/30';
+    textCls = 'text-emerald-300';
+    blurb = 'Real edge across the data';
+  } else {
+    label = 'SOLID';
+    bgCls = 'bg-gradient-to-r from-sky-500/12 to-sky-500/4 border-sky-500/25';
+    textCls = 'text-sky-300';
+    blurb = 'Best available — bet at your conviction';
+  }
+  return (
+    <div className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 ${bgCls}`}>
+      <div className="flex items-center gap-2">
+        <span className={`text-[10px] font-black uppercase tracking-widest ${textCls}`}>{label}</span>
+        <span className="text-[10px] text-white/40 hidden sm:inline">· {blurb}</span>
+      </div>
+      <span className={`text-[10px] font-black tabular-nums ${textCls}`}>{score.toFixed(0)}</span>
+    </div>
+  );
+}
 
 function CompactParlayLeg({ pick, index }: { pick: DeepPick; index: number }) {
   const oddsTextCls = pick.odds && pick.odds.startsWith('+') ? 'text-emerald-400' : 'text-sky-400';

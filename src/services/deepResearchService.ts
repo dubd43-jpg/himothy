@@ -3094,12 +3094,22 @@ export async function runDailyDeepResearch(board: BoardType = 'north-american'):
   // even to hit a slot count. If we somehow can't fill at 80+, the slot stays short
   // (this should be extremely rare given ~20 MLB games × 5+ markets each = 100+
   // candidates per night).
+  // PARLAY SAFETY: track game IDs already used in the $10 Parlay separately, so even
+  // if usedGames is somehow stale we never ship two legs from the same game (which
+  // would correlate the parlay outcomes and silently inflate the implied odds shown
+  // to customers — a major safety issue).
+  const parlayGames = new Set<string>(parlayPlan.map((p) => p.gameId));
+
   const promote = (target: DeepPickResult[], cap: number, tierTag: ProductTier, pool: DeepPickResult[]) => {
     while (target.length < cap && pool.length > 0) {
       const p = pool.shift()!;
       if (usedPicks.has(pickKey(p))) continue;
       if (usedGames.has(p.gameId)) continue;
+      // Parlay-specific guard: even if main usedGames is wrong, the parlay never gets
+      // two legs from the same game. Distinct-games is a hard correlation-suppression rule.
+      if (tierTag === 'PARLAY_PLAN' && parlayGames.has(p.gameId)) continue;
       target.push({ ...p, tier: tierTag }); usedPicks.add(pickKey(p)); usedGames.add(p.gameId);
+      if (tierTag === 'PARLAY_PLAN') parlayGames.add(p.gameId);
     }
   };
   // Quality gates at each tier — same -145 cap for Pressure + VIP, no PASS for Parlay.
