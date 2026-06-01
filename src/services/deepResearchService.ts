@@ -1877,16 +1877,43 @@ export async function buildMarketCandidates(pick: any, opts?: { includeProps?: b
 
   const candidates: BestMarketSwap[] = [];
 
-  // 1) FULL-GAME TOTAL — no fetch; line from the scoreboard (pick.total), projection from form.
+  // PITCHER-AWARE PROJECTION ADJUSTMENT — when the parent pick carries MLB pitcher data
+  // from the deep signal stack, drag the totals projection by the pitcher matchup so
+  // every totals scorer agrees with the side-bet thesis. Without this, scoreGame() may
+  // pick a side based on pitcher matchup (low-scoring thesis) while scoreTotalsConfidence
+  // projects OVER from raw team form averages — same engine, contradicting itself.
+  // Owner directive 2026-06-01: no contradictions across the website.
+  const parentSig: any = (pick as any)?.signals || null;
+  const pitcherAdjustment = (() => {
+    if (!parentSig || !parentSig.pickedPitcherStarts || parentSig.pickedPitcherStarts < 3) return 0;
+    let adj = 0;
+    const ourEra = parentSig.pickedPitcherEraL5 || 0;
+    const oppEra = parentSig.oppPitcherEraL5 || 0;
+    // Strong starter → projection drops (opponents score less)
+    if (ourEra > 0 && ourEra <= 2.5) adj -= 1.2;
+    else if (ourEra > 0 && ourEra <= 3.5) adj -= 0.6;
+    else if (ourEra >= 5.5) adj += 0.8;
+    // Bad opponent starter → projection rises (our team scores more), but capped because
+    // a weak offensive team (low team avgTotal10) limits the upside.
+    if (oppEra >= 5.5) adj += 0.8;
+    else if (oppEra >= 4.5) adj += 0.4;
+    else if (oppEra > 0 && oppEra <= 2.5) adj -= 1.0;
+    else if (oppEra > 0 && oppEra <= 3.5) adj -= 0.5;
+    return adj;
+  })();
+
+  // 1) FULL-GAME TOTAL — line from the scoreboard, projection from form + pitcher matchup.
   if (pick?.total != null && homeTot != null && awayTot != null) {
-    const proj = (homeTot + awayTot) / 2;
+    const rawProj = (homeTot + awayTot) / 2;
+    const proj = rawProj + pitcherAdjustment;
     const over = proj >= pick.total;
     const align = combinedOverRate != null ? (over ? combinedOverRate : 1 - combinedOverRate) : null;
+    const adjustNote = pitcherAdjustment !== 0 ? ` (pitcher adj ${pitcherAdjustment > 0 ? '+' : ''}${pitcherAdjustment.toFixed(1)})` : '';
     candidates.push({
       selection: `${over ? 'Over' : 'Under'} ${pick.total}`, marketType: 'total',
       selectionSide: over ? 'home' : 'away', odds: '-110', line: `${pick.total}`,
       confidence: scoreTotalsConfidence(proj, pick.total, align),
-      detail: `Projected ${proj.toFixed(1)} vs line ${pick.total}`,
+      detail: `Projected ${proj.toFixed(1)} vs line ${pick.total}${adjustNote}`,
     });
   }
 
@@ -1899,11 +1926,38 @@ export async function buildMarketCandidates(pick: any, opts?: { includeProps?: b
   ]);
 
   // 2) TEAM TOTALS — each team's own projected scoring = (its game-total avg + its margin)/2.
+  //    Adjusted by pitcher matchup: the OPPOSING starter affects this team's projected
+  //    scoring (good opp pitcher = we score less, bad opp pitcher = we score more).
   if (alt?.teamTotals?.length && homeTot != null && awayTot != null && homeMargin != null && awayMargin != null) {
+    // pickedSide = the side our main board pick is on. Opposite pitcher = "their starter
+    // facing US". For team total of our side: adjust by opposing starter's quality.
+    const pickedSide = (pick as any)?.selectionSide || 'home';
+    const teamTotalAdj = (() => {
+      if (!parentSig || !parentSig.oppPitcherStarts || parentSig.oppPitcherStarts < 3) return 0;
+      const oppEra = parentSig.oppPitcherEraL5 || 0;
+      if (oppEra <= 2.5) return -0.7;   // facing a great pitcher → score less
+      if (oppEra <= 3.5) return -0.3;
+      if (oppEra >= 5.5) return +0.7;   // facing a bad pitcher → score more
+      if (oppEra >= 4.5) return +0.3;
+      return 0;
+    })();
     const projFor = { home: (homeTot + homeMargin) / 2, away: (awayTot + awayMargin) / 2 } as const;
     for (const tt of alt.teamTotals) {
       if (tt.line == null) continue;
-      const proj = projFor[tt.side];
+      // Adjust whichever side is OUR side by the opposing pitcher's quality;
+      // the other team's total uses the same logic but mirrored (our pitcher vs them).
+      const isOurTeam = tt.side === pickedSide;
+      const baseProj = projFor[tt.side];
+      const adj = isOurTeam ? teamTotalAdj : (() => {
+        if (!parentSig || !parentSig.pickedPitcherStarts || parentSig.pickedPitcherStarts < 3) return 0;
+        const ourEra = parentSig.pickedPitcherEraL5 || 0;
+        if (ourEra <= 2.5) return -0.7;
+        if (ourEra <= 3.5) return -0.3;
+        if (ourEra >= 5.5) return +0.7;
+        if (ourEra >= 4.5) return +0.3;
+        return 0;
+      })();
+      const proj = baseProj + adj;
       const over = proj >= tt.line;
       const ob = tt.side === 'home' ? home?.trends?.ou10 : away?.trends?.ou10;
       const orate = ouOverRate(ob);
@@ -1944,9 +1998,11 @@ export async function buildMarketCandidates(pick: any, opts?: { includeProps?: b
     } catch { /* non-blocking */ }
   }
 
-  // 4) F5 TOTAL (MLB first 5 innings) — project ~5/9 of the full-game total.
+  // 4) F5 TOTAL (MLB first 5 innings) — project ~5/9 of the full-game total. The pitcher
+  // matchup matters MORE here than for the full game (starters are guaranteed on the
+  // mound through F5, vs. bullpen taking over after), so we use a 1.4x weighted adjustment.
   if (f5?.totalLine != null && homeTot != null && awayTot != null) {
-    const projF5 = ((homeTot + awayTot) / 2) * (5 / 9);
+    const projF5 = ((homeTot + awayTot) / 2) * (5 / 9) + (pitcherAdjustment * 1.4);
     const over = projF5 >= f5.totalLine;
     // F5 prices from the feed are best-across-alt-lines (mismatched to the median line),
     // same issue as team totals — quote the standard -115 main-line price instead.
