@@ -1585,7 +1585,8 @@ function MainPickCard({ pick }: { pick: BoardPick }) {
     s === "loss" ? "border-red-500/80 bg-gradient-to-br from-red-950/70 via-red-900/30 to-slate-900 shadow-[0_0_46px_-10px_rgba(239,68,68,0.55)]" :
     "border-amber-500/30 bg-gradient-to-br from-amber-950/60 via-amber-900/30 to-slate-900 shadow-xl";
   return (
-    <article className={`relative overflow-hidden rounded-3xl border p-6 md:p-8 ${cardAccent}`}>
+    <Link href={`/pick-by-id/${pick.id}`} className="block">
+    <article className={`relative overflow-hidden rounded-3xl border p-6 md:p-8 ${cardAccent} hover:border-amber-400/60 transition-all`}>
       <div className="absolute -top-10 -right-10 h-40 w-40 rounded-full bg-amber-500/10 blur-3xl" />
       {graded && (
         <div className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center select-none">
@@ -1645,6 +1646,7 @@ function MainPickCard({ pick }: { pick: BoardPick }) {
         )}
       </div>
     </article>
+    </Link>
   );
 }
 
@@ -1652,6 +1654,7 @@ function PickCard({ pick }: { pick: BoardPick }) {
   const sc = statusConfig(pick.status);
   const StatusIcon = sc.icon;
   return (
+    <Link href={`/pick-by-id/${pick.id}`} className="block">
     <article className="flex flex-col rounded-2xl border border-white/8 bg-white/[0.03] p-5 gap-4 hover:border-white/15 hover:bg-white/[0.05] transition-all">
       <div className="flex items-start justify-between gap-2">
         <div>
@@ -1687,6 +1690,7 @@ function PickCard({ pick }: { pick: BoardPick }) {
         <p className="text-xs text-white/40 leading-relaxed border-t border-white/5 pt-3">{pick.reasoning}</p>
       )}
     </article>
+    </Link>
   );
 }
 
@@ -1694,6 +1698,7 @@ function CompactPickRow({ pick, index }: { pick: BoardPick; index: number }) {
   const sc = statusConfig(pick.status);
   const StatusIcon = sc.icon;
   return (
+    <Link href={`/pick-by-id/${pick.id}`} className="block">
     <div className="flex items-center gap-3 rounded-xl border border-white/8 bg-white/[0.02] p-3 hover:bg-white/[0.04] transition-all">
       <div className="w-6 h-6 rounded-full bg-white/5 flex items-center justify-center text-[10px] font-black text-white/40 shrink-0">
         {index + 1}
@@ -1714,6 +1719,7 @@ function CompactPickRow({ pick, index }: { pick: BoardPick; index: number }) {
         <StatusIcon className="h-2.5 w-2.5" /> {sc.label}
       </span>
     </div>
+    </Link>
   );
 }
 

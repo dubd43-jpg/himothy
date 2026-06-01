@@ -285,7 +285,6 @@ export default function Home() {
                       { label: "Best Parlays", icon: BarChart3, href: "/best-parlay-picks" },
                       { label: "Missouri", icon: ShieldCheck, href: "/missouri-sports-picks" },
                       { label: "Global", icon: ShieldCheck, href: "/picks?board=global" },
-                      { label: "Overseas", icon: ShieldCheck, href: "/overseas" },
                       { label: "Hailmary", icon: Zap, href: "/hailmary" },
                     ].map((pkg, i) => (
                        <Link key={i} href={pkg.href} className="glass-morphism rounded-2xl p-4 border-white/5 hover:border-primary/40 transition-all flex items-center justify-between group">
