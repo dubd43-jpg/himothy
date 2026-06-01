@@ -6,6 +6,6 @@
     { "path": "/api/cron/prewarm-lines", "schedule": "30 11 * * *" },
     { "path": "/api/cron/warm-cache", "schedule": "0 12 * * *" },
     { "path": "/api/system/health", "schedule": "0 23 * * *" },
-    { "path": "/api/cron/late-news", "schedule": "0,30 15-23 * * *" }
+    { "path": "/api/cron/late-news", "schedule": "30 18 * * *" }
   ]
 }
