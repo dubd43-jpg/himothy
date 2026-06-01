@@ -1202,9 +1202,9 @@ function DeepResearchSection({ board }: { board: string }) {
             </p>
           </div>
 
-          {/* 2. SECONDARY ROW — Personal Pick + Parlay Plan */}
+          {/* 2. SECONDARY ROW — Sport Parlays + Parlay Plan (swapped with Personal Pick per owner) */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <CategoryTile href="/himothy-picks" icon={Crown} title="HIMOTHY Personal Pick" count={1} unit="prop" restingLabel="Best prop across every sport" stats={statsFor('Personal Pick')} />
+            <CategoryTile href="/sport-parlays" icon={Layers} title="Sport Parlays" count={(data as any).sportParlays?.length ?? 0} unit="parlay" restingLabel="Built across tonight's full slate" stats={statsFor('Sport Parlays')} />
             <CategoryTile href="/parlay-plan" icon={DollarSign} title="$10 Parlay Plan" count={data.parlayPlan.length} unit="leg" restingLabel="Not enough legs today" stats={statsFor('Parlay Center')} />
           </div>
 
@@ -1212,13 +1212,13 @@ function DeepResearchSection({ board }: { board: string }) {
           <div>
             <div className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30 mb-3 pl-1">More on tonight's board</div>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+              <FooterLink href="/himothy-picks" icon={Crown} title="HIMOTHY Personal Pick" count={1} />
               <FooterLink href="/big-games" icon={Trophy} title="Big Games" count={data.marquee?.length ?? 0} />
               <FooterLink href="/nrfi" icon={Radio} title="NRFI" count={data.nrfi?.length ?? 0} />
               <FooterLink href="/value" icon={Target} title="Value Plays" count={data.valuePlays?.length ?? 0} />
               {/* Edges & Tendencies are methodology (our edge) — back-end only now, not customer-facing. */}
               <FooterLink href="/asleep" icon={Flame} title="Asleep" count={data.asleepPicks?.length ?? 0} />
               <FooterLink href="/period-plays" icon={Radio} title="Period Plays" count={null} />
-              <FooterLink href="/sport-parlays" icon={Layers} title="Sport Parlays" count={null} />
               <FooterLink href="/stats" icon={Trophy} title="Full Record" count={null} />
             </div>
           </div>
