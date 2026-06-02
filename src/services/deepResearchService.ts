@@ -1889,16 +1889,25 @@ export async function buildMarketCandidates(pick: any, opts?: { includeProps?: b
     let adj = 0;
     const ourEra = parentSig.pickedPitcherEraL5 || 0;
     const oppEra = parentSig.oppPitcherEraL5 || 0;
+    // SAMPLE-SIZE GATE (added 2026-06-01 after Tampa scored 9 in a "low-scoring" thesis
+    // game): when we have <5 starts of data we apply HALF the adjustment. 3-4 starts is
+    // a small-sample signal — Madden's 2.38 ERA L3 tonight was a mirage; we treated it
+    // like ace-level data and the Tampa team-total UNDER thesis lost (Tampa scored 9).
+    // Below 5 starts = half-weight; 5+ starts = full-weight.
+    const ourReliable = parentSig.pickedPitcherStarts >= 5;
+    const oppReliable = (parentSig.oppPitcherStarts || 0) >= 5;
+    const ourWeight = ourReliable ? 1.0 : 0.5;
+    const oppWeight = oppReliable ? 1.0 : 0.5;
     // Strong starter → projection drops (opponents score less)
-    if (ourEra > 0 && ourEra <= 2.5) adj -= 1.2;
-    else if (ourEra > 0 && ourEra <= 3.5) adj -= 0.6;
-    else if (ourEra >= 5.5) adj += 0.8;
+    if (ourEra > 0 && ourEra <= 2.5) adj -= 1.2 * ourWeight;
+    else if (ourEra > 0 && ourEra <= 3.5) adj -= 0.6 * ourWeight;
+    else if (ourEra >= 5.5) adj += 0.8 * ourWeight;
     // Bad opponent starter → projection rises (our team scores more), but capped because
     // a weak offensive team (low team avgTotal10) limits the upside.
-    if (oppEra >= 5.5) adj += 0.8;
-    else if (oppEra >= 4.5) adj += 0.4;
-    else if (oppEra > 0 && oppEra <= 2.5) adj -= 1.0;
-    else if (oppEra > 0 && oppEra <= 3.5) adj -= 0.5;
+    if (oppEra >= 5.5) adj += 0.8 * oppWeight;
+    else if (oppEra >= 4.5) adj += 0.4 * oppWeight;
+    else if (oppEra > 0 && oppEra <= 2.5) adj -= 1.0 * oppWeight;
+    else if (oppEra > 0 && oppEra <= 3.5) adj -= 0.5 * oppWeight;
     return adj;
   })();
 
@@ -1978,10 +1987,13 @@ export async function buildMarketCandidates(pick: any, opts?: { includeProps?: b
     const teamTotalAdj = (() => {
       if (!parentSig || !parentSig.oppPitcherStarts || parentSig.oppPitcherStarts < 3) return 0;
       const oppEra = parentSig.oppPitcherEraL5 || 0;
-      if (oppEra <= 2.5) return -0.7;   // facing a great pitcher → score less
-      if (oppEra <= 3.5) return -0.3;
-      if (oppEra >= 5.5) return +0.7;   // facing a bad pitcher → score more
-      if (oppEra >= 4.5) return +0.3;
+      // Sample-size gate: <5 starts gets half-weight (the Tampa TT Under loss lesson).
+      const reliable = parentSig.oppPitcherStarts >= 5;
+      const w = reliable ? 1.0 : 0.5;
+      if (oppEra <= 2.5) return -0.7 * w;
+      if (oppEra <= 3.5) return -0.3 * w;
+      if (oppEra >= 5.5) return +0.7 * w;
+      if (oppEra >= 4.5) return +0.3 * w;
       return 0;
     })();
     const projFor = { home: (homeTot + homeMargin) / 2, away: (awayTot + awayMargin) / 2 } as const;
@@ -1994,10 +2006,12 @@ export async function buildMarketCandidates(pick: any, opts?: { includeProps?: b
       const adj = isOurTeam ? teamTotalAdj : (() => {
         if (!parentSig || !parentSig.pickedPitcherStarts || parentSig.pickedPitcherStarts < 3) return 0;
         const ourEra = parentSig.pickedPitcherEraL5 || 0;
-        if (ourEra <= 2.5) return -0.7;
-        if (ourEra <= 3.5) return -0.3;
-        if (ourEra >= 5.5) return +0.7;
-        if (ourEra >= 4.5) return +0.3;
+        const reliable = parentSig.pickedPitcherStarts >= 5;
+        const w = reliable ? 1.0 : 0.5;
+        if (ourEra <= 2.5) return -0.7 * w;
+        if (ourEra <= 3.5) return -0.3 * w;
+        if (ourEra >= 5.5) return +0.7 * w;
+        if (ourEra >= 4.5) return +0.3 * w;
         return 0;
       })();
       const proj = baseProj + adj;
@@ -2623,6 +2637,26 @@ async function processGame(
       selectionSide: pickedSideForSignals, marketType: 'total',
       selection: `${totalPlay.over ? 'Over' : 'Under'} ${totalPlay.line}`,
       odds: '-110', line: `${totalPlay.line}`,
+    };
+  }
+
+  // NCAA BASEBALL SPREAD RESTRICTION (added 2026-06-01 after Georgia Tech -4.5 + Florida -3.5
+  // both lost tonight). Without probable pitcher data we can't predict cover margin — laying
+  // runs on a college team is a coin flip. Convert any NCAA Baseball spread/runline pick
+  // to a moneyline pick on the same side. Tighter risk, same direction.
+  if (
+    (league === 'NCAA Baseball' || league === 'College Baseball' || league === 'NCAA Softball') &&
+    pickData.marketType === 'spread'
+  ) {
+    const pickedTeam = pickData.selectionSide === 'home' ? home : away;
+    const pickedML = pickData.selectionSide === 'home' ? mergedHomeML : mergedAwayML;
+    const mlOdds = pickedML != null ? `${pickedML > 0 ? '+' : ''}${pickedML}` : pickData.odds;
+    pickData = {
+      selectionSide: pickData.selectionSide,
+      marketType: 'moneyline',
+      selection: `${pickedTeam.name} ML`,
+      odds: mlOdds,
+      line: null,
     };
   }
 
@@ -4195,19 +4229,25 @@ async function buildOneSportParlay(sport: string, excluded: Set<string>): Promis
   altLegs.sort((a, b) => b.edgeScore - a.edgeScore);
 
   // 2. If gameLegs + altLegs already give us 4+, take top 4 — no props needed.
+  // CORRELATION CAP (added 2026-06-01 after the DET/TB game contributed BOTH a Tampa
+  // Team Total Under AND Detroit Tigers ML — same low-scoring thesis, both bets bleed
+  // from the same trauma. Cap at ONE LEG per game so the parlay is genuinely 4
+  // independent edges, not 1 thesis x 4 markets.)
   const combinedTop = [...gameLegs, ...altLegs].sort((a, b) => b.edgeScore - a.edgeScore);
   if (combinedTop.length >= 4) {
-    // Dedupe by (gameId|selection) to avoid the same leg twice
     const seen = new Set<string>();
+    const gameIdsUsed = new Set<string>();
     const top4: SportParlayLeg[] = [];
     for (const l of combinedTop) {
       const key = `${l.gameId}|${l.selection.toLowerCase()}`;
       if (seen.has(key)) continue;
+      if (gameIdsUsed.has(l.gameId)) continue; // one leg per game (correlation cap)
       seen.add(key);
+      gameIdsUsed.add(l.gameId);
       top4.push(l);
       if (top4.length >= 4) break;
     }
-    if (top4.length >= 4) return assembleSportParlay(sport, top4, new Set(top4.map((l) => l.gameId)).size === 1);
+    if (top4.length >= 4) return assembleSportParlay(sport, top4, false);
   }
 
   // 3. Otherwise, fill remaining slots with PROP legs from the sport's games (real value
@@ -4244,19 +4284,22 @@ async function buildOneSportParlay(sport: string, excluded: Set<string>): Promis
   propLegs.sort((a, b) => b.edgeScore - a.edgeScore);
 
   // Combine game legs + alt-market legs + prop legs, dedupe by selection + by player.
-  // Take the top 4 by edge.
+  // ALSO enforce 1-leg-per-game correlation cap (same fix as above for the no-props path).
   const combined = [...gameLegs, ...altLegs, ...propLegs].sort((a, b) => b.edgeScore - a.edgeScore);
   const legs: SportParlayLeg[] = [];
   const seenSelections = new Set<string>();
   const seenPlayers = new Set<string>();
+  const gameIdsUsed = new Set<string>();
   for (const c of combined) {
     const selKey = c.selection.toLowerCase();
     if (seenSelections.has(selKey)) continue;
+    if (gameIdsUsed.has(c.gameId)) continue; // 1 leg per game — correlation cap
     // crude player extraction: prop selections lead with the player name
     const playerKey = c.type === 'prop' ? c.selection.split(/\s+(over|under|\d)/i)[0].toLowerCase().trim() : '';
     if (playerKey && seenPlayers.has(playerKey)) continue;
     legs.push(c);
     seenSelections.add(selKey);
+    gameIdsUsed.add(c.gameId);
     if (playerKey) seenPlayers.add(playerKey);
     if (legs.length >= 4) break;
   }
