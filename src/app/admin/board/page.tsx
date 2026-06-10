@@ -8,7 +8,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ChevronDown, ChevronUp } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
 import { PickBreakdown, type DeepPick } from "@/components/PickBreakdown";
 import { AltLines } from "@/components/AltLines";
 import { AltPropLadders } from "@/components/AltPropLadders";
@@ -55,34 +55,53 @@ function AdminPickRow({ pick, rank, live }: { pick: DeepPick; rank: number; live
 export default function AdminBoardPage() {
   const [picks, setPicks] = useState<DeepPick[]>([]);
   const [loading, setLoading] = useState(true);
+  const [regenStatus, setRegenStatus] = useState<string | null>(null);
+  const [regenBusy, setRegenBusy] = useState(false);
   const liveMap = useLiveScores();
+
+  const loadBoard = async (forceRefresh = false) => {
+    const url = forceRefresh
+      ? "/api/research/daily-picks?board=north-american&refresh=true"
+      : "/api/research/daily-picks?board=north-american";
+    const res = await fetch(url, {
+      cache: "no-store",
+      headers: { "x-admin-secret": (typeof window !== "undefined" ? localStorage.getItem("himothy_admin_secret") : null) || "" },
+    });
+    const d = await res.json();
+    const all: DeepPick[] = [
+      ...(d.grandSlam ? [d.grandSlam] : []),
+      ...(d.pressurePack || []), ...(d.vip4Pack || []), ...(d.parlayPlan || []),
+      ...(d.marquee || []), ...(d.asleepPicks || []),
+    ];
+    const seen = new Set<string>();
+    return all.filter((p) => {
+      const k = `${p.gameId}|${p.marketType}|${p.selection}`.toLowerCase();
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    }).sort((a, b) => (b.confidenceScore ?? 0) - (a.confidenceScore ?? 0));
+  };
 
   useEffect(() => {
     let mounted = true;
-    (async () => {
-      try {
-        const res = await fetch("/api/research/daily-picks?board=north-american", { cache: "no-store" });
-        const d = await res.json();
-        // Every pick across every product, deduped by exact bet, sorted highest conviction first.
-        const all: DeepPick[] = [
-          ...(d.grandSlam ? [d.grandSlam] : []),
-          ...(d.pressurePack || []), ...(d.vip4Pack || []), ...(d.parlayPlan || []),
-          ...(d.marquee || []), ...(d.asleepPicks || []),
-        ];
-        const seen = new Set<string>();
-        const deduped = all.filter((p) => {
-          const k = `${p.gameId}|${p.marketType}|${p.selection}`.toLowerCase();
-          if (seen.has(k)) return false;
-          seen.add(k);
-          return true;
-        }).sort((a, b) => (b.confidenceScore ?? 0) - (a.confidenceScore ?? 0));
-        if (mounted) setPicks(deduped);
-      } catch { /* ignore */ } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
+    loadBoard().then((deduped) => { if (mounted) setPicks(deduped); }).catch(() => {}).finally(() => { if (mounted) setLoading(false); });
     return () => { mounted = false; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const forceRegen = async () => {
+    setRegenBusy(true);
+    setRegenStatus("Regenerating… this takes 60-120s, please wait.");
+    try {
+      const deduped = await loadBoard(true);
+      setPicks(deduped);
+      setRegenStatus(`Done — ${deduped.length} picks loaded.`);
+    } catch (err) {
+      setRegenStatus(`Error: ${String(err)}`);
+    } finally {
+      setRegenBusy(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background text-white pb-24">
@@ -90,14 +109,35 @@ export default function AdminBoardPage() {
         <Link href="/admin" className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-widest text-white/40 hover:text-white transition-colors w-max">
           <ArrowLeft className="h-4 w-4" /> Admin
         </Link>
-        <div>
-          <h1 className="text-3xl font-black uppercase tracking-tight">Today's Board — Every Pick</h1>
-          <p className="mt-2 text-sm text-white/50">Highest conviction to lowest. Full breakdown + odds boards (admin only — never shown to customers). {picks.length} plays.</p>
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h1 className="text-3xl font-black uppercase tracking-tight">Today's Board — Every Pick</h1>
+            <p className="mt-2 text-sm text-white/50">Highest conviction to lowest. Full breakdown + odds boards (admin only — never shown to customers). {picks.length} plays.</p>
+          </div>
+          <button
+            type="button"
+            onClick={forceRegen}
+            disabled={regenBusy}
+            className="flex items-center gap-2 px-4 py-2 bg-primary/10 border border-primary/30 hover:bg-primary/20 text-primary text-xs font-black uppercase tracking-widest rounded-lg transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${regenBusy ? 'animate-spin' : ''}`} />
+            {regenBusy ? 'Running engine…' : 'Force Regen'}
+          </button>
         </div>
+        {regenStatus && (
+          <div className={`px-4 py-3 rounded-lg text-xs font-mono ${regenStatus.startsWith('Error') ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}`}>
+            {regenStatus}
+          </div>
+        )}
         {loading ? (
           <div className="py-20 text-center text-white/40">Loading the board…</div>
         ) : picks.length === 0 ? (
-          <div className="py-20 text-center text-white/40">No picks on the board right now.</div>
+          <div className="py-16 text-center space-y-4">
+            <p className="text-white/40">No picks on the board yet — morning cron may have timed out.</p>
+            <button type="button" onClick={forceRegen} disabled={regenBusy} className="px-6 py-3 bg-primary text-black font-black text-sm uppercase tracking-widest rounded-full hover:bg-white transition-colors disabled:opacity-50">
+              {regenBusy ? 'Generating…' : 'Generate Today\'s Picks Now'}
+            </button>
+          </div>
         ) : (
           <div className="space-y-4">
             {picks.map((pick, i) => (

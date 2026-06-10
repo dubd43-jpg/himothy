@@ -78,26 +78,6 @@ async function writePersistedSlate(version: string, etDate: string, board: strin
   }
 }
 
-// Admin override: force-replace the persisted slate for today. Use sparingly — this exists
-// for surgical mid-day edits (cutting a pick whose data turned bad post-publish) that the
-// write-once guard above is supposed to block. ALSO clears in-memory cache for that key so
-// the next request reads the patched JSONB instead of stale RAM.
-export async function adminOverwritePersistedSlate(etDate: string, board: string, data: any) {
-  if (!hasDatabase()) return;
-  await ensureSlateCacheSchema();
-  try {
-    await prisma.$executeRawUnsafe(
-      `INSERT INTO "DailySlateCache" ("version", "etDate", "board", "data", "generatedAt")
-       VALUES ($1, $2, $3, $4::jsonb, NOW())
-       ON CONFLICT ("version", "etDate", "board") DO UPDATE SET "data" = EXCLUDED."data", "generatedAt" = NOW()`,
-      SLATE_RULES_VERSION, etDate, board, JSON.stringify(data),
-    );
-    boardCache.delete(`${SLATE_RULES_VERSION}|${etDate}|${board}`);
-  } catch (err) {
-    console.error('[dailyBoardCache] adminOverwritePersistedSlate failed', err);
-  }
-}
-
 // Hard reset (admin only): clears EVERY version of the day's board so the next compute can
 // post a fresh one. This is the single sanctioned way to change a posted slate mid-day.
 async function deletePersistedSlate(etDate: string, board: string) {
@@ -149,14 +129,7 @@ export async function getFrozenDaily(key: string, compute: () => Promise<any>, f
   }
   const data = await compute();
   boardCache.set(memKey, { data, generatedAt: Date.now() });
-  // When force=true, OVERWRITE the persisted slate (admin-triggered refresh path).
-  // Without this, writePersistedSlate's ON CONFLICT DO NOTHING silently kept the old
-  // row and the refresh appeared to do nothing. Fixed 2026-06-01.
-  if (force) {
-    await adminOverwritePersistedSlate(etDate, key, data);
-  } else {
-    await writePersistedSlate(SLATE_RULES_VERSION, etDate, key, data);
-  }
+  await writePersistedSlate(SLATE_RULES_VERSION, etDate, key, data);
   return data;
 }
 
@@ -409,21 +382,18 @@ export async function getOrComputeBoard(board: BoardType): Promise<any> {
   // NOT actually frozen — each cold instance regenerates with possibly different picks).
   await writePersistedSlate(SLATE_RULES_VERSION, etDate, board, result);
 
-  // INLINE RECORD: the moment the north-american slate is first computed for the day,
-  // fire recordTodaysBoard so the registry gets populated immediately. This eliminates
-  // the race window where a daily cron might run after games have already started — at
-  // which point the integrity guard refuses to post-record. Fire-and-forget so the
-  // user's slate response doesn't wait on recording I/O. Already-recorded picks dedupe
-  // safely, so this is idempotent across multiple slate generations.
+  // INLINE RECORD: record synchronously so picks land in the registry before this
+  // function returns. Fire-and-forget was unreliable — Vercel kills background promises
+  // shortly after a function responds, so the registry often stayed empty even when the
+  // slate computed fine. Synchronous call adds a few hundred ms but guarantees the
+  // customer board (/api/slate reads registry) is never empty after a fresh compute.
   if (board === 'north-american' && hasDatabase()) {
-    void (async () => {
-      try {
-        const { recordTodaysBoard } = await import('@/services/recordBoardService');
-        await recordTodaysBoard();
-      } catch (err) {
-        console.error('[dailyBoardCache] inline record failed', err);
-      }
-    })();
+    try {
+      const { recordTodaysBoard } = await import('@/services/recordBoardService');
+      await recordTodaysBoard();
+    } catch (err) {
+      console.error('[dailyBoardCache] inline record failed', err);
+    }
   }
 
   return result;

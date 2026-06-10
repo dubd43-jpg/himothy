@@ -9,7 +9,10 @@ import { sendEmail } from '@/lib/email';
 // the active boards. Runs early (8am ET) so the first real user request is already warm.
 // First scan of the day fetches summary endpoints (1 per game) for ATS/O/U history — this
 // cron eats that latency so the live page stays snappy.
-export const maxDuration = 60;
+// maxDuration bumped to 300: the NA engine fetches 50-100+ games in parallel (ESPN
+// summaries + odds + injuries per game + AI enrichment). 60s was consistently too short,
+// causing the slate to never persist to Postgres and the morning board to be blank.
+export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
 
 function authorized(req: Request): boolean {

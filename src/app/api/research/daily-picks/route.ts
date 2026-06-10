@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { type BoardType } from '@/services/deepResearchService';
-import { CACHE_TTL_MS, getOrComputeBoard, getCachedBoard, invalidateBoardCache } from '@/services/dailyBoardCache';
+import { CACHE_TTL_MS, getOrComputeBoard, getCachedBoard, invalidateBoardCache, getPersistedBoardForDate } from '@/services/dailyBoardCache';
+import { getEtDateKey } from '@/lib/officialTracking';
 import { isAdminRequest } from '@/lib/adminAuth';
 import { getUserEntitlements } from '@/lib/entitlements';
 import type { ProductKey } from '@/lib/products';
@@ -215,8 +216,7 @@ export async function GET(req: Request) {
     // STEP 2 — try the persisted frozen slate from Postgres before recomputing.
     if (!forceRefresh) {
       try {
-        const { readPersistedSlate, todayEtKey } = await import('@/services/dailyBoardCache');
-        const persisted = await readPersistedSlate(todayEtKey(), board);
+        const persisted = await getPersistedBoardForDate(getEtDateKey(), board);
         if (persisted) {
           const { applyRegistryOverlay } = await import('@/services/slateRegistryOverlay');
           const overlaid = await applyRegistryOverlay(persisted);
@@ -252,7 +252,7 @@ export async function GET(req: Request) {
     }
 
     // STEP 4 — admin-only force path. Triggers the full engine.
-    if (forceRefresh) await invalidateBoardCache(board, { force: forceUnlock });
+    if (forceRefresh) await invalidateBoardCache(board);
     if (forceUnlock) {
       // Also wipe today's registry rows so the regen can re-publish without the
       // dedup guard rejecting "same gameId/selection" rows from the bad slate.
