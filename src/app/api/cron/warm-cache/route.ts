@@ -3,6 +3,7 @@ import { getOrComputeBoard } from '@/services/dailyBoardCache';
 import { isAdminRequest } from '@/lib/adminAuth';
 import { recordTodaysBoard } from '@/services/recordBoardService';
 import { gradeRegistryBoard } from '@/services/pickRegistryService';
+import { sendEmail } from '@/lib/email';
 
 // Pre-warms the daily-picks board cache and the closing-line cache for every league on
 // the active boards. Runs early (8am ET) so the first real user request is already warm.
@@ -60,6 +61,30 @@ async function handle(req: Request) {
     gradeResult = await gradeRegistryBoard();
   } catch (err) {
     gradeResult = { error: String(err) };
+  }
+
+  // CRON FAILURE ALERT — if the north-american board failed or produced no picks,
+  // email the owner immediately so it can be investigated before customers notice.
+  const naResult = results['north-american'];
+  const noPicksRecorded = recordResult?.recorded === 0 || recordResult?.error;
+  if (!naResult?.ok || noPicksRecorded) {
+    const errorDetails = [
+      naResult?.error ? `Board compute error: ${naResult.error}` : null,
+      recordResult?.error ? `Record error: ${recordResult.error}` : null,
+      noPicksRecorded && !recordResult?.error ? 'Board computed but 0 picks recorded (empty slate)' : null,
+    ].filter(Boolean).join('\n');
+    try {
+      await sendEmail({
+        to: 'rentalsgradea@gmail.com',
+        subject: `[HIMOTHY] ⚠️ Morning cron failed — picks may be missing today`,
+        html: `<div style="font-family:sans-serif;max-width:600px">
+          <h2 style="color:#ef4444">Morning cron failure detected</h2>
+          <p>The 8am ET warm-cache cron ran at ${new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })} ET but customers may have no picks today.</p>
+          <pre style="background:#1e293b;color:#f1f5f9;padding:12px;border-radius:8px;white-space:pre-wrap">${errorDetails || 'Unknown failure — check Vercel logs'}</pre>
+          <p style="color:#94a3b8;font-size:12px">To force a regen: visit <code>/admin</code> and hit "Force Refresh", or hit <code>/api/research/daily-picks?refresh=true</code> with admin header.</p>
+        </div>`,
+      });
+    } catch { /* best-effort alert */ }
   }
 
   return NextResponse.json({
