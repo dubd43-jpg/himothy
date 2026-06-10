@@ -170,7 +170,7 @@ function backfillProducts(slate: any): any {
 
 // Heavy multi-league research scan + per-pick best-market enrichment (totals/team-totals/
 // halves/F5 fetches). Give it room so the first cold compute of the day doesn't get killed.
-export const maxDuration = 120;
+export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
 
 const VALID_BOARDS: BoardType[] = ['north-american', 'soccer', 'tennis', 'combat', 'individual', 'racing', 'global', 'overseas'];
