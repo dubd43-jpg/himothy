@@ -384,6 +384,13 @@ export async function getOrComputeBoard(board: BoardType): Promise<any> {
   }
 
   const result = await runDailyDeepResearch(board);
+
+  // Persist the raw result immediately — enrichments below are best-effort and can
+  // take 30-60s. Persisting now means a cron that times out mid-enrichment still
+  // leaves a usable frozen slate in Postgres for all subsequent customer requests.
+  boardCache.set(key, { data: result, generatedAt: Date.now() });
+  await writePersistedSlate(SLATE_RULES_VERSION, etDate, board, result);
+
   await enrichWithOdds(result);
   // Swap a featured pick to its best totals-family market (total/team total/half/F5) when
   // that's clearly the stronger play, then float the best-priced plays to the top.
@@ -397,9 +404,10 @@ export async function getOrComputeBoard(board: BoardType): Promise<any> {
   (result as any).valuePlays = valuePool
     .filter((p: any) => p.marketType === 'moneyline' && p.oddsInsight && typeof p.oddsInsight.valueEdge === 'number' && p.oddsInsight.valueEdge > 0)
     .sort((a: any, b: any) => b.oddsInsight.valueEdge - a.oddsInsight.valueEdge);
+  // Update cache and persist again with fully-enriched result (overwrites the raw version).
   boardCache.set(key, { data: result, generatedAt: Date.now() });
-  // Persist so the next function instance reads the same slate (otherwise the slate is
-  // NOT actually frozen — each cold instance regenerates with possibly different picks).
+  // Use upsert on second write since writePersistedSlate is write-once; delete first.
+  await deletePersistedSlate(etDate, board);
   await writePersistedSlate(SLATE_RULES_VERSION, etDate, board, result);
 
   // INLINE RECORD: record synchronously so picks land in the registry before this

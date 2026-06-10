@@ -232,21 +232,25 @@ export async function GET(req: Request) {
         }
       } catch (e) { /* fall through */ }
       // STEP 3 — neither cache hit. The morning cron must have failed.
-      // Fall back to computing on-demand so customers don't get a blank page.
-      // This is intentionally re-enabled after the June 9 blackout — the "kill
-      // on-demand compute" change from 2026-06-06 was too aggressive: one cron
-      // failure meant zero picks all day. On-demand compute runs at most once
-      // (getOrComputeBoard persists + caches the result so the next visitor is
-      // served from Postgres, not the engine). Cost: one extra engine run on
-      // cron-failure days, which is worth avoiding a customer-facing blackout.
+      // Try a quick on-demand compute but race it against a 20s timeout so we never
+      // leave the customer staring at a spinner for 120s. If it wins, great — the
+      // result is persisted and all subsequent visitors get the cached version.
+      // If it loses, fall through to slateNotReady and let the UI retry.
       try {
-        const computedResult = await getOrComputeBoard(board);
+        const computedResult = await Promise.race([
+          getOrComputeBoard(board),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('step3-timeout')), 20_000)
+          ),
+        ]);
         const { applyRegistryOverlay } = await import('@/services/slateRegistryOverlay');
         const overlaid = await applyRegistryOverlay(computedResult);
         const cleaned = backfillProducts(stripMlbProps(stripHeavyChalk(stripNrfiFromMainBets(overlaid))));
         return NextResponse.json({ success: true, cached: false, source: 'cron-fallback', ...filterSlateByAccess(cleaned, viewerKeys) });
-      } catch (computeErr) {
-        console.error('[daily-picks] cron fallback compute failed', computeErr);
+      } catch (computeErr: any) {
+        if (computeErr?.message !== 'step3-timeout') {
+          console.error('[daily-picks] cron fallback compute failed', computeErr);
+        }
       }
       // Last resort: tell the UI the slate isn't ready (cron AND fallback both failed).
       return NextResponse.json({

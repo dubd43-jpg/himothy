@@ -1022,6 +1022,7 @@ function DeepResearchSection({ board }: { board: string }) {
   const [data, setData] = useState<DailyPicksData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [slateBuilding, setSlateBuilding] = useState(false);
   const liveMap = useLiveScores();
   // Per-section stats (W-L, units, streak). Fetched from /api/records/summary, mapped to
   // each category tile so users see "Pressure Pack 12-5 (70%) +3.2u · 🔥 3W" inline.
@@ -1096,7 +1097,13 @@ function DeepResearchSection({ board }: { board: string }) {
           .sort((a: any, b: any) => (b?.confidenceScore || 0) - (a?.confidenceScore || 0))
           .slice(0, 12);
       }
-      setData(json);
+      if (json.slateNotReady) {
+        setSlateBuilding(true);
+        setData(null);
+      } else {
+        setSlateBuilding(false);
+        setData(json);
+      }
     } catch (e) {
       console.error('Deep research fetch failed', e);
     } finally {
@@ -1107,18 +1114,35 @@ function DeepResearchSection({ board }: { board: string }) {
 
   useEffect(() => {
     load();
-    // Keep up with the world: re-run the research every 2 minutes so picks reflect
-    // live odds, lineup, and injury changes right up until game time.
+    // Normal 2-minute refresh for live odds/injury updates.
     const interval = setInterval(() => load(true), 120000);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [board]);
 
+  // When the slate is still building, retry every 30s until it's ready.
+  useEffect(() => {
+    if (!slateBuilding) return;
+    const retry = setInterval(() => load(), 30000);
+    return () => clearInterval(retry);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slateBuilding, board]);
+
   if (loading) {
     return (
       <div className="rounded-3xl border border-white/8 bg-white/[0.02] p-8 flex items-center justify-center gap-3">
         <div className="h-5 w-5 rounded-full border-2 border-white/20 border-t-white animate-spin" />
-        <span className="text-sm text-white/40 font-semibold">Running deep research across all leagues...</span>
+        <span className="text-sm text-white/40 font-semibold">Loading today&apos;s board...</span>
+      </div>
+    );
+  }
+
+  if (slateBuilding) {
+    return (
+      <div className="rounded-3xl border border-primary/20 bg-primary/[0.04] p-8 text-center space-y-3">
+        <div className="h-5 w-5 rounded-full border-2 border-primary/30 border-t-primary animate-spin mx-auto" />
+        <p className="text-sm font-black uppercase tracking-widest text-primary/70">Building today&apos;s slate</p>
+        <p className="text-xs text-white/40">The engine is scoring today&apos;s games. This takes a few minutes — checking back automatically.</p>
       </div>
     );
   }
