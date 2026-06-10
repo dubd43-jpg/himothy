@@ -4,27 +4,29 @@
  
 @layer base {
   :root {
-    /* HIMOTHY PLAYS AND PARLAYS — deep navy + gold, matched to the logo badge */
-    --background: 218 52% 7%;
+    /* HIMOTHY PLAYS AND PARLAYS — Orlando Magic blue + gold */
+    --background: 215 62% 12%;
     --foreground: 0 0% 98%;
-    --card: 218 46% 10%;
+    --card: 215 52% 17%;
     --card-foreground: 0 0% 98%;
-    --popover: 218 52% 7%;
+    --popover: 215 62% 12%;
     --popover-foreground: 0 0% 98%;
-    --primary: 43 74% 54%;
-    --primary-foreground: 218 52% 8%;
-    --secondary: 218 40% 15%;
+    --primary: 43 90% 55%;
+    --primary-foreground: 215 62% 8%;
+    --secondary: 215 42% 22%;
     --secondary-foreground: 0 0% 98%;
-    --muted: 218 35% 14%;
-    --muted-foreground: 218 18% 60%;
-    --accent: 218 40% 15%;
+    --muted: 215 38% 20%;
+    --muted-foreground: 215 22% 65%;
+    --accent: 215 42% 22%;
     --accent-foreground: 0 0% 98%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
-    --border: 218 38% 16%;
-    --input: 218 40% 15%;
-    --ring: 43 74% 54%;
+    --border: 215 36% 23%;
+    --input: 215 42% 21%;
+    --ring: 43 90% 55%;
     --radius: 0.75rem;
+    /* Orlando Magic royal blue — used for sport cards, CTAs, highlights */
+    --magic-blue: 207 100% 38%;
   }
 }
  
@@ -43,12 +45,16 @@
 }
 
 .premium-gradient {
-  background: radial-gradient(at top left, hsla(43, 74%, 54%, 0.14) 0%, transparent 50%),
-              radial-gradient(at bottom right, hsla(218, 60%, 22%, 0.18) 0%, transparent 55%);
+  background: radial-gradient(at top left, hsla(43, 90%, 55%, 0.18) 0%, transparent 50%),
+              radial-gradient(at bottom right, hsla(207, 100%, 38%, 0.20) 0%, transparent 55%);
 }
 
 .himo-glow {
-  box-shadow: 0 0 30px -10px hsla(43, 74%, 54%, 0.35);
+  box-shadow: 0 0 30px -10px hsla(43, 90%, 55%, 0.40);
+}
+
+.magic-glow {
+  box-shadow: 0 0 30px -10px hsla(207, 100%, 38%, 0.45);
 }
 
 .animate-float {

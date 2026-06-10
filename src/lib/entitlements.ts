@@ -15,21 +15,6 @@ import { prisma } from '@/lib/prisma';
 import { ensureSubscriptionSchema } from '@/services/stripeService';
 import type { ProductKey } from '@/lib/products';
 
-// GLOBAL UNLOCK — owner directive 2026-05-31: "right now, everything should be unlocked.
-// We're not charging anybody to move our locks everywhere. And till we get better at this
-// and people start liking us, right now, we will just do everything for free."
-//
-// When this is true, every entitlement check returns full access. No paywalls, no trial
-// gating, no yearly-only research tools — everything is free. To re-lock later, set the
-// env var UNLOCK_ALL_PRODUCTS=false (or remove it) and redeploy. Default is UNLOCKED.
-const UNLOCK_ALL = process.env.UNLOCK_ALL_PRODUCTS !== 'false';
-
-// Full product key universe — when UNLOCK_ALL is true, every user's productKeys returns this.
-const ALL_PRODUCT_KEYS: ProductKey[] = [
-  'grand_slam', 'pressure_pack', 'vip_4_pack', 'himothy_pick',
-  'power_20', 'power_10', 'asleep_picks', 'trends', 'edges', 'parlay_plan',
-] as ProductKey[];
-
 // Day-restricted trial product mapping. Active trial subscriptions (status='trialing')
 // substitute their actual single-product entitlement for this rolling sampler.
 //
@@ -57,18 +42,32 @@ export interface UserEntitlements {
 // Pulls all active entitlements for a user. Active = accessUntil > now.
 // Cancelled-but-still-in-period subscriptions stay active until accessUntil passes —
 // customers paid for the period and we honor it.
+// All product keys — returned for ADMIN users so they bypass every paywall.
+const ALL_KEYS_FOR_ADMIN: ProductKey[] = [
+  'himothy_package', 'nba_package', 'mlb_package', 'nhl_package', 'nfl_package',
+  'ncaa_package', 'wnba_package', 'soccer_package', 'tennis_package', 'ufc_package',
+  'golf_package', 'all_sports_bundle', 'grand_slam', 'pressure_pack', 'vip_4_pack',
+  'parlay_plan', 'big_games', 'sleeper_picks', 'nrfi', 'value_plays', 'period_plays',
+  'power_20', 'power_10', 'himothy_personal', 'sport_parlays',
+];
+
 export async function getUserEntitlements(userId: string): Promise<UserEntitlements> {
-  // GLOBAL UNLOCK SHORT-CIRCUIT — everyone has every product.
-  if (UNLOCK_ALL) {
-    const productKeys = new Set<ProductKey>(ALL_PRODUCT_KEYS);
-    const accessUntil = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
-    const details = ALL_PRODUCT_KEYS.map((k) => ({
-      productKey: k, accessUntil, isOneTime: false, status: 'unlocked',
-    }));
-    return { userId: userId || 'free', productKeys, details };
-  }
   await ensureSubscriptionSchema();
   if (!userId) return { userId: '', productKeys: new Set(), details: [] };
+
+  // ADMIN users bypass every paywall.
+  try {
+    const roleRows = await prisma.$queryRawUnsafe<Array<{ role: string }>>(
+      `SELECT role FROM "User" WHERE id = $1 LIMIT 1`, userId,
+    );
+    if (roleRows[0]?.role === 'ADMIN') {
+      return {
+        userId,
+        productKeys: new Set(ALL_KEYS_FOR_ADMIN),
+        details: [],
+      };
+    }
+  } catch { /* table may not exist yet — fall through to subscription check */ }
 
   const rows = await prisma.$queryRawUnsafe<Array<{
     productKey: string;
@@ -116,7 +115,6 @@ export async function getUserEntitlements(userId: string): Promise<UserEntitleme
 
 // Single product check — convenience wrapper.
 export async function hasAccessTo(userId: string, productKey: ProductKey): Promise<boolean> {
-  if (UNLOCK_ALL) return true;
   const e = await getUserEntitlements(userId);
   return e.productKeys.has(productKey);
 }
@@ -149,7 +147,6 @@ export async function isTrialActive(userId: string): Promise<boolean> {
 // ~365 days (post-trial), monthly ~30. >180 days ⇒ yearly. (Keep the catalog check as a
 // fallback in case real Price IDs are ever configured.)
 export async function hasYearlyAccess(userId: string): Promise<boolean> {
-  if (UNLOCK_ALL) return true;
   await ensureSubscriptionSchema();
   if (!userId) return false;
   const rows = await prisma.$queryRawUnsafe<Array<{ stripePriceId: string | null; currentPeriodEnd: Date | null; createdAt: Date | null }>>(
@@ -182,8 +179,6 @@ export async function filterPicksByAccess<T extends { tier?: string; isAsleepPic
   picks: T[],
   productKeyForTier: (tier?: string) => ProductKey | null,
 ): Promise<{ accessible: T[]; lockedCount: number }> {
-  // GLOBAL UNLOCK: no filtering, return everything to everyone.
-  if (UNLOCK_ALL) return { accessible: picks, lockedCount: 0 };
   if (!userId) {
     // No user → still show everything by default (the UI handles teaser/lock state).
     // The gate matters on the per-pick reveal page, not the board summary.

@@ -171,12 +171,12 @@ export function HistoricalResults() {
           {(() => {
             const order = ['GRAND SLAM', 'PRESSURE PACK', 'VIP 4 PACK', 'PARLAY PLAN', 'MARQUEE', 'NRFI'];
             const labels: Record<string, string> = {
-              'GRAND SLAM': 'HIMOTHY Grand Slam',
-              'PRESSURE PACK': 'HIMOTHY 2-Pick Pressure Pack',
-              'VIP 4 PACK': 'HIMOTHY VIP 4-Pack',
-              'PARLAY PLAN': '$10 Parlay Plan',
-              'MARQUEE': 'Big Games',
-              'NRFI': 'NRFI — No Runs First Inning',
+              'GRAND SLAM': 'Grand Slam',
+              'PRESSURE PACK': 'Pressure Pack',
+              'VIP 4 PACK': '4-Pack',
+              'PARLAY PLAN': 'System Parlay',
+              'MARQUEE': 'Board Picks',
+              'NRFI': 'NRFI',
             };
             const groups: Record<string, PickResult[]> = {};
             for (const p of data?.picks || []) {

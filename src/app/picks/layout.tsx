@@ -1,36 +1,33 @@
 import { absoluteUrl, pageMeta, collectionPageJsonLd, faqJsonLd } from '@/lib/seo';
 
-// FAQs targeted at the picks hub — different angle than the homepage FAQs.
-// Surfaced as FAQPage JSON-LD so Google can expand them inline on the SERP.
 const PICKS_FAQS = [
   {
-    question: "How often are today's picks updated?",
-    answer: "The board refreshes automatically every 2 minutes during the live window — so injury news, line moves, and lineup scratches flow through to the picks before tipoff. A cron warmer runs at 8am ET daily so the slate is cached and instant for the first user of the day."
+    question: "How does the HIMOTHY Board work?",
+    answer: "Every day the engine ranks every pick across every sport and market — spreads, totals, props, NRFI, period plays, anything — by confidence. The top pick becomes the Grand Slam. Picks 2 and 3 are the Pressure Pack. Picks 4 through 7 are the 4-Pack. If a system parlay earns its spot, it shows at the bottom. That's the whole board."
   },
   {
-    question: "What's the difference between the Grand Slam, Pressure Pack, and VIP 4-Pack?",
-    answer: "Grand Slam is the rare single-game near-lock — only posts when win probability is 66%+ with full signal confluence. Pressure Pack is 2 high-confidence plays per day. VIP 4-Pack is a 4-leg curated set with mixed confidence levels. Parlay Plan is the daily $10 parlay. Most days the Grand Slam is empty — that's the point. We only drop it when we genuinely feel it."
+    question: "What's the difference between the Grand Slam, Pressure Pack, and 4-Pack?",
+    answer: "It's a confidence ranking, not separate products. Grand Slam is the single highest-confidence play of the day across any sport or market. Pressure Pack is #2 and #3. The 4-Pack is #4 through #7. Some days the Grand Slam doesn't post — that means nothing cleared the bar. We never fill slots just to fill them."
   },
   {
-    question: "Why is some Pick saying 'Stay Away' instead of a play?",
-    answer: "When two teams' last-10 tendencies cancel out and the math edge vs. the posted line is under 0.7 points (totals) or 1.5 points (spreads), the system flags it as Stay Away — the book has the line priced correctly and there's no real edge. Better to skip than guess. The reasoning shows on every pick's breakdown page."
+    question: "How often are picks updated?",
+    answer: "The board is generated once each morning and stays frozen through the day — so the picks you see at 9am are the same ones at 7pm. No moving picks after they're posted. Once a game goes live, it's graded when it finishes."
   },
   {
     question: "Where can I see the verified win/loss record?",
-    answer: "The full record lives at /stats. Every pick is graded against the official result the moment the game finishes — wins, losses, and pushes. Broken out by category (Grand Slam, Pressure Pack, etc.), by odds bucket, and by parlay leg count. Honest record from day one. No backdated wins, no fake history."
+    answer: "The full record is at /stats — every graded pick since launch, wins, losses, and pushes. Honest record from day one, no backdated wins."
   },
 ];
 
 export const metadata = pageMeta({
-  title: "Today's Sports Picks — Free Daily Plays & Parlays",
-  description: "Tonight's full slate across MLB, NBA, NHL, NFL, UFC, tennis, golf. Grand Slam, Pressure Pack, VIP 4-Pack, $10 Parlay Plan. Real plays, verified record.",
+  title: "Today's Sports Picks — HIMOTHY Board",
+  description: "The HIMOTHY Board: Grand Slam, Pressure Pack, and 4-Pack — the top 7 picks of the day across every sport and market, ranked by confidence. System parlay when earned.",
   path: '/picks',
   keywords: [
     "sports picks today", "free sports picks", "daily picks", "best picks tonight",
-    "free parlay picks", "free mlb picks today", "free nba picks", "free nhl picks",
-    "free wnba picks", "free ufc picks", "free tennis picks", "best parlay today",
+    "grand slam pick", "best pick today", "top sports picks", "free mlb picks today",
+    "free nba picks", "free nhl picks", "free ufc picks", "free tennis picks",
     "expert sports picks", "ats picks", "moneyline picks", "over under picks",
-    "$10 parlay plan", "free pick of the day",
   ],
 });
 
@@ -41,8 +38,8 @@ export default function PicksLayout({ children }: { children: React.ReactNode })
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(collectionPageJsonLd({
           url: absoluteUrl('/picks'),
-          name: "Today's Sports Picks",
-          description: "Daily curated sports picks across every major league — moneyline, spread, total, props, parlays.",
+          name: "HIMOTHY Board — Today's Top Picks",
+          description: "The top 7 picks of the day across every sport and market, ranked by confidence. Grand Slam, Pressure Pack, 4-Pack, system parlay when earned.",
         })) }}
       />
       <script

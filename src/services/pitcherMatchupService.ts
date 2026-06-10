@@ -29,11 +29,35 @@ export interface PitcherProfile {
   // Most recent start was rough? Some indicator the SP is in a slump.
   lastStartER: number | null;
   lastStartIP: number | null;
+  // MLB Stats API enrichment (populated when the cross-reference succeeds):
+  // OPS allowed to lefty / righty batters this season — the matchup math the
+  // Tampa-TT-Under loss exposed we needed.
+  vsLOpsAllowed: number | null;
+  vsROpsAllowed: number | null;
+  seasonERA: number | null;
+  mlbStatsApiId: string | null;   // statsapi.mlb.com person ID
+}
+
+// Team-level vs-handedness batting profile (separate from pitcher above so we can
+// fetch them in parallel). Populated by MLB Stats API.
+export interface TeamHandednessProfile {
+  vsLhpOps: number | null;
+  vsRhpOps: number | null;
+  vsLhpKRate: number | null;
+  vsRhpKRate: number | null;
+  mlbTeamId: string | null;
 }
 
 export interface GameProbables {
   home: PitcherProfile | null;
   away: PitcherProfile | null;
+  // 2026-06-04 — late-scratch protection. ESPN's competitor.probables[] entries
+  // carry a `status` field. "Confirmed" means the team has officially announced
+  // this starter; otherwise it's a projection that can change up until first pitch.
+  // Late scratches are the single biggest cause of MLB ML losses, so the engine
+  // caps confidence on un-confirmed starts as game time approaches.
+  homeConfirmed: boolean;
+  awayConfirmed: boolean;
 }
 
 async function fetchJson(url: string): Promise<any | null> {
@@ -110,6 +134,10 @@ export async function getPitcherProfile(athleteId: string, season = new Date().g
     hitsPerStart: null,
     lastStartER: log[0]?.er ?? null,
     lastStartIP: log[0]?.ip ?? null,
+    vsLOpsAllowed: null,
+    vsROpsAllowed: null,
+    seasonERA: null,
+    mlbStatsApiId: null,
   };
 
   if (log.length > 0) {
@@ -138,7 +166,7 @@ export async function getGameProbables(eventId: string, season = new Date().getF
   if (hit && Date.now() - hit.at < TTL_MS) return hit.data;
 
   const summary = await fetchJson(`https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=${eventId}`);
-  const empty: GameProbables = { home: null, away: null };
+  const empty: GameProbables = { home: null, away: null, homeConfirmed: false, awayConfirmed: false };
   if (!summary) {
     GAME_PROBABLE_CACHE.set(cacheKey, { data: empty, at: Date.now() });
     return empty;
@@ -151,11 +179,19 @@ export async function getGameProbables(eventId: string, season = new Date().getF
 
   let homeId: string | null = null;
   let awayId: string | null = null;
+  let homeConfirmed = false;
+  let awayConfirmed = false;
   for (const c of comp.competitors || []) {
     const probs = c.probables || [];
-    const aid = probs[0]?.athlete?.id ? String(probs[0].athlete.id) : null;
-    if (c.homeAway === 'home') homeId = aid;
-    else if (c.homeAway === 'away') awayId = aid;
+    const p0 = probs[0] || null;
+    const aid = p0?.athlete?.id ? String(p0.athlete.id) : null;
+    // ESPN populates probables[].status when the team formally announces.
+    // status.name === "Confirmed" or status.type === "starting-pitcher" both
+    // indicate locked-in; absence of status (or "Probable") = projection only.
+    const statusName = String(p0?.status?.name || p0?.status?.type || '').toLowerCase();
+    const confirmed = statusName.includes('confirm') || statusName === 'starter' || statusName === 'starting-pitcher';
+    if (c.homeAway === 'home') { homeId = aid; homeConfirmed = confirmed; }
+    else if (c.homeAway === 'away') { awayId = aid; awayConfirmed = confirmed; }
   }
 
   const [home, away] = await Promise.all([
@@ -163,9 +199,111 @@ export async function getGameProbables(eventId: string, season = new Date().getF
     awayId ? getPitcherProfile(awayId, season) : Promise.resolve(null),
   ]);
 
-  const out: GameProbables = { home, away };
+  const out: GameProbables = { home, away, homeConfirmed, awayConfirmed };
   GAME_PROBABLE_CACHE.set(cacheKey, { data: out, at: Date.now() });
   return out;
+}
+
+// Cross-reference an ESPN pitcher to the MLB Stats API by name (statsapi.mlb.com
+// uses different IDs). When found, merge the enriched per-handedness OPS-allowed
+// splits onto the profile. Silent fail when not found — engine just falls back to
+// ERA-only matchup logic.
+const NAME_TO_MLB_ID: Map<string, string | null> = new Map();
+async function resolveMlbStatsApiId(name: string): Promise<string | null> {
+  const key = name.toLowerCase().trim();
+  if (NAME_TO_MLB_ID.has(key)) return NAME_TO_MLB_ID.get(key) || null;
+  try {
+    const url = `https://statsapi.mlb.com/api/v1/people/search?names=${encodeURIComponent(name)}`;
+    const r = await fetch(url, { cache: 'no-store' });
+    if (!r.ok) { NAME_TO_MLB_ID.set(key, null); return null; }
+    const d: any = await r.json();
+    const id = d?.people?.[0]?.id != null ? String(d.people[0].id) : null;
+    NAME_TO_MLB_ID.set(key, id);
+    return id;
+  } catch {
+    NAME_TO_MLB_ID.set(key, null);
+    return null;
+  }
+}
+
+// Enrich an existing PitcherProfile in-place with MLB Stats API per-handedness OPS.
+// Safe to call repeatedly — uses caching from mlbStatsService.
+export async function enrichPitcherWithMlbStats(profile: PitcherProfile): Promise<PitcherProfile> {
+  if (profile.vsLOpsAllowed != null || profile.vsROpsAllowed != null) return profile;
+  const { getPitcherEnhancedStats } = await import('./mlbStatsService');
+  const id = await resolveMlbStatsApiId(profile.name);
+  if (!id) return profile;
+  const enh = await getPitcherEnhancedStats(id);
+  if (!enh) return profile;
+  profile.mlbStatsApiId = id;
+  profile.vsLOpsAllowed = enh.vsLHB?.ops ?? null;
+  profile.vsROpsAllowed = enh.vsRHB?.ops ?? null;
+  profile.seasonERA = enh.seasonERA;
+  if (!profile.throws && enh.throwsHand) profile.throws = enh.throwsHand;
+  return profile;
+}
+
+// Pull team-level vs-LHP/vs-RHP batting splits for ONE team. The team name is
+// the ESPN name; we cross-reference to the MLB Stats API team ID by abbreviation.
+const TEAM_HANDEDNESS_CACHE: Map<string, { data: TeamHandednessProfile; at: number }> = new Map();
+const MLB_TEAM_NAME_TO_ID: Record<string, string> = {
+  'angels': '108', 'astros': '117', 'athletics': '133', 'blue jays': '141',
+  'braves': '144', 'brewers': '158', 'cardinals': '138', 'cubs': '112',
+  'diamondbacks': '109', 'dodgers': '119', 'giants': '137', 'guardians': '114',
+  'mariners': '136', 'marlins': '146', 'mets': '121', 'nationals': '120',
+  'orioles': '110', 'padres': '135', 'phillies': '143', 'pirates': '134',
+  'rangers': '140', 'rays': '139', 'red sox': '111', 'reds': '113',
+  'rockies': '115', 'royals': '118', 'tigers': '116', 'twins': '142',
+  'white sox': '145', 'yankees': '147',
+};
+function findMlbTeamId(teamName: string): string | null {
+  const lower = teamName.toLowerCase();
+  for (const k of Object.keys(MLB_TEAM_NAME_TO_ID)) {
+    if (lower.includes(k)) return MLB_TEAM_NAME_TO_ID[k];
+  }
+  return null;
+}
+export async function getTeamHandednessProfile(teamName: string): Promise<TeamHandednessProfile> {
+  const empty: TeamHandednessProfile = { vsLhpOps: null, vsRhpOps: null, vsLhpKRate: null, vsRhpKRate: null, mlbTeamId: null };
+  const teamId = findMlbTeamId(teamName);
+  if (!teamId) return empty;
+  const cacheKey = teamId;
+  const hit = TEAM_HANDEDNESS_CACHE.get(cacheKey);
+  if (hit && Date.now() - hit.at < TTL_MS) return hit.data;
+
+  const { getTeamBattingSplits } = await import('./mlbStatsService');
+  const splits = await getTeamBattingSplits(teamId);
+  const out: TeamHandednessProfile = {
+    vsLhpOps: splits?.vsLHP?.ops ?? null,
+    vsRhpOps: splits?.vsRHP?.ops ?? null,
+    vsLhpKRate: splits?.vsLHP?.kRate ?? null,
+    vsRhpKRate: splits?.vsRHP?.kRate ?? null,
+    mlbTeamId: teamId,
+  };
+  TEAM_HANDEDNESS_CACHE.set(cacheKey, { data: out, at: Date.now() });
+  return out;
+}
+
+// Compute lineup-vs-pitcher edge using the enriched data. Returns delta in OPS
+// (positive = lineup likely to hit pitcher hard) plus a human label.
+export function computeMatchupEdge(
+  pitcher: PitcherProfile | null,
+  opp: TeamHandednessProfile | null,
+): { delta: number; lineupOps: number; pitcherOps: number; label: string } | null {
+  if (!pitcher?.throws || !opp) return null;
+  const lineupOps = pitcher.throws === 'L' ? opp.vsLhpOps : opp.vsRhpOps;
+  // Use the AVERAGE of the pitcher's vs-L and vs-R OPS-allowed when both available
+  const pL = pitcher.vsLOpsAllowed;
+  const pR = pitcher.vsROpsAllowed;
+  let pitcherOps: number | null = null;
+  if (pL != null && pR != null) pitcherOps = (pL + pR) / 2;
+  else if (pL != null) pitcherOps = pL;
+  else if (pR != null) pitcherOps = pR;
+  if (lineupOps == null || pitcherOps == null) return null;
+  const delta = Number((lineupOps - pitcherOps).toFixed(3));
+  const sign = delta > 0 ? '+' : '';
+  const label = `Lineup vs ${pitcher.throws}HP: ${lineupOps.toFixed(3)} OPS vs ${pitcher.name} ${pitcherOps.toFixed(3)} OPS allowed (${sign}${delta.toFixed(3)})`;
+  return { delta, lineupOps, pitcherOps, label };
 }
 
 // Human-readable pitcher snapshot for postmortem / admin display.

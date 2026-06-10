@@ -36,19 +36,6 @@ export const LEAGUE_TO_SPORT: Record<string, string> = {
   'Tennis - ATP': 'tennis_atp_french_open',
   'Tennis - WTA': 'tennis_wta_french_open',
   Tennis: 'tennis_atp_french_open',
-  // Added 2026-05-31 — the engine fetches ESPN events for these leagues but had no
-  // Odds API mapping, so processGame returned null and the global/soccer boards
-  // shipped empty even when 5-7 events existed. Now they get real pricing.
-  'Soccer - Brazil Serie A': 'soccer_brazil_campeonato',
-  'Soccer - Argentina': 'soccer_argentina_primera_division',
-  'Soccer - MLS': 'soccer_usa_mls',
-  'Soccer - Liga MX': 'soccer_mexico_ligamx',
-  AFL: 'aussierules_afl',
-  'Australian Football': 'aussierules_afl',
-  'Rugby - NRL': 'rugbyleague_nrl',
-  'Rugby - Premiership': 'rugbyunion_six_nations',
-  Cricket: 'cricket_international_t20',
-  'Cricket - IPL': 'cricket_ipl',
 };
 
 // Cache of currently-active tennis sport keys from The Odds API /sports endpoint.
@@ -907,4 +894,117 @@ export async function getOddsInsightForPick(
     valueEdge: valueEdge != null ? Math.round(valueEdge * 10) / 10 : null,
     isValue: valueEdge != null && valueEdge >= 1.5, // ~1.5+ pts of edge = a real value spot
   };
+}
+
+export interface HardRockGameLine {
+  homeML: number | null;
+  awayML: number | null;
+  spread: number | null;
+  total: number | null;
+}
+
+// ─── Hard Rock Bet specific odds ──────────────────────────────────────────────
+// Fetches h2h + spreads + totals filtered to Hard Rock Bet only.
+// Separate 30-min cache (shorter than the 6h all-books cache since HR is our
+// primary line source and we want the freshest number when picks are generated).
+
+type HardRockLeagueMap = Record<string, HardRockGameLine>; // key: `${away}@@${home}`
+const hrCache = new Map<string, { data: HardRockLeagueMap; at: number }>();
+const HR_CACHE_TTL_MS = 30 * 60 * 1000; // 30 min
+
+async function fetchHardRockLeagueOdds(league: string, sportKeys: string[]): Promise<HardRockLeagueMap> {
+  const key = `hr:${league}`;
+  const cached = hrCache.get(key);
+  if (cached && Date.now() - cached.at < HR_CACHE_TTL_MS) return cached.data;
+  const map: HardRockLeagueMap = {};
+  try {
+    for (const sport of sportKeys) {
+      const url = `${ODDS_API_BASE}/sports/${sport}/odds/?apiKey=${process.env.THE_ODDS_API_KEY}&regions=us&bookmakers=hardrockbet&markets=h2h,spreads,totals&oddsFormat=american`;
+      const res = await fetchWithTimeout(url, { cache: 'no-store' });
+      if (!res.ok) continue;
+      const games: any[] = await res.json();
+      for (const g of games || []) {
+        const home = g.home_team;
+        const away = g.away_team;
+        if (!home || !away) continue;
+        let homeML: number | null = null, awayML: number | null = null;
+        let homeSpread: number | null = null, total: number | null = null;
+        for (const bk of g.bookmakers || []) {
+          for (const m of bk.markets || []) {
+            if (m.key === 'h2h') {
+              for (const o of m.outcomes || []) {
+                if (typeof o.price !== 'number') continue;
+                if (o.name === home) homeML = o.price;
+                else if (o.name === away) awayML = o.price;
+              }
+            } else if (m.key === 'spreads') {
+              for (const o of m.outcomes || []) {
+                if (o.name === home && typeof o.point === 'number') homeSpread = o.point;
+              }
+            } else if (m.key === 'totals') {
+              for (const o of m.outcomes || []) {
+                if (String(o.name || '').toLowerCase() === 'over' && typeof o.point === 'number') total = o.point;
+              }
+            }
+          }
+        }
+        map[gameKey(away, home)] = { homeML, awayML, spread: homeSpread, total };
+      }
+    }
+  } catch {
+    // swallow — caller falls back gracefully
+  }
+  hrCache.set(key, { data: map, at: Date.now() });
+  return map;
+}
+
+// Fetch Hard Rock sportsbook line for a game via The Odds API (bookmaker filter).
+// Returns null when HR doesn't list the game or the API key is missing — caller
+// falls back to ESPN/pickcenter data in that case.
+export async function getHardRockLineForGame(
+  league: string, awayTeam: string, homeTeam: string,
+): Promise<HardRockGameLine | null> {
+  if (!hasOddsApi()) return null;
+  try {
+    // Resolve sport key(s) the same way fetchLeagueOdds does.
+    let sportKeys: string[] = [];
+    if (league === 'Tennis - ATP' || league === 'Tennis - WTA' || league === 'Tennis') {
+      const { atp, wta } = await resolveActiveTennisSportKeys();
+      if (league === 'Tennis - WTA') sportKeys = wta;
+      else if (league === 'Tennis - ATP') sportKeys = atp;
+      else sportKeys = [...atp, ...wta];
+      if (sportKeys.length === 0) {
+        const fb = LEAGUE_TO_SPORT[league];
+        if (fb) sportKeys = [fb];
+      }
+    } else {
+      const sport = LEAGUE_TO_SPORT[league];
+      if (!sport) return null;
+      sportKeys = [sport];
+    }
+
+    const map = await fetchHardRockLeagueOdds(league, sportKeys);
+    let g = map[gameKey(awayTeam, homeTeam)];
+    let flipped = false;
+    if (!g) { g = map[gameKey(homeTeam, awayTeam)]; flipped = true; }
+    if (!g) {
+      // HR doesn't have the game — fall back to best-available from all books
+      const allMap = await fetchLeagueOdds(league);
+      let ag = allMap[gameKey(awayTeam, homeTeam)];
+      let af = false;
+      if (!ag) { ag = allMap[gameKey(homeTeam, awayTeam)]; af = true; }
+      if (!ag) return null;
+      return {
+        homeML: af ? ag.bestAwayOdds : ag.bestHomeOdds,
+        awayML: af ? ag.bestHomeOdds : ag.bestAwayOdds,
+        spread: null,
+        total: null,
+      };
+    }
+    return flipped
+      ? { homeML: g.awayML, awayML: g.homeML, spread: g.spread != null ? -g.spread : null, total: g.total }
+      : g;
+  } catch {
+    return null;
+  }
 }

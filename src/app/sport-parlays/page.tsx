@@ -114,7 +114,7 @@ export default function SportParlaysPage() {
           <div className="rounded-2xl border-2 border-dashed border-white/10 bg-white/[0.02] py-10 text-center px-6">
             <h3 className="text-lg font-black uppercase tracking-tight">No Sport Parlays Today</h3>
             <p className="mx-auto mt-2 max-w-md text-sm text-white/45 leading-relaxed">
-              The main board covered every game tonight — no extras left to parlay. We never recommend the OPPOSITE side of a game we already picked, even if Vegas would let us. Check back tomorrow.
+              No sport had 4 quality legs available. We only build a parlay when there's real value — no padding.
             </p>
           </div>
         ) : (
@@ -163,8 +163,8 @@ export default function SportParlaysPage() {
                         if (ls.state === "live") return <span className="shrink-0 inline-flex items-center gap-0.5 text-[9px] font-black text-emerald-400"><CircleDot className="h-2.5 w-2.5 animate-pulse" /> LIVE {ls.awayScore}-{ls.homeScore}</span>;
                         return <span className="shrink-0 inline-flex items-center gap-0.5 text-[9px] font-bold text-white/30"><Timer className="h-2.5 w-2.5" /> {t || "scheduled"}</span>;
                       })();
-                      const legContent = (
-                        <div className={`flex items-center gap-2.5 rounded-lg border px-2.5 py-2 transition-all hover:bg-white/[0.05] ${ls?.state === "final" && ls.result === "lost" ? "border-red-500/20 bg-red-500/[0.04]" : ls?.state === "final" && ls.result === "won" ? "border-emerald-500/20 bg-emerald-500/[0.04]" : ls?.state === "live" ? "border-emerald-500/20 bg-white/[0.02]" : "border-white/8 bg-white/[0.02]"}`}>
+                      return (
+                        <div key={`${leg.gameId}-${leg.selection}-${i}`} className={`flex items-center gap-2.5 rounded-lg border px-2.5 py-2 ${ls?.state === "final" && ls.result === "lost" ? "border-red-500/20 bg-red-500/[0.04]" : ls?.state === "final" && ls.result === "won" ? "border-emerald-500/20 bg-emerald-500/[0.04]" : ls?.state === "live" ? "border-emerald-500/20 bg-white/[0.02]" : "border-white/8 bg-white/[0.02]"}`}>
                           <div className="w-5 h-5 shrink-0 rounded-full bg-white/5 flex items-center justify-center text-[9px] font-black text-white/40">{i + 1}</div>
                           <div className="flex-1 min-w-0">
                             <div className="text-[13px] font-bold text-white truncate">{leg.selection}</div>
@@ -173,18 +173,10 @@ export default function SportParlaysPage() {
                               <span className="truncate">{leg.eventName}</span>
                               {t && <span className="text-white/30">· {t}</span>}
                             </div>
-                            {leg.detail && <div className="mt-0.5 text-[10px] text-white/50 truncate">{leg.detail}</div>}
                           </div>
                           {statusChip}
                           {leg.odds && <span className="text-[13px] font-black tabular-nums text-white/55 shrink-0">{leg.odds}</span>}
                         </div>
-                      );
-                      return leg.type === "game" ? (
-                        // Pass ?selection= so /pick/[gameId] resolves to the Sport Parlays
-                        // side (not the main board's opposite-side pick on the same game).
-                        <Link key={`${leg.gameId}-${leg.selection}-${i}`} href={`/pick/${leg.gameId}?from=/sport-parlays&selection=${encodeURIComponent(leg.selection)}`} className="block">{legContent}</Link>
-                      ) : (
-                        <div key={`${leg.gameId}-${leg.selection}-${i}`}>{legContent}</div>
                       );
                     })}
                   </div>

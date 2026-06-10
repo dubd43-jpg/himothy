@@ -38,6 +38,8 @@ import { getGameProbables, type GameProbables, enrichPitcherWithMlbStats, getTea
 import { getStadiumForecast, windTotalsNudge, type WeatherForecast } from '@/services/weatherService';
 import { captureOpeningOdds, getOpeningOdds, computeMovement, type LineMovement, type OddsSnapshot } from '@/services/lineMovementService';
 import { oddsBucket } from '@/lib/oddsBucket';
+import { getAdvancedSportsSignals, oddsApiSportKey } from '@/services/advancedSportsSignalsAggregator';
+import { getBookConsensus } from '@/services/bookConsensusService';
 
 // Module-level cache for odds-bucket stats — refreshed every 5 minutes during a slate
 // run. Pulled from the registry, so it's our OWN verified hit rate per price band.
@@ -1930,6 +1932,29 @@ function scoreGame(signals: Omit<GameSignals, 'confirmingSignals'>): number {
     if (signals.oppPctBlewLateLead >= 30) score += 4;
   }
 
+  // TENDENCY GATE — owner directive 2026-06-10: tendencies are priority one.
+  // Tiers require minimum ATS to be reachable — tendencies gate before market signals.
+  //
+  //  Grand Slam (96+) : ATS must be ≥ 58% (strong tendency). Below that → cap 92.
+  //  Pressure (83+)   : ATS must be ≥ 48% (at least neutral). Below that → cap 80.
+  //  Any tier         : ATS ≤ 38% → cap 75 (can't reach Pressure floor of 83).
+  const atsGate = signals.atsCoverPct;
+  const atsHAGate = signals.atsHomeAwayCoverPct;
+  if (atsGate !== null && atsGate <= 38) {
+    // Clearly bad tendency — locked out of all premium tiers
+    score = Math.min(score, 75);
+  } else if (atsGate !== null && atsGate <= 43 && atsHAGate !== null && atsHAGate <= 42) {
+    // Both overall and situational weak — can't reach Pressure
+    score = Math.min(score, 80);
+  } else if (atsGate !== null && atsGate < 48) {
+    // Below-neutral tendency — can't reach Pressure (83 floor)
+    score = Math.min(score, 80);
+  } else if (atsGate !== null && atsGate < 58) {
+    // Neutral-to-decent tendency — can reach Pressure but not Grand Slam (96 floor)
+    score = Math.min(score, 92);
+  }
+  // atsGate ≥ 58: strong tendency — all tiers reachable, no cap applied
+
   // Data quality floor
   const dq = signals.dataQuality;
   if (dq < 30) score = Math.min(score, 52);
@@ -3242,9 +3267,63 @@ async function processGame(
   else if (pickedValueEdge <= -0.05) valueEdgeAdj = -4;
   else if (pickedValueEdge <= -0.02) valueEdgeAdj = -2;
   const rawScore = Math.round(baseScore * asleepBoost) + valueEdgeAdj;
+
+  // ADVANCED SPORTS SIGNALS + BOOK CONSENSUS — tendencies priority one.
+  // Run in parallel: H2H history, sport-specific (NHL PP/PK, NBA net rating, MLB park factors,
+  // situational ATS after-loss/bye, etc.) + multi-book consensus. All non-blocking.
+  // Score adj capped at ±15 inside aggregator. Bullets surface in reasonsFor so customers
+  // see the exact tendency driving the pick ("Last 6 times these two played, game went over").
+  let advancedAdj = 0;
+  let advancedBullets: string[] = [];
+  let h2hBulletsForPick: string[] = [];
+  let bookConsensusBullets: string[] = [];
+  try {
+    const pickedML = pickedSideForSignals === 'home' ? mergedHomeML : mergedAwayML;
+    const todayStr = new Date(event.date || Date.now()).toISOString().slice(0, 10);
+
+    const [advResult, consensusResult] = await Promise.all([
+      getAdvancedSportsSignals({
+        league,
+        homeTeamId: String(homeRaw.team?.id || homeRaw.id || ''),
+        homeTeamName,
+        awayTeamId: String(awayRaw.team?.id || awayRaw.id || ''),
+        awayTeamName,
+        side: pickedSideForSignals,
+        gameDate: todayStr,
+        postedTotal: mergedTotal,
+        umpireName: (event as any).umpire || (comp as any).officials?.[0]?.fullName || null,
+        officials: ((comp as any).officials || []).map((o: any) => String(o.fullName || o.displayName || '')).filter(Boolean),
+        currentTournament: String(event?.season?.year || event?.name || ''),
+      }).catch(() => null),
+      pickedML != null
+        ? getBookConsensus(
+            oddsApiSportKey(league),
+            homeTeamName,
+            awayTeamName,
+            pickedSideForSignals,
+            // pickData not yet assigned here — derive: soccer/tennis/combat = ML; NA = spread if available
+            sportStyle !== 'na' ? 'moneyline' : (mergedSpread !== null ? 'spread' : 'moneyline'),
+            pickedML,
+          ).catch(() => null)
+        : Promise.resolve(null),
+    ]);
+
+    if (advResult) {
+      advancedAdj = advResult.scoreAdj;
+      advancedBullets = advResult.bullets;
+      h2hBulletsForPick = advResult.h2hBullets;
+    }
+    if (consensusResult) {
+      advancedAdj += consensusResult.scoreAdj;
+      bookConsensusBullets = consensusResult.bullets;
+    }
+  } catch { /* non-blocking */ }
+
+  const finalRawScore = rawScore + Math.max(-15, Math.min(15, advancedAdj));
+
   // CHANGE THE PICK on breaking news: if a star on our side is OUT, cap the score so
   // this play drops out of the headline tiers (the board will surface a different game).
-  let confidenceScore = starOutPickSide ? Math.min(rawScore, 42) : rawScore;
+  let confidenceScore = starOutPickSide ? Math.min(finalRawScore, 42) : finalRawScore;
   // 2026-06-04 chaos-game guard: when BOTH sides have a star ruled out, the
   // matchup is too unpredictable to claim high conviction — neither side has
   // a clean read on the other. Cap conf at 80 so this game can still ship as
@@ -3681,6 +3760,24 @@ async function processGame(
     } else if (pickData.marketType === 'moneyline' && oppWinPct - pickedWinPct >= 5) {
       reasonsFor.push(`Value price: ${pickedTeam.abbreviation} is the underdog at ${pickedWinPct.toFixed(0)}% implied — our deeper signals (above) say the line is wrong.`);
     }
+  }
+
+  // ===== ADVANCED TENDENCIES — H2H, sport-specific, book consensus =====
+  // These are the "why we like it" bullets — what the teams have actually done
+  // historically (H2H totals, venue splits, NHL PP/PK, NBA net rating, MLB park factors,
+  // situational ATS after loss / bye week, soccer BTTS rates, etc.). When everything
+  // matches up — tendencies + market + line — THAT is our game.
+  if (h2hBulletsForPick.length) {
+    // H2H bullets lead: "Last 6 times these teams played, game went over."
+    reasonsFor.push(...h2hBulletsForPick.slice(0, 4));
+  }
+  if (advancedBullets.length) {
+    // Cap at 4 advanced bullets to avoid flooding the pick card.
+    const nonH2H = advancedBullets.filter((b) => !h2hBulletsForPick.includes(b));
+    reasonsFor.push(...nonH2H.slice(0, 4));
+  }
+  if (bookConsensusBullets.length) {
+    reasonsFor.push(...bookConsensusBullets.slice(0, 2));
   }
 
   // Tendency resolver — produces a per-pick math read on whether the line is fair.

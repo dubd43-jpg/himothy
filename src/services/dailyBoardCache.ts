@@ -42,7 +42,7 @@ async function ensureSlateCacheSchema() {
 // later request — even after a deploy that bumps SLATE_RULES_VERSION — serves that exact
 // board instead of recomputing a different one (which is how the record drifted from the
 // display). A version bump therefore only affects the NEXT ET-day, never a posted slate.
-async function readPersistedSlate(etDate: string, board: string): Promise<any | null> {
+export async function readPersistedSlate(etDate: string, board: string): Promise<any | null> {
   if (!hasDatabase()) return null;
   await ensureSlateCacheSchema();
   try {
@@ -103,7 +103,7 @@ const SLATE_RULES_VERSION = 'frozen-v1';
 // slate snapshot from the morning's 8am ET cron lives ALL DAY until the next ET-day's
 // cron generates a fresh one. Mid-day requests always read the frozen snapshot — never
 // re-generate — which means finished games stay on the slate exactly as published.
-function todayEtKey(): string {
+export function todayEtKey(): string {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
   }).formatToParts(new Date());
@@ -245,9 +245,29 @@ export function getCachedBoardPicks(board: string): any[] {
   return c ? flattenBoardPicks(c.data) : [];
 }
 
-export async function invalidateBoardCache(board: string) {
+export async function invalidateBoardCache(board: string, _opts?: { force?: boolean }) {
   boardCache.delete(slateVersionKey(board));
   await deletePersistedSlate(todayEtKey(), board);
+}
+
+export async function adminOverwritePersistedSlate(etDate: string, board: string, data: any) {
+  if (!hasDatabase()) return;
+  await ensureSlateCacheSchema();
+  try {
+    await prisma.$executeRawUnsafe(
+      `DELETE FROM "DailySlateCache" WHERE "etDate" = $1 AND "board" = $2`,
+      etDate, board,
+    );
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "DailySlateCache" ("version", "etDate", "board", "data", "generatedAt")
+       VALUES ($1, $2, $3, $4::jsonb, NOW())`,
+      SLATE_RULES_VERSION, etDate, board, JSON.stringify(data),
+    );
+    boardCache.set(`${SLATE_RULES_VERSION}|${etDate}|${board}`, { data, generatedAt: Date.now() });
+  } catch (err) {
+    console.error('[dailyBoardCache] adminOverwritePersistedSlate failed', err);
+    throw err;
+  }
 }
 
 export function getCachedBoard(board: string) {

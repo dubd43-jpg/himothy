@@ -116,11 +116,18 @@ export async function GET(req: Request) {
     ...params
   );
 
+  // Perf 2026-06-04: was sequential await per row (N RTTs to ESPN).
+  // Now prefetch every ESPN summary in parallel, then iterate locally.
+  const espnByRow = await Promise.all(rows.map((r) =>
+    r.event_id && r.league ? fetchEspnFinal(r.league, String(r.event_id)) : Promise.resolve(null)
+  ));
+
   const out: PostmortemRow[] = [];
-  for (const r of rows) {
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
     const payload = r.research_payload || {};
     const ev = payload.evidence || null;
-    const espn = r.event_id && r.league ? await fetchEspnFinal(r.league, String(r.event_id)) : null;
+    const espn = espnByRow[i];
 
     let gameOut: PostmortemRow['game'] = null;
     let coverNote: string | null = null;

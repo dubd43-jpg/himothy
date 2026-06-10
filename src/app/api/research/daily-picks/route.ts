@@ -19,15 +19,22 @@ const FIELD_PRODUCT_KEY: Record<string, ProductKey> = {
   valuePlays: 'value_plays',
 };
 
+const ALL_PRODUCT_KEYS = new Set<ProductKey>(
+  Object.values(FIELD_PRODUCT_KEY) as ProductKey[]
+);
+
 async function getViewerProductKeys(req: Request): Promise<Set<ProductKey>> {
+  // When paywalls are off (default), everyone sees the full slate.
+  if (process.env.UNLOCK_ALL_PRODUCTS !== 'false') return ALL_PRODUCT_KEYS;
+
+  if (isAdminRequest(req)) return ALL_PRODUCT_KEYS;
+
   const cookie = req.headers.get('cookie') || '';
   const uid = cookie.split(';').map((c) => c.trim()).find((c) => c.startsWith('himothy_uid='))?.slice('himothy_uid='.length) || '';
-  // Pass uid (or empty string) — getUserEntitlements short-circuits and returns
-  // ALL product keys when UNLOCK_ALL_PRODUCTS is true (current default), so
-  // anonymous visitors still see the slate. Only when paywalls flip on does
-  // the empty-uid case actually return zero keys.
+  if (!uid) return new Set();
   try {
     const ent = await getUserEntitlements(uid);
+    // ADMIN role → full access
     return ent.productKeys;
   } catch { return new Set(); }
 }
@@ -170,7 +177,7 @@ function backfillProducts(slate: any): any {
 
 // Heavy multi-league research scan + per-pick best-market enrichment (totals/team-totals/
 // halves/F5 fetches). Give it room so the first cold compute of the day doesn't get killed.
-export const maxDuration = 300;
+export const maxDuration = 120;
 export const dynamic = 'force-dynamic';
 
 const VALID_BOARDS: BoardType[] = ['north-american', 'soccer', 'tennis', 'combat', 'individual', 'racing', 'global', 'overseas'];

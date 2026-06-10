@@ -52,23 +52,21 @@ function AdminPickRow({ pick, rank, live }: { pick: DeepPick; rank: number; live
   );
 }
 
-const SECRET_KEY = "himothy_admin_secret";
-
 export default function AdminBoardPage() {
   const [picks, setPicks] = useState<DeepPick[]>([]);
   const [loading, setLoading] = useState(true);
   const [regenStatus, setRegenStatus] = useState<string | null>(null);
   const [regenBusy, setRegenBusy] = useState(false);
-  const [secret, setSecret] = useState("");
   const liveMap = useLiveScores();
 
-  useEffect(() => {
-    try { const s = localStorage.getItem(SECRET_KEY); if (s) setSecret(s); } catch {}
-  }, []);
-  const saveSecret = (v: string) => { setSecret(v); try { localStorage.setItem(SECRET_KEY, v); } catch {} };
-
-  const loadBoard = async () => {
-    const res = await fetch("/api/research/daily-picks?board=north-american", { cache: "no-store" });
+  const loadBoard = async (forceRefresh = false) => {
+    const url = forceRefresh
+      ? "/api/research/daily-picks?board=north-american&refresh=true"
+      : "/api/research/daily-picks?board=north-american";
+    const res = await fetch(url, {
+      cache: "no-store",
+      headers: { "x-admin-secret": (typeof window !== "undefined" ? localStorage.getItem("himothy_admin_secret") : null) || "" },
+    });
     const d = await res.json();
     const all: DeepPick[] = [
       ...(d.grandSlam ? [d.grandSlam] : []),
@@ -92,22 +90,12 @@ export default function AdminBoardPage() {
   }, []);
 
   const forceRegen = async () => {
-    if (!secret) { setRegenStatus("Paste your ADMIN_SECRET above first."); return; }
     setRegenBusy(true);
-    setRegenStatus("Running engine… takes up to 3 minutes, please wait.");
+    setRegenStatus("Regenerating… this takes 60-120s, please wait.");
     try {
-      // Call warm-cache (maxDuration=300) not daily-picks (120s) so the engine
-      // has enough time to finish and populate the registry.
-      const res = await fetch("/api/cron/warm-cache", {
-        method: "POST",
-        headers: { "x-admin-secret": secret },
-      });
-      const d = await res.json();
-      if (!res.ok || !d.success) throw new Error(d.error || `HTTP ${res.status}`);
-      // Now reload the board display from the freshly-persisted slate.
-      const deduped = await loadBoard();
+      const deduped = await loadBoard(true);
       setPicks(deduped);
-      setRegenStatus(`Done — ${deduped.length} picks on board. Recorded: ${d.recorded?.recorded ?? '?'}`);
+      setRegenStatus(`Done — ${deduped.length} picks loaded.`);
     } catch (err) {
       setRegenStatus(`Error: ${String(err)}`);
     } finally {
@@ -121,27 +109,23 @@ export default function AdminBoardPage() {
         <Link href="/admin" className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-widest text-white/40 hover:text-white transition-colors w-max">
           <ArrowLeft className="h-4 w-4" /> Admin
         </Link>
-        <div>
-          <h1 className="text-3xl font-black uppercase tracking-tight">Today's Board — Every Pick</h1>
-          <p className="mt-2 text-sm text-white/50">Highest conviction to lowest. Full breakdown + odds boards (admin only — never shown to customers). {picks.length} plays.</p>
-        </div>
-        <div className="flex items-end gap-3 flex-wrap">
-          <div className="flex-1 min-w-[200px]">
-            <label className="text-[10px] font-black uppercase tracking-widest text-white/40 block mb-1">Admin Secret (required for Force Regen)</label>
-            <input type="password" value={secret} onChange={(e) => saveSecret(e.target.value)} placeholder="paste ADMIN_SECRET once — saved in browser" className="w-full rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm font-mono text-white/80 outline-none focus:border-primary/50" />
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h1 className="text-3xl font-black uppercase tracking-tight">Today's Board — Every Pick</h1>
+            <p className="mt-2 text-sm text-white/50">Highest conviction to lowest. Full breakdown + odds boards (admin only — never shown to customers). {picks.length} plays.</p>
           </div>
           <button
             type="button"
             onClick={forceRegen}
-            disabled={regenBusy || !secret}
-            className="flex items-center gap-2 px-4 py-2.5 bg-primary/10 border border-primary/30 hover:bg-primary/20 text-primary text-xs font-black uppercase tracking-widest rounded-lg transition-colors disabled:opacity-40"
+            disabled={regenBusy}
+            className="flex items-center gap-2 px-4 py-2 bg-primary/10 border border-primary/30 hover:bg-primary/20 text-primary text-xs font-black uppercase tracking-widest rounded-lg transition-colors disabled:opacity-50"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${regenBusy ? 'animate-spin' : ''}`} />
             {regenBusy ? 'Running engine…' : 'Force Regen'}
           </button>
         </div>
         {regenStatus && (
-          <div className={`px-4 py-3 rounded-lg text-xs font-mono ${regenStatus.startsWith('Error') || regenStatus.startsWith('Paste') ? 'bg-red-500/10 text-red-400 border border-red-500/20' : regenStatus.startsWith('Running') ? 'bg-primary/10 text-primary border border-primary/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}`}>
+          <div className={`px-4 py-3 rounded-lg text-xs font-mono ${regenStatus.startsWith('Error') ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}`}>
             {regenStatus}
           </div>
         )}

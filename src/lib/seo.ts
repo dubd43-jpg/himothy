@@ -182,3 +182,29 @@ export function breadcrumbsJsonLd(items: Array<{ name: string; path: string }>) 
 export function jsonLdString(data: object): string {
   return JSON.stringify(data);
 }
+
+export const AUTHOR_NAME = 'HIMOTHY';
+
+export function articleJsonLd(args: {
+  headline: string;
+  description: string;
+  path: string;
+  datePublished: string;
+  dateModified?: string;
+  imageUrl?: string;
+  articleSection?: string;
+}) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'Article',
+    headline: args.headline,
+    description: args.description,
+    url: absoluteUrl(args.path),
+    datePublished: args.datePublished,
+    dateModified: args.dateModified || args.datePublished,
+    author: { '@type': 'Organization', name: AUTHOR_NAME, url: SITE_URL },
+    publisher: { '@type': 'Organization', name: SITE_NAME, url: SITE_URL, logo: { '@type': 'ImageObject', url: absoluteUrl('/logo-badge.png') } },
+    ...(args.imageUrl ? { image: absoluteUrl(args.imageUrl) } : {}),
+    ...(args.articleSection ? { articleSection: args.articleSection } : {}),
+  };
+}

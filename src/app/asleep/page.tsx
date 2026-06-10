@@ -44,7 +44,7 @@ export default function AsleepPage() {
 
         <div className="border-b border-white/5 pb-6">
           <h1 className="flex items-center gap-3 text-3xl md:text-4xl font-black uppercase tracking-tight">
-            <Flame className="h-8 w-8 text-amber-400" /> Sleeper Picks
+            <Flame className="h-8 w-8 text-amber-400" /> Asleep Picks
           </h1>
           <p className="mt-3 max-w-2xl text-base text-white/50 leading-relaxed">
             Games people aren't watching — quieter markets like NCAA Baseball, UFC, AFL, Rugby, KBO. Soft books, real edges. The plays mainstream cappers won't touch.
@@ -52,7 +52,7 @@ export default function AsleepPage() {
         </div>
 
         <YearlyMemberGate
-          toolName="Sleeper Picks"
+          toolName="Asleep Picks"
           toolDescription="Lesser-watched leagues where sportsbooks haven't priced as tightly — NCAA Baseball, KBO, AFL, rugby, Brazil Serie A, lower European leagues. Where the line inefficiencies live."
         >
         {loading ? (

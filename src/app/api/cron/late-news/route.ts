@@ -68,8 +68,9 @@ function isAuthed(req: Request): boolean {
   const adminHeader = req.headers.get('x-admin-secret')?.trim();
   if (cronSecret && bearer === cronSecret) return true;
   if (adminSecret && adminHeader === adminSecret) return true;
-  // Allow Vercel cron requests (they send a Vercel cron header).
-  if (req.headers.get('user-agent')?.includes('vercel-cron')) return true;
+  // SECURITY 2026-06-02: dropped the user-agent: vercel-cron bypass — it's a
+  // client-controlled header and was spoofable. Vercel cron sends
+  // Authorization: Bearer ${CRON_SECRET}, already accepted above.
   return false;
 }
 
@@ -84,14 +85,17 @@ export async function GET(req: Request) {
   }).formatToParts(new Date());
   const etDate = `${parts.find((p) => p.type === 'year')?.value}-${parts.find((p) => p.type === 'month')?.value}-${parts.find((p) => p.type === 'day')?.value}`;
 
-  // Pull today's published, ungraded picks with an event_id
+  // Pull today's published, ungraded, PREGAME picks with an event_id. The pregame
+  // filter is critical — late-news must never modify a pick whose game has already
+  // started (violates the no-changes-during-games rule). Added 2026-06-02.
   const rows = await prisma.$queryRawUnsafe<any[]>(
     `SELECT id, event_id, league, selection, market_type, home_team, away_team, research_payload
        FROM himothy_pick_registry
        WHERE board_date = $1::date
          AND status IN ('published','locked')
          AND result = 'pending'
-         AND event_id IS NOT NULL`,
+         AND event_id IS NOT NULL
+         AND (start_time IS NULL OR start_time > NOW())`,
     etDate,
   );
 

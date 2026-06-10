@@ -71,7 +71,7 @@ export const CONTENT_FIELDS: Array<{ group: string; key: string; label: string; 
   { group: 'Brand', key: 'site.name', label: 'Site name', default: 'HIMOTHY Plays & Parlays' },
   { group: 'Brand', key: 'site.tagline', label: 'Tagline', default: 'Daily sports picks, parlays, and edges', multiline: true },
   { group: 'Home', key: 'home.hero.title', label: 'Home hero title', default: 'Daily Picks. Real Record. No Bullshit.', multiline: true },
-  { group: 'Home', key: 'home.hero.subhead', label: 'Home hero subheadline', default: 'Built on tendencies, not gut takes. Verified record since 2026-05-27.', multiline: true },
+  { group: 'Home', key: 'home.hero.subhead', label: 'Home hero subheadline', default: 'Built on tendencies, not gut takes. Every pick logged. Every result graded.', multiline: true },
   { group: 'Pricing', key: 'pricing.headline', label: 'Pricing headline', default: '', multiline: true },
   { group: 'Pricing', key: 'pricing.bullets', label: 'Pricing value bullets (one per line)', default: '', multiline: true },
   { group: 'SEO defaults', key: 'seo.default.title', label: 'Default page title template', hint: 'e.g. "%s | HIMOTHY Plays & Parlays". Leave empty to keep code default.', default: '' },

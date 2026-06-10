@@ -8,12 +8,15 @@ import { ArrowLeft, CheckCircle2, CreditCard, Loader2, Lock } from "lucide-react
 import { getOrCreateUserId, getStoredEmail } from "@/lib/clientUser";
 
 const PRODUCT_LABELS: Record<string, { name: string; href: string }> = {
-  grand_slam: { name: "HIMOTHY Grand Slam", href: "/grand-slam" },
-  himothy_personal: { name: "HIMOTHY Personal Pick", href: "/himothy-picks" },
-  pressure_pack: { name: "Pressure Pack", href: "/pressure-pack" },
-  vip_4_pack: { name: "VIP 4-Pack", href: "/vip-picks" },
-  power_20: { name: "Power of Parlays", href: "/picks" },
-  power_10: { name: "Power 10", href: "/picks" },
+  grand_slam: { name: "HIMOTHY Board Access", href: "/picks" },
+  himothy_personal: { name: "HIMOTHY Board Access", href: "/picks" },
+  pressure_pack: { name: "HIMOTHY Board Access", href: "/picks" },
+  vip_4_pack: { name: "HIMOTHY Board Access", href: "/picks" },
+  power_20: { name: "HIMOTHY Board Access", href: "/picks" },
+  power_10: { name: "HIMOTHY Board Access", href: "/picks" },
+  himothy_package: { name: "HIMOTHY Board Access", href: "/picks" },
+  nba_package: { name: "HIMOTHY Board Access", href: "/picks" },
+  mlb_package: { name: "HIMOTHY Board Access", href: "/picks" },
 };
 
 interface MeResponse {

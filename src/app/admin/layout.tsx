@@ -144,15 +144,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <Link href="/admin/email" className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-md hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground">
               <Lock className="w-3.5 h-3.5" /> Email
             </Link>
-            <Link href="/admin/content" className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-md hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground">
-              <Target className="w-3.5 h-3.5" /> Content
-            </Link>
-            <Link href="/admin/picks-editor" className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-md hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground">
-              <ShieldCheck className="w-3.5 h-3.5" /> Edit Picks
-            </Link>
-            <Link href="/admin/postmortem" className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-md hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground">
-              <AlertTriangle className="w-3.5 h-3.5" /> Postmortem
-            </Link>
             <Link href="/admin/pricing" className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-md hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground">
               <Crown className="w-3.5 h-3.5" /> Pricing Control
             </Link>

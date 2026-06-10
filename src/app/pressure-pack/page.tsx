@@ -1,17 +1,24 @@
 import { Metadata } from "next";
-import { ProductPickPage } from "@/components/ProductPickPage";
+import { PicksPageTemplate } from "@/components/PicksPageTemplate";
+import { Zap } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "2-Pick Pressure Pack | HIMOTHY PLAYS AND PARLAYS",
-  description: "Our 2 strongest plays of the day — the HIMOTHY BET drops here only. Full reasoning on every pick.",
+  title: "Pressure Pack | HIMOTHY",
+  description: "The two strongest plays of the day. Maximum pressure on market inefficiencies.",
 };
 
 export default function PressurePackPage() {
   return (
-    <ProductPickPage
-      product="pressurePack"
-      subtitle="Our 2 strongest plays of the day. When it's time to apply pressure, it's here — and when it's time to hammer, the HIMOTHY BET drops in this section only. Each pick is broken down below."
-      accentNote="⚡ Play these as straights or combine them into a 2-leg."
+    <PicksPageTemplate
+      category="PRESSURE_PACK"
+      title="HIMOTHY Pressure Pack"
+      subtitle="Our 2 strongest plays of the day. If we're applying pressure anywhere on the board, it's right here. Both legs picked for maximum edge."
+      badge="High Pressure"
+      icon={<Zap className="w-9 h-9 text-primary" />}
+      backHref="/picks"
+      backLabel="Back to All Picks"
+      columns={2}
+      accentNote="⚡ Recommended: Play these as straights or combine for a 2-leg."
     />
   );
 }

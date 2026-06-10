@@ -92,8 +92,6 @@ export default function StatsDashboardPage() {
                 {Object.entries(categoryStats).map(([key, v]) => {
                   const rate = parseFloat(v.winRate);
                   const tone = rate >= 55 ? "text-emerald-400" : rate >= 45 ? "text-white/70" : "text-red-400";
-                  const units = (v as any).units != null ? Number((v as any).units) : null;
-                  const unitsTone = units != null && units >= 0 ? "text-emerald-400" : "text-red-400";
                   return (
                     <div key={key} className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
                       <div className="flex items-center justify-between mb-2">
@@ -104,14 +102,6 @@ export default function StatsDashboardPage() {
                         <span className="text-2xl font-black tabular-nums">{v.wins}-{v.losses}{v.pushes ? `-${v.pushes}` : ""}</span>
                         <span className="text-[11px] font-bold text-white/40">{v.total ?? v.wins + v.losses} settled</span>
                       </div>
-                      {units != null && (
-                        <div className="mt-2 flex items-center justify-between border-t border-white/5 pt-2">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-white/40">Units</span>
-                          <span className={`text-base font-black tabular-nums ${unitsTone}`}>
-                            {units >= 0 ? "+" : ""}{units.toFixed(2)}u
-                          </span>
-                        </div>
-                      )}
                     </div>
                   );
                 })}

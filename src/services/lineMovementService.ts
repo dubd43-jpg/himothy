@@ -31,9 +31,97 @@ async function ensureSchema() {
         PRIMARY KEY (event_id, market_type)
       )
     `);
+    // Time-series snapshots for VELOCITY detection (sharp money / steam moves).
+    // We append every time we see new odds; capped at ~24h rolling per event.
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS himothy_line_snapshots (
+        id BIGSERIAL PRIMARY KEY,
+        event_id TEXT NOT NULL,
+        league TEXT NOT NULL,
+        home_ml INTEGER,
+        away_ml INTEGER,
+        spread NUMERIC,
+        total NUMERIC,
+        captured_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_line_snapshots_event ON himothy_line_snapshots (event_id, captured_at DESC)`);
     _schemaReady = true;
   } catch (err) {
     console.error('[lineMovementService] ensureSchema failed', err);
+  }
+}
+
+// Append a fresh snapshot every time we see odds. Cheap, append-only. Read back
+// via getVelocity() to spot moves in the last 15 / 60 minutes.
+export async function appendSnapshot(eventId: string, league: string, snap: OddsSnapshot) {
+  if (!hasDatabase() || !eventId) return;
+  await ensureSchema();
+  try {
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO himothy_line_snapshots (event_id, league, home_ml, away_ml, spread, total)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      eventId, league,
+      snap.homeML ?? null, snap.awayML ?? null,
+      snap.spread ?? null, snap.total ?? null,
+    );
+  } catch (err) {
+    // Best-effort — never throw out of the engine path.
+    console.error('[lineMovementService] appendSnapshot failed', err);
+  }
+}
+
+export interface LineVelocity {
+  hasRecent: boolean;            // did we have any snapshot in the last hour?
+  sinceMinutes: number | null;   // how recent is the comparison point
+  mlDeltaForSide: number;        // current vs snapshot N min ago for the picked side
+  spreadDeltaForSide: number;
+  totalDelta: number;
+  isSteamMove: boolean;          // > ~10c in <= 15min = textbook steam
+}
+
+export async function getVelocity(
+  eventId: string,
+  current: OddsSnapshot,
+  pickedSide: 'home' | 'away',
+  windowMinutes: number = 15,
+): Promise<LineVelocity> {
+  if (!hasDatabase() || !eventId) {
+    return { hasRecent: false, sinceMinutes: null, mlDeltaForSide: 0, spreadDeltaForSide: 0, totalDelta: 0, isSteamMove: false };
+  }
+  await ensureSchema();
+  try {
+    const rows = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT home_ml, away_ml, spread, total, EXTRACT(EPOCH FROM (NOW() - captured_at)) AS age_sec
+       FROM himothy_line_snapshots
+       WHERE event_id = $1 AND captured_at <= NOW() - INTERVAL '${windowMinutes} minutes'
+       ORDER BY captured_at DESC
+       LIMIT 1`,
+      eventId,
+    );
+    if (rows.length === 0) {
+      return { hasRecent: false, sinceMinutes: null, mlDeltaForSide: 0, spreadDeltaForSide: 0, totalDelta: 0, isSteamMove: false };
+    }
+    const past = rows[0];
+    const sinceMinutes = Math.round(Number(past.age_sec || 0) / 60);
+    const ourPastMl = pickedSide === 'home' ? past.home_ml : past.away_ml;
+    const ourCurMl = pickedSide === 'home' ? current.homeML : current.awayML;
+    const mlDelta = (ourCurMl != null && ourPastMl != null) ? Number(ourCurMl) - Number(ourPastMl) : 0;
+    // Spread movement for picked side. Positive = line moved TOWARD picked side.
+    const spreadFlip = pickedSide === 'away' ? -1 : 1;
+    const spreadDelta = (current.spread != null && past.spread != null) ? (Number(current.spread) - Number(past.spread)) * spreadFlip : 0;
+    const totalDelta = (current.total != null && past.total != null) ? Number(current.total) - Number(past.total) : 0;
+    const isSteamMove = Math.abs(mlDelta) >= 10 || Math.abs(spreadDelta) >= 1;
+    return {
+      hasRecent: true,
+      sinceMinutes,
+      mlDeltaForSide: Math.round(mlDelta),
+      spreadDeltaForSide: Number(spreadDelta.toFixed(1)),
+      totalDelta: Number(totalDelta.toFixed(1)),
+      isSteamMove,
+    };
+  } catch {
+    return { hasRecent: false, sinceMinutes: null, mlDeltaForSide: 0, spreadDeltaForSide: 0, totalDelta: 0, isSteamMove: false };
   }
 }
 

@@ -5,7 +5,6 @@ import { MapPin } from "lucide-react";
 import "./globals.css";
 import { SITE_URL, SITE_NAME, TWITTER_HANDLE, DEFAULT_OG_IMAGE } from "@/lib/seo";
 import { ContactWidget } from "@/components/ContactWidget";
-import { getContent } from "@/lib/siteContent";
 
 // Viewport + theme color live as a separate export in Next 14+ (warning if mixed with metadata).
 export const viewport: Viewport = {
@@ -85,18 +84,11 @@ export const metadata: Metadata = {
   },
 };
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // OWNER-EDITABLE BANNER — set via /admin/content (keys: site.banner.enabled,
-  // site.banner.message). Renders ONLY when enabled === 'true' and a message is set; if
-  // either is empty the existing state-disclaimer banner shows. No deploy needed to change it.
-  const bannerEnabled = (await getContent('site.banner.enabled', 'false')).toLowerCase() === 'true';
-  const bannerMessage = await getContent('site.banner.message', '');
-  const showCustomBanner = bannerEnabled && bannerMessage.trim().length > 0;
-
   return (
     <html lang="en" className="dark">
       <head>
@@ -110,11 +102,6 @@ export default async function RootLayout({
       </head>
       <body className={inter.className}>
         <div className="min-h-screen bg-background text-foreground flex flex-col">
-          {showCustomBanner ? (
-            <div className="bg-primary/10 border-b border-primary/20 px-4 py-2 text-center">
-              <p className="text-xs md:text-sm font-black tracking-wide text-primary">{bannerMessage}</p>
-            </div>
-          ) : null}
           {/* State-Aware Disclaimer Banner Mock */}
           <div className="bg-yellow-500/10 border-b border-yellow-500/20 px-4 py-2 text-center flex items-center justify-center gap-2">
             <MapPin className="w-3.5 h-3.5 text-yellow-500 flex-shrink-0" />

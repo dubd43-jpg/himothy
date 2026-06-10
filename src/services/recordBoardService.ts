@@ -151,26 +151,10 @@ async function recordPick(
       selection: p.selection,
       line,
       odds: p.odds ?? null,
-      // confidenceTier reflects the CATEGORY the pick is filed under, NOT the engine's
-      // internal scoring tier. Fixed 2026-05-31: previously a pick with internal tier
-      // 'GRAND_SLAM' got filed under ASLEEP_PICKS but the registry still wrote
-      // confidenceTier=GRAND_SLAM, so admin reports showed "Asleep pick (GRAND_SLAM tier)"
-      // which was incoherent. Now they always agree.
-      confidenceTier: category,
+      confidenceTier: p.tier ?? null,
       reasoningSummary: p.aiExplanation?.shortReason || p.reasonsFor?.[0] || null,
       riskSummary: p.reasonsAgainst?.[0] || null,
       edgeScore: typeof p.confidenceScore === 'number' ? p.confidenceScore : null,
-      // Signal capture at publish — both sides scored, both sides' signals frozen.
-      // Lets postmortems answer "what did the engine know about the dog when it picked
-      // the favorite?" instead of guessing after the loss.
-      researchPayload: p.evidence ? {
-        evidence: p.evidence,
-        signals: p.signals,
-        reasonsFor: p.reasonsFor,
-        reasonsAgainst: p.reasonsAgainst,
-        sharpFlags: p.sharpFlags,
-        tendencyResolution: p.tendencyResolution || null,
-      } : null,
       status: 'published',
       // Capture-at-publish (Tier 1):
       bestOddsAtPublish,

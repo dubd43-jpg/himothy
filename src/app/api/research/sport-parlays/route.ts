@@ -10,21 +10,13 @@ export const maxDuration = 120;
 // to Postgres) so the posted parlays don't shift mid-day across Vercel instances.
 
 function buildExclusionSet(boardPicks: any[]): Set<string> {
-  // Owner directive 2026-06-01: Sport Parlays cannot include ANY leg on a game the
-  // main board already picked. Was previously exact (gameId|selection) which let
-  // Sport Parlays pick the OPPOSITE SIDE on a shared game — the engine flipped
-  // Detroit ML via tendency, Sport Parlays kept Tampa ML via raw win-prob — and
-  // the site appeared to contradict itself. Now: game-level dedup. Sport Parlays
-  // plays only on games the main board left alone.
+  // We never repeat the main-board picks inside a parlay. Exclude each exact pick
+  // (gameId|selection) so the sport parlay has to find different angles.
   const out = new Set<string>();
   for (const p of boardPicks) {
-    if (!p?.gameId) continue;
-    out.add(`game:${p.gameId}`);
-    // Keep the legacy pick-level key too in case any downstream code still reads it.
-    if (p.selection) {
-      const norm = String(p.selection).toLowerCase().replace(/\s+/g, ' ').trim();
-      out.add(`${p.gameId}|${norm}`);
-    }
+    if (!p?.gameId || !p?.selection) continue;
+    const norm = String(p.selection).toLowerCase().replace(/\s+/g, ' ').trim();
+    out.add(`${p.gameId}|${norm}`);
   }
   return out;
 }

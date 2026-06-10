@@ -3,17 +3,16 @@ import Link from "next/link";
 // Evergreen sport-specific SEO content. Each block targets long-tail keywords ("nba picks
 // today", "mlb run line picks", "best parlay strategy") while being substantial enough
 // (300-500 words) that Google treats the page as having real content, not just a feed
-// of dynamic data. Internal links pass authority to /trends, /asleep, /edges.
+// of dynamic data. Internal links pass authority to /picks, sport boards, and /stats.
 
 const cardCls = "rounded-2xl border border-white/8 bg-white/[0.02] p-5 md:p-6";
 
 function CrossLinks() {
   return (
     <div className="mt-6 flex flex-wrap gap-2 not-prose">
-      <Link href="/edges" className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-[11px] font-black uppercase tracking-widest text-emerald-400 hover:bg-emerald-400/20 transition">Tonight's Edges</Link>
-      <Link href="/trends" className="rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1 text-[11px] font-black uppercase tracking-widest text-amber-400 hover:bg-amber-400/20 transition">Hot Tendencies</Link>
-      <Link href="/asleep" className="rounded-full border border-orange-400/30 bg-orange-400/10 px-3 py-1 text-[11px] font-black uppercase tracking-widest text-orange-400 hover:bg-orange-400/20 transition">Sleeper Picks</Link>
-      <Link href="/value" className="rounded-full border border-sky-400/30 bg-sky-400/10 px-3 py-1 text-[11px] font-black uppercase tracking-widest text-sky-400 hover:bg-sky-400/20 transition">Value Plays</Link>
+      <Link href="/picks" className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-[11px] font-black uppercase tracking-widest text-primary hover:bg-primary/20 transition">Today's Picks</Link>
+      <Link href="/picks?board=soccer" className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-[11px] font-black uppercase tracking-widest text-emerald-400 hover:bg-emerald-400/20 transition">Soccer Board</Link>
+      <Link href="/picks?board=tennis" className="rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1 text-[11px] font-black uppercase tracking-widest text-amber-400 hover:bg-amber-400/20 transition">Tennis Board</Link>
       <Link href="/stats" className="rounded-full border border-white/15 bg-white/[0.04] px-3 py-1 text-[11px] font-black uppercase tracking-widest text-white/60 hover:bg-white/[0.08] transition">Verified Record</Link>
     </div>
   );
@@ -31,14 +30,14 @@ export function NbaSeoContent() {
         Pace is the biggest variable nobody talks about. A high-pace team like the Pacers or Nuggets playing a low-pace team like the Celtics or Magic produces a total that's almost never priced correctly. We pull each team's last-10 average game total, compute the midpoint, and only post the over/under when the gap with the posted line is real (0.7+ points of edge). Below that we say <strong>stay away</strong> instead of forcing a coin flip.
       </p>
       <p className="text-white/70 leading-relaxed mb-3">
-        Spread picks lean on the same model. We compute the projected home margin from each team's last-10 average margin, adjust for a league-standard 2.5-point home-court bump (1.5 for road favorites), and compare to tonight's number. The pick lands as a <Link href="/edges" className="text-emerald-400 underline">value edge</Link> when our model differs from the line by 1.5+ points.
+        Spread picks lean on the same model. We compute the projected home margin from each team's last-10 average margin, adjust for a league-standard 2.5-point home-court bump (1.5 for road favorites), and compare to tonight's number. The pick lands as a <Link href="/picks" className="text-emerald-400 underline">value edge</Link> when our model differs from the line by 1.5+ points.
       </p>
       <h3 className="text-lg font-black text-white mt-5 mb-2">NBA player props + alt lines</h3>
       <p className="text-white/70 leading-relaxed mb-3">
         On every NBA pick page you'll see the alt-line ladder for points, rebounds, assists, and threes — multi-book best prices for each step. Sportsbooks price these soft, so the goal is to surface the cheapest line at the best book rather than just take the headline number. We also flag streaks (last-5 over/under counts) so you see whether a player is heating up before you bet the prop.
       </p>
       <p className="text-white/70 leading-relaxed">
-        Want the sharpest reads only? <Link href="/edges" className="text-primary underline">Tonight's Edges</Link> filters to picks with real positive expected value vs. the consensus true line. <Link href="/trends" className="text-primary underline">Hot Tendencies</Link> surfaces teams 7-3 or better against the spread or total over their last 10. <Link href="/asleep" className="text-primary underline">Sleeper Picks</Link> covers WNBA + lesser leagues where books are softest.
+        Every market type — spreads, props, totals, NRFI — competes for the same confidence ranking. The top NBA picks of the day land on the <Link href="/picks" className="text-primary underline">HIMOTHY Board</Link>. For the full NBA slate see the <Link href="/nba-picks-today" className="text-primary underline">NBA picks page</Link>.
       </p>
       <CrossLinks />
     </article>
@@ -65,7 +64,7 @@ export function MlbSeoContent() {
         On the breakdown page for every MLB game you'll see alt-prop ladders for pitcher strikeouts, batter hits, total bases, and home runs. Multi-book best prices, recent-form streaks (over/under the line last 5 starts), and matchup notes. These markets are the softest sportsbooks offer — the math edges are bigger than you'd expect.
       </p>
       <p className="text-white/70 leading-relaxed">
-        See the <Link href="/trends" className="text-primary underline">Hot Tendencies</Link> page for teams 7-3 or better ATS or to the over their last 10 games. Verified record at <Link href="/stats" className="text-primary underline">/stats</Link>.
+        MLB picks — spreads, run lines, F5 totals, and NRFI — compete for slots alongside every other sport on the <Link href="/picks" className="text-primary underline">HIMOTHY Board</Link>. Full graded record at <Link href="/stats" className="text-primary underline">/stats</Link>.
       </p>
       <CrossLinks />
     </article>
@@ -81,14 +80,14 @@ export function NcaaBasketballSeoContent() {
       </p>
       <h3 className="text-lg font-black text-white mt-5 mb-2">Why college basketball totals move so much</h3>
       <p className="text-white/70 leading-relaxed mb-3">
-        Pace is the single biggest variable in college hoops. A 70-possession team playing a 62-possession team almost always produces a total between the two — but books price toward the historical average, missing the matchup. We compute each team's last-10 average game total and surface the gap as a real <Link href="/edges" className="text-emerald-400 underline">edge</Link> when it's 0.7+ points off the posted line.
+        Pace is the single biggest variable in college hoops. A 70-possession team playing a 62-possession team almost always produces a total between the two — but books price toward the historical average, missing the matchup. We compute each team's last-10 average game total and surface the gap as a real <Link href="/picks" className="text-emerald-400 underline">edge</Link> when it's 0.7+ points off the posted line.
       </p>
       <h3 className="text-lg font-black text-white mt-5 mb-2">Conference tournaments and March Madness</h3>
       <p className="text-white/70 leading-relaxed mb-3">
         Bracket play is where the public floods one side and softens the other. Public-money tracking, sharp-money signals, and the bigger home-court advantage in conference tournament games (when applicable) all feed into our model. The system never forces a pick — when the tendency math cancels out, we say <strong>stay away</strong> rather than guess.
       </p>
       <p className="text-white/70 leading-relaxed">
-        Looking for the quieter spots? <Link href="/asleep" className="text-orange-400 underline">Sleeper Picks</Link> highlights mid-major and lesser-watched conference games where books are softest. <Link href="/trends" className="text-amber-400 underline">Hot Tendencies</Link> surfaces teams 7-3 or better ATS over their last 10.
+        Mid-major conference games are where books are softest — if one clears the confidence bar, it earns a slot on the <Link href="/picks" className="text-primary underline">HIMOTHY Board</Link> alongside every other sport and market.
       </p>
       <CrossLinks />
     </article>
@@ -102,13 +101,9 @@ export function ParlaySeoContent() {
       <p className="text-white/70 leading-relaxed mb-4">
         Most parlays lose because they stack heavy favorites at -300 or worse, where one upset wipes out months of action. Our parlay engine runs the opposite way: we cap every leg at -450 maximum, prioritize legs at -185 to +160 where the real money lives, and dedupe against the regular pick board so the parlay never overlaps with picks we've already posted as straights.
       </p>
-      <h3 className="text-lg font-black text-white mt-5 mb-2">The $10 Parlay Plan</h3>
+      <h3 className="text-lg font-black text-white mt-5 mb-2">System Parlay</h3>
       <p className="text-white/70 leading-relaxed mb-3">
-        Our daily flagship parlay. 3-4 legs, all from today's analyzed slate, picked for correlation when possible. The $10 stake is designed to chase real payouts ($50-$250 range) without a stake that ruins your bankroll if it misses. <Link href="/parlay-plan" className="text-primary underline">See today's $10 Parlay Plan →</Link>
-      </p>
-      <h3 className="text-lg font-black text-white mt-5 mb-2">Power 20 + Power 10 — heavy chalk stacks</h3>
-      <p className="text-white/70 leading-relaxed mb-3">
-        Two big-payout parlays generated daily from today's heavy-favorite slate. Power 20 stacks 20 chalk legs for moonshot payouts; Power 10 is the safer 10-leg version. Every leg is capped at -450, every leg comes from a different game (correlation-aware), and the legs never overlap with picks already on the regular board. Available on the picks page under the Power 20 tab.
+        When the edge is real, a system parlay drops at the bottom of the board — 2-3 legs, built from the same analyzed slate as the straights. Not every day, only when it earns its spot. <Link href="/picks" className="text-primary underline">See today's board →</Link>
       </p>
       <h3 className="text-lg font-black text-white mt-5 mb-2">Same Game Parlay (SGP)</h3>
       <p className="text-white/70 leading-relaxed mb-3">
@@ -138,7 +133,7 @@ export function WnbaPropsSeoContent() {
         Star WNBA players drive most prop interest. Clark&apos;s threes/assists ladders, Wilson&apos;s points/rebounds, Ionescu&apos;s threes — all are markets where the public hammers one side and the line moves accordingly. Our model uses last-5 game streak data (how many times the player has gone over/under recently), recent-form averages, and matchup-based pace adjustments to land on the alt-line step with the real edge.
       </p>
       <p className="text-white/70 leading-relaxed">
-        Browse <Link href="/picks?board=north-american" className="text-primary underline">tonight&apos;s WNBA picks</Link> alongside the NBA, NHL, MLB slate, or jump to <Link href="/asleep" className="text-orange-400 underline">Sleeper Picks</Link> for the lesser-watched WNBA matchups where books are softest.
+        Browse <Link href="/picks" className="text-primary underline">tonight&apos;s HIMOTHY Board</Link> — WNBA picks compete alongside NBA, NHL, and MLB for slots by confidence. The quieter WNBA matchups where books are softest often earn spots on the board precisely because the edges are bigger.
       </p>
       <CrossLinks />
     </article>
@@ -161,7 +156,7 @@ export function KboSeoContent() {
         Heavy KBO favorites often price at -240 or worse on the moneyline — too steep for a straight bet (our system caps ML picks at -185). For those games we convert to the run line at standard -110, where the value lives. Same approach as MLB: avoid the juice trap, get paid for being right.
       </p>
       <p className="text-white/70 leading-relaxed">
-        KBO picks live in the <Link href="/asleep" className="text-orange-400 underline">Sleeper Picks</Link> tile on the main board — quieter markets where edges are bigger. <Link href="/trends" className="text-amber-400 underline">Hot Tendencies</Link> surfaces KBO teams 7-3 or better against the spread or total over their last 10.
+        KBO picks compete on the <Link href="/global-picks" className="text-primary underline">Global Pack</Link> — international markets where the edges run bigger because books price them softer. If a KBO play ranks high enough in overall confidence, it can earn a slot on the <Link href="/picks" className="text-primary underline">HIMOTHY Board</Link>.
       </p>
       <CrossLinks />
     </article>
@@ -189,7 +184,7 @@ export function F5SeoContent() {
         Every MLB pick breakdown page on this site surfaces the F5 total, spread, and moneyline with multi-book best prices. Lines are pulled from The Odds API every 15 minutes; we compare the consensus F5 total to each starter&apos;s recent first-5-inning ERA + opposing lineup quality and flag the strongest reads on the main MLB board.
       </p>
       <p className="text-white/70 leading-relaxed">
-        See <Link href="/mlb-picks" className="text-primary underline">today&apos;s full MLB slate</Link>, or for the niche-but-related angle, check the <Link href="/nrfi" className="text-primary underline">NRFI (No Runs First Inning)</Link> picks — first-inning only, even sharper edge when both pitchers are first-inning specialists.
+        See <Link href="/mlb-picks" className="text-primary underline">today&apos;s full MLB slate</Link>. NRFI (No Runs First Inning) is one of the market types the engine scores — when the first-inning pitcher matchup is sharp enough, it competes for a slot just like any other play.
       </p>
       <CrossLinks />
     </article>
@@ -209,11 +204,11 @@ export function MissouriSeoContent() {
       </p>
       <h3 className="text-lg font-black text-white mt-5 mb-2">Missouri teams to bet — Cardinals, Royals, Chiefs, Blues</h3>
       <p className="text-white/70 leading-relaxed mb-3">
-        Public money in Missouri leans hard on home teams. The Cardinals (MLB), Royals (MLB), Chiefs (NFL), and Blues (NHL) routinely see lines move 1-2 points before kickoff/first pitch when MO books start taking heavy action on the home side. That public pressure creates value on the opposite side — a classic contrarian angle. Our system flags these moves on the <Link href="/edges" className="text-emerald-400 underline">Tonight&apos;s Edges</Link> page when the math agrees.
+        Public money in Missouri leans hard on home teams. The Cardinals (MLB), Royals (MLB), Chiefs (NFL), and Blues (NHL) routinely see lines move 1-2 points before kickoff/first pitch when MO books start taking heavy action on the home side. That public pressure creates value on the opposite side — a classic contrarian angle. Our engine scores these moves by confidence, and when the math agrees they earn a slot on the <Link href="/picks" className="text-emerald-400 underline">HIMOTHY Board</Link>.
       </p>
       <h3 className="text-lg font-black text-white mt-5 mb-2">Free Missouri picks every day</h3>
       <p className="text-white/70 leading-relaxed mb-3">
-        Every pick on the daily board is free — no email signup, no paywall, no upsell. The Grand Slam, Pressure Pack, VIP 4-Pack, $10 Parlay Plan, and Sleeper Picks are all viewable. Verified record at <Link href="/stats" className="text-primary underline">/stats</Link>.
+        Every pick on the daily board is free to browse — the top 7 plays of the day ranked by confidence, any sport, any market. System parlay at the bottom when earned. Verified record at <Link href="/stats" className="text-primary underline">/stats</Link>.
       </p>
       <p className="text-white/70 leading-relaxed">
         Browse <Link href="/picks" className="text-primary underline">tonight&apos;s full slate</Link>, or jump to a sport: <Link href="/mlb-picks" className="text-primary underline">MLB</Link>, <Link href="/nba-picks-today" className="text-primary underline">NBA</Link>, <Link href="/best-parlay-picks" className="text-primary underline">parlays</Link>.
@@ -239,10 +234,10 @@ export function SportsPicksTodaySeoContent() {
       </ul>
       <h3 className="text-lg font-black text-white mt-5 mb-2">How we find the edges</h3>
       <p className="text-white/70 leading-relaxed mb-3">
-        Real-line value (when our best price beats the consensus true line), strong ATS or Over/Under tendency (7-3 or better over the last 10), sharp-money alignment (where the books are taking heavy action on our side), and asleep-market edges (lesser-watched leagues where books haven't priced as tightly). All four show up on the <Link href="/edges" className="text-emerald-400 underline">Tonight's Edges</Link> page.
+        Real-line value (when our best price beats the consensus true line), strong ATS or Over/Under tendency (7-3 or better over the last 10), sharp-money alignment, and edges in quieter markets where books haven't priced as tightly. Every pick — spread, total, prop, NRFI, period play — gets scored the same way and competes for a slot by confidence.
       </p>
       <p className="text-white/70 leading-relaxed">
-        The full verified record lives at <Link href="/stats" className="text-primary underline">/stats</Link> — every graded pick since day one, broken out by product (Grand Slam, Pressure Pack, VIP 4-Pack, Parlay Plan), by odds bucket, and by parlay leg count.
+        The full verified record lives at <Link href="/stats" className="text-primary underline">/stats</Link> — every graded pick since launch, Straights and Parlays tracked separately.
       </p>
       <CrossLinks />
     </article>

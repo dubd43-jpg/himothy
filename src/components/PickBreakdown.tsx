@@ -342,7 +342,7 @@ export function PickSummaryCard({ pick, href, index, live, hideResultWatermark, 
         </div>
         {pick.isAsleepPick && (
           <div className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-amber-400/30 bg-amber-400/10 px-2.5 py-1 text-[9px] font-black uppercase tracking-widest text-amber-300">
-            <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" /> Asleep Pick · {pick.league}
+            <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" /> Under the Radar · {pick.league}
           </div>
         )}
         <div className="mt-2 flex items-center justify-between gap-3">

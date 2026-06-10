@@ -169,28 +169,21 @@ function PreGameCard({ pick, validation, isSelected, onToggleSelect }: { pick: P
         </div>
       </div>
 
-      {/* 3. Why We Like It — reasoning surfaced prominently (owner directive). Was
-          buried behind a "Full Decision Data" toggle + line-clamp-2. Now: visible at
-          the top of this section with a clear "Why we like it" header, no clamping. */}
+      {/* 3. Audit & Analysis Toggles */}
       <div className="p-6 md:p-8 space-y-4 flex-1">
-        {pick.reasoning && (
-          <div className="rounded-2xl border border-primary/20 bg-primary/[0.05] p-4">
-            <div className="text-[10px] font-black uppercase tracking-[0.3em] text-primary/70 mb-2 flex items-center gap-2">
-              <Cpu className="w-3 h-3" /> Why we like it
-            </div>
-            <p className="text-sm md:text-base font-medium text-white/85 leading-relaxed">
-              {pick.reasoning}
-            </p>
-          </div>
+        {!showAudit && (
+          <p className="text-sm md:text-base font-medium text-white/50 leading-relaxed italic line-clamp-2 mb-4">
+            {pick.reasoning}
+          </p>
         )}
 
-        {/* Technical Registry Toggle — now optional drill-in for the deep audit data */}
-        <div className="pt-4">
-           <button
+        {/* Technical Registry Toggle */}
+        <div className="pt-12">
+           <button 
              onClick={() => setShowAudit(!showAudit)}
              className="w-full py-3 px-6 rounded-xl border border-white/5 bg-white/[0.02] text-[9px] font-black text-white/40 uppercase tracking-[0.3em] hover:bg-white/5 transition-all flex items-center justify-center gap-3 group"
            >
-              {showAudit ? "Hide deep audit" : "Show deep audit"}
+              {showAudit ? "Minimize Audit" : "Full Decision Data"}
               <div className={`transition-transform duration-700 ${showAudit ? 'rotate-180' : ''}`}>
                  <Activity className="w-3 h-3" />
               </div>

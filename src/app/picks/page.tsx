@@ -24,7 +24,6 @@ import {
   CheckCircle2,
   XCircle,
   Radio,
-  Search,
   Target,
   Flame,
   DollarSign,
@@ -93,12 +92,6 @@ interface DeepPick {
   sharpFlags?: SharpFlag[];
   sharpIntel?: { betting: any; weather: any; rest: any; sharpScore: number; } | null;
   bigGameLabel?: string | null;
-  // Highlighted single-biggest-reason banner + deep pitcher stats for MLB picks
-  keyFactor?: { category: string; headline: string; detail: string };
-  pitcherSpotlight?: {
-    picked: { name: string; throws: 'L' | 'R' | null; starts: number; eraL5: number | null; whipL5: number | null; kPer9L5: number | null; hitsPerStart: number | null; lastStartER: number | null; lastStartIP: number | null } | null;
-    opp:    { name: string; throws: 'L' | 'R' | null; starts: number; eraL5: number | null; whipL5: number | null; kPer9L5: number | null; hitsPerStart: number | null; lastStartER: number | null; lastStartIP: number | null } | null;
-  };
 }
 interface NrfiPlay {
   gameId: string; eventName: string; league: string; startTime: string;
@@ -112,6 +105,7 @@ interface DailyPicksData {
   nrfi?: NrfiPlay[];
   valuePlays?: DeepPick[];
   asleepPicks?: DeepPick[];
+  periodPlays?: DeepPick[];
   outrights?: OutrightTournament[];
   totalGamesScanned: number;
 }
@@ -585,28 +579,19 @@ function LiveRecordBar() {
   const hasRecord = (at.wins + at.losses) > 0;
   if (!hasRecord) return null;
 
-  // Per user: ONLY Grand Slam, Pressure Pack, and VIP 4-Pack count toward the main
-  // "Straights" stat (user prefers "Straights" over "Singles" — sports-betting term).
-  // Everything else (Big Games, Personal Pick, Parlays, NRFI, Asleep, Value Plays) is
-  // shown separately or just lives on its own tile. This keeps the headline number tied
-  // to our flagship core products.
+  // All straight picks (any market type) count toward the Straights stat.
+  // Parlays tracked separately. Everything is one pool now — no separate Big Games,
+  // Personal, NRFI, Asleep categories.
   const lines = stats.productLineStats || {};
-  const isCoreSingle = (k: string) => /^(grand slam|pressure pack|vip 4-pack)$/i.test(k);
   const isParlayLine = (k: string) => /parlay|hailmary/i.test(k);
-  const isMarqueeLine = (k: string) => /big games|marquee/i.test(k);
-  const isPersonalLine = (k: string) => /personal/i.test(k);
-  const singles = Object.entries(lines).filter(([k]) => isCoreSingle(k));
+  const singles = Object.entries(lines).filter(([k]) => !isParlayLine(k));
   const parlays = Object.entries(lines).filter(([k]) => isParlayLine(k));
-  const marquee = Object.entries(lines).filter(([k]) => isMarqueeLine(k));
-  const personal = Object.entries(lines).filter(([k]) => isPersonalLine(k));
   const sum = (rows: Array<[string, ProductLineStats]>) => rows.reduce(
     (acc, [, s]) => ({ wins: acc.wins + s.wins, losses: acc.losses + s.losses, pushes: acc.pushes + s.pushes, units: acc.units + s.units }),
     { wins: 0, losses: 0, pushes: 0, units: 0 },
   );
   const singlesAgg = sum(singles);
   const parlaysAgg = sum(parlays);
-  const marqueeAgg = sum(marquee);
-  const personalAgg = sum(personal);
   const wlPct = (w: number, l: number) => (w + l > 0 ? `${Math.round((w / (w + l)) * 100)}%` : '—');
   const unitStr = (u: number) => `${u >= 0 ? '+' : ''}${u.toFixed(1)}u`;
 
@@ -628,20 +613,6 @@ function LiveRecordBar() {
             <span className="text-emerald-400/70 ml-1">{wlPct(parlaysAgg.wins, parlaysAgg.losses)}</span>
             <span className={`ml-1 ${parlaysAgg.units >= 0 ? 'text-emerald-400/80' : 'text-red-400/80'}`}>{unitStr(parlaysAgg.units)}</span>
           </span>
-          {(marqueeAgg.wins + marqueeAgg.losses) > 0 && (
-            <span className="text-white/50">
-              Big Games <span className="text-white">{marqueeAgg.wins}-{marqueeAgg.losses}{marqueeAgg.pushes > 0 ? `-${marqueeAgg.pushes}` : ''}</span>
-              <span className="text-emerald-400/70 ml-1">{wlPct(marqueeAgg.wins, marqueeAgg.losses)}</span>
-              <span className={`ml-1 ${marqueeAgg.units >= 0 ? 'text-emerald-400/80' : 'text-red-400/80'}`}>{unitStr(marqueeAgg.units)}</span>
-            </span>
-          )}
-          {(personalAgg.wins + personalAgg.losses) > 0 && (
-            <span className="text-white/50">
-              Personal <span className="text-white">{personalAgg.wins}-{personalAgg.losses}{personalAgg.pushes > 0 ? `-${personalAgg.pushes}` : ''}</span>
-              <span className="text-emerald-400/70 ml-1">{wlPct(personalAgg.wins, personalAgg.losses)}</span>
-              <span className={`ml-1 ${personalAgg.units >= 0 ? 'text-emerald-400/80' : 'text-red-400/80'}`}>{unitStr(personalAgg.units)}</span>
-            </span>
-          )}
           <Link href="/results" className="text-white/30 hover:text-emerald-400 transition-colors underline underline-offset-2">
             Full Record →
           </Link>
@@ -707,7 +678,7 @@ function PublicMoneyBadge({ awayTeam, homeTeam, selectionSide, league }: {
 
 // Clean, clickable SUMMARY card. The full breakdown (win %, H2H, props, form, reasons)
 // lives on the breakdown page the card links to — the whole card is the click target.
-function DeepPickCard({ pick, variant, href, live, lateNewsNote }: { pick: DeepPick; variant: 'grand-slam' | 'pressure' | 'vip' | 'parlay'; href?: string; live?: LivePickState | null; lateNewsNote?: string | null }) {
+function DeepPickCard({ pick, variant, href, live }: { pick: DeepPick; variant: 'grand-slam' | 'pressure' | 'vip' | 'parlay'; href?: string; live?: LivePickState | null }) {
   const startTime = formatGameDateTimeET(pick.startTime) || TIME_TBD;
   const showLive = !!live && live.state !== 'pre';
   const liveClockStr = live ? [live.period, live.clock && live.clock !== '0:00' ? live.clock : null].filter(Boolean).join(' · ') : '';
@@ -795,54 +766,6 @@ function DeepPickCard({ pick, variant, href, live, lateNewsNote }: { pick: DeepP
             )}
           </div>
         )}
-        {/* CONFIDENCE BAND — owner directive: customers should see at a glance which picks
-            are slam dunks vs strong vs solid-best-available. Sets expectations + builds trust. */}
-        <ConfidenceBand score={pick.confidenceScore} />
-
-        {/* KEY FACTOR — owner directive: every pick must show the SINGLE BIGGEST reason
-            we took it, highlighted prominently. Customer sees this BEFORE anything else
-            so they immediately know "we like this because of X." */}
-        {pick.keyFactor && <KeyFactorBanner factor={pick.keyFactor} />}
-
-        {/* PITCHER SPOTLIGHT — for MLB picks, show both starters' full L5 stats. Critical
-            when the KEY FACTOR is the pitcher matchup; useful context for any MLB pick. */}
-        {pick.pitcherSpotlight && (pick.pitcherSpotlight.picked || pick.pitcherSpotlight.opp) && (
-          <PitcherSpotlight spotlight={pick.pitcherSpotlight} pickedAbbr={pick.homeTeam.abbreviation === pick.selection.split(' ')[0] ? pick.homeTeam.abbreviation : pick.awayTeam.abbreviation} oppAbbr={pick.homeTeam.abbreviation === pick.selection.split(' ')[0] ? pick.awayTeam.abbreviation : pick.homeTeam.abbreviation} highlight={pick.keyFactor?.category === 'pitcher'} />
-        )}
-        {/* LATE NEWS warning — the cron flags this pick when an OUT/scratch happened
-            after morning publish. We WARN, never auto-pull. Customer sees "verify before betting." */}
-        {lateNewsNote && (
-          <div className="flex items-start gap-2 rounded-lg border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-xs">
-            <span className="text-amber-400 font-black shrink-0">⚠</span>
-            <div>
-              <div className="text-[10px] font-black uppercase tracking-widest text-amber-300">Late news</div>
-              <div className="text-amber-100/85 mt-0.5">{lateNewsNote}</div>
-              <div className="text-[10px] text-amber-200/60 mt-1">Verify lineup before betting.</div>
-            </div>
-          </div>
-        )}
-        {/* WHY WE LIKE IT — top 4 reasons surface prominently. Customer sees the
-            FULL case for the pick before deciding. Especially important on dog flips
-            where the win-prob would seem to argue against — the pitcher matchup,
-            bullpen, line movement, and tendency reasons need to land FIRST. */}
-        {pick.reasonsFor && pick.reasonsFor.length > 0 && (
-          <ul className="space-y-1.5 text-[12px] leading-relaxed text-white/75 border-t border-white/5 pt-3">
-            {pick.reasonsFor.slice(0, 4).map((r, i) => (
-              <li key={i} className="flex gap-2"><span className="text-emerald-400 shrink-0">✓</span><span>{r}</span></li>
-            ))}
-          </ul>
-        )}
-        {/* RISKS — surface key reasonsAgainst so the customer sees them too. Honest
-            picking shows both sides. Especially important on dog flips where the
-            losing streak / opp's hot hitting is real context. */}
-        {pick.reasonsAgainst && pick.reasonsAgainst.length > 0 && (
-          <ul className="space-y-1.5 text-[12px] leading-relaxed text-white/55 border-t border-white/5 pt-3">
-            <li className="text-[10px] font-black uppercase tracking-widest text-amber-400/70">Honest risks</li>
-            {pick.reasonsAgainst.slice(0, 2).map((r, i) => (
-              <li key={i} className="flex gap-2"><span className="text-amber-400/70 shrink-0">!</span><span>{r}</span></li>
-            ))}
-          </ul>
-        )}
         {/* Sharp-signal badges are methodology (our edge) — back-end only, hidden from customers. */}
         {href && (
           <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-primary/70 group-hover:text-primary transition-colors">
@@ -859,126 +782,6 @@ function DeepPickCard({ pick, variant, href, live, lateNewsNote }: { pick: DeepP
     : <Link href={href} className="block">{inner}</Link>;
 }
 
-
-// CONFIDENCE BAND — three-tier label customers see on every pick card. Sets
-// expectations honestly: SLAM DUNK is a 96+ "highest conviction", STRONG is 88-95
-// "real edge", SOLID is 80-87 "best available — proceed at your conviction." This
-// is what customers ASKED for: not every pick is a lock, and we tell them which is which.
-function ConfidenceBand({ score }: { score: number }) {
-  let label: string, bgCls: string, textCls: string, blurb: string;
-  if (score >= 96) {
-    label = 'SLAM DUNK';
-    bgCls = 'bg-gradient-to-r from-amber-400/20 to-amber-500/10 border-amber-400/40';
-    textCls = 'text-amber-300';
-    blurb = 'Highest conviction tonight';
-  } else if (score >= 88) {
-    label = 'STRONG';
-    bgCls = 'bg-gradient-to-r from-emerald-500/15 to-emerald-500/5 border-emerald-500/30';
-    textCls = 'text-emerald-300';
-    blurb = 'Real edge across the data';
-  } else {
-    label = 'SOLID';
-    bgCls = 'bg-gradient-to-r from-sky-500/12 to-sky-500/4 border-sky-500/25';
-    textCls = 'text-sky-300';
-    blurb = 'Best available — bet at your conviction';
-  }
-  return (
-    <div className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 ${bgCls}`}>
-      <div className="flex items-center gap-2">
-        <span className={`text-[10px] font-black uppercase tracking-widest ${textCls}`}>{label}</span>
-        <span className="text-[10px] text-white/40 hidden sm:inline">· {blurb}</span>
-      </div>
-      <span className={`text-[10px] font-black tabular-nums ${textCls}`}>{score.toFixed(0)}</span>
-    </div>
-  );
-}
-
-// KEY FACTOR BANNER — the single biggest reason we took this pick, surfaced
-// prominently above all other reasoning. Owner directive: every pick MUST show
-// a clear key-factor explanation so customers immediately know why.
-function KeyFactorBanner({ factor }: { factor: { category: string; headline: string; detail: string } }) {
-  // Category-driven color (so the bar tells the customer at a glance what kind of edge)
-  const stylesByCategory: Record<string, { ring: string; bg: string; iconBg: string; iconColor: string; emoji: string }> = {
-    pitcher:        { ring: "border-emerald-400/50", bg: "from-emerald-500/15 to-emerald-500/5", iconBg: "bg-emerald-500/25", iconColor: "text-emerald-300", emoji: "⚾" },
-    bullpen:        { ring: "border-amber-400/50",   bg: "from-amber-500/15 to-amber-500/5",     iconBg: "bg-amber-500/25",   iconColor: "text-amber-300",   emoji: "🔥" },
-    line_movement:  { ring: "border-sky-400/50",     bg: "from-sky-500/15 to-sky-500/5",         iconBg: "bg-sky-500/25",     iconColor: "text-sky-300",     emoji: "📈" },
-    odds_bucket:    { ring: "border-purple-400/50",  bg: "from-purple-500/15 to-purple-500/5",   iconBg: "bg-purple-500/25",  iconColor: "text-purple-300",  emoji: "👁" },
-    streak_real:    { ring: "border-rose-400/50",    bg: "from-rose-500/15 to-rose-500/5",       iconBg: "bg-rose-500/25",    iconColor: "text-rose-300",    emoji: "🔥" },
-    first_frame:    { ring: "border-cyan-400/50",    bg: "from-cyan-500/15 to-cyan-500/5",       iconBg: "bg-cyan-500/25",    iconColor: "text-cyan-300",    emoji: "⚡" },
-    q1_h1:          { ring: "border-cyan-400/50",    bg: "from-cyan-500/15 to-cyan-500/5",       iconBg: "bg-cyan-500/25",    iconColor: "text-cyan-300",    emoji: "⚡" },
-    injury:         { ring: "border-red-400/50",     bg: "from-red-500/15 to-red-500/5",         iconBg: "bg-red-500/25",     iconColor: "text-red-300",     emoji: "🏥" },
-    ats:            { ring: "border-lime-400/50",    bg: "from-lime-500/15 to-lime-500/5",       iconBg: "bg-lime-500/25",    iconColor: "text-lime-300",    emoji: "📊" },
-    value:          { ring: "border-yellow-400/50",  bg: "from-yellow-500/15 to-yellow-500/5",   iconBg: "bg-yellow-500/25",  iconColor: "text-yellow-300",  emoji: "💎" },
-    win_prob:       { ring: "border-white/20",       bg: "from-white/[0.05] to-white/[0.01]",    iconBg: "bg-white/10",       iconColor: "text-white/70",    emoji: "🎯" },
-  };
-  const style = stylesByCategory[factor.category] || stylesByCategory.win_prob;
-  return (
-    <div className={`rounded-xl border-2 ${style.ring} bg-gradient-to-br ${style.bg} p-3 space-y-2`}>
-      <div className="flex items-center gap-2">
-        <div className={`flex items-center justify-center h-7 w-7 rounded-lg ${style.iconBg} text-sm`}>{style.emoji}</div>
-        <div className="flex flex-col leading-tight">
-          <span className="text-[9px] font-black uppercase tracking-[0.2em] text-white/40">Key Factor</span>
-          <span className={`text-[12px] font-black uppercase tracking-wider ${style.iconColor}`}>{factor.headline}</span>
-        </div>
-      </div>
-      <div className="text-[12px] leading-relaxed text-white/85">{factor.detail}</div>
-    </div>
-  );
-}
-
-// PITCHER SPOTLIGHT — both starters' deep L5 stats. Highlighted when the KEY FACTOR
-// is the pitcher matchup (the whole point of this block for those picks).
-function PitcherSpotlight({ spotlight, pickedAbbr, oppAbbr, highlight }: {
-  spotlight: NonNullable<DeepPick['pitcherSpotlight']>;
-  pickedAbbr: string;
-  oppAbbr: string;
-  highlight: boolean;
-}) {
-  const cell = (p: NonNullable<NonNullable<DeepPick['pitcherSpotlight']>['picked']>, label: string, ourSide: boolean) => {
-    const eraTone = p.eraL5 == null ? 'text-white/30' : p.eraL5 <= 2.5 ? 'text-emerald-400' : p.eraL5 <= 3.5 ? 'text-sky-400' : p.eraL5 <= 4.5 ? 'text-white/70' : 'text-red-400';
-    return (
-      <div className={`flex-1 min-w-0 ${ourSide ? '' : 'opacity-90'}`}>
-        <div className="flex items-baseline justify-between gap-2">
-          <span className="text-[9px] font-black uppercase tracking-widest text-white/40">{label}</span>
-          <span className="text-[9px] font-bold text-white/30">{p.throws ? `${p.throws}HP` : ''}</span>
-        </div>
-        <div className="text-sm font-black text-white truncate mt-0.5">{p.name}</div>
-        <div className="grid grid-cols-3 gap-1 mt-1.5 text-[10px]">
-          <div className="rounded bg-white/[0.04] px-1.5 py-1">
-            <div className="text-[8px] text-white/30 uppercase">ERA L{p.starts}</div>
-            <div className={`font-black tabular-nums ${eraTone}`}>{p.eraL5?.toFixed(2) ?? '—'}</div>
-          </div>
-          <div className="rounded bg-white/[0.04] px-1.5 py-1">
-            <div className="text-[8px] text-white/30 uppercase">WHIP</div>
-            <div className="font-black tabular-nums text-white/80">{p.whipL5?.toFixed(2) ?? '—'}</div>
-          </div>
-          <div className="rounded bg-white/[0.04] px-1.5 py-1">
-            <div className="text-[8px] text-white/30 uppercase">K/9</div>
-            <div className="font-black tabular-nums text-white/80">{p.kPer9L5?.toFixed(1) ?? '—'}</div>
-          </div>
-        </div>
-        {p.lastStartER != null && p.lastStartIP != null && (
-          <div className="mt-1 text-[10px] text-white/40">
-            Last start: <span className="font-bold text-white/65">{p.lastStartER} ER / {p.lastStartIP.toFixed(1)} IP</span>
-          </div>
-        )}
-      </div>
-    );
-  };
-  if (!spotlight.picked && !spotlight.opp) return null;
-  return (
-    <div className={`rounded-xl border ${highlight ? 'border-emerald-400/40 bg-emerald-500/[0.04]' : 'border-white/10 bg-white/[0.02]'} p-3 space-y-2`}>
-      <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-white/50">
-        <span>⚾ Pitcher Matchup</span>
-        {highlight && <span className="text-emerald-300/70 text-[9px]">· this is why we picked it</span>}
-      </div>
-      <div className="flex items-stretch gap-3 divide-x divide-white/8">
-        {spotlight.picked && cell(spotlight.picked, `${pickedAbbr} (us)`, true)}
-        {spotlight.opp && <div className="pl-3">{cell(spotlight.opp, oppAbbr, false)}</div>}
-      </div>
-    </div>
-  );
-}
 
 function CompactParlayLeg({ pick, index }: { pick: DeepPick; index: number }) {
   const oddsTextCls = pick.odds && pick.odds.startsWith('+') ? 'text-emerald-400' : 'text-sky-400';
@@ -1008,76 +811,31 @@ function WinProbBadge({ pct }: { pct: number }) {
   );
 }
 
-// Compute per-leg state from live scores — Power20 had no per-leg display, customer
-// couldn't tell which leg killed a parlay. Now every leg shows live/final + win/loss.
-function gradePower20Leg(leg: Power20Pick, liveMap: Record<string, any>): 'won' | 'lost' | 'push' | 'live' | 'pre' {
-  const g = liveMap[leg.gameId];
-  if (!g) return 'pre';
-  if (!g.isFinal && g.isLive) return 'live';
-  if (!g.isFinal) return 'pre';
-  if (g.homeScore === g.awayScore) return 'push';
-  if (leg.selectionSide !== 'home' && leg.selectionSide !== 'away') return 'pre';
-  const ourSideWon = leg.selectionSide === 'home' ? g.homeScore > g.awayScore : g.awayScore > g.homeScore;
-  return ourSideWon ? 'won' : 'lost';
-}
-
-function Power20Leg({ pick, index, live }: { pick: Power20Pick; index: number; live?: any }) {
+function Power20Leg({ pick, index }: { pick: Power20Pick; index: number }) {
   const oddsPos = pick.odds.startsWith('+');
-  const result: 'won' | 'lost' | 'push' | 'live' | 'pre' = live ? gradePower20Leg(pick, { [pick.gameId]: live }) : 'pre';
-  // Per-leg accent based on outcome — customer immediately sees which leg lost.
-  let accent = 'border-white/8 bg-white/[0.02]';
-  let badge: { txt: string; cls: string } | null = null;
-  if (result === 'won') {
-    accent = 'border-emerald-400/60 bg-emerald-500/[0.08]';
-    badge = { txt: 'W', cls: 'bg-emerald-500 text-black' };
-  } else if (result === 'lost') {
-    accent = 'border-red-500/60 bg-red-500/[0.08]';
-    badge = { txt: 'L', cls: 'bg-red-500 text-white' };
-  } else if (result === 'push') {
-    accent = 'border-white/15 bg-white/[0.04]';
-    badge = { txt: 'PUSH', cls: 'bg-white/20 text-white/70' };
-  } else if (result === 'live') {
-    accent = 'border-amber-400/40 bg-amber-500/[0.05]';
-    badge = { txt: 'LIVE', cls: 'bg-amber-500 text-black' };
-  }
-  const scoreLine = live && (live.isLive || live.isFinal)
-    ? `${pick.underdogName?.split(' ').pop() || 'AWAY'} ${live.awayScore ?? 0}–${live.homeScore ?? 0}`
-    : null;
-  // Build a short why-we-like-it from the data we have — Power20Pick doesn't carry
-  // reasonsFor, but we can synthesize one from winProbability + market + injury status.
-  const whyLine = `${pick.winProbability.toFixed(0)}% implied win probability${!pick.isInjuryClear && pick.injuryNote ? ` · ${pick.injuryNote}` : ''}`;
-
-  // Wrap in Link so every Power 20 leg is clickable to the detail view.
+  const mktColor = pick.marketType === 'runline' ? 'text-amber-400' : pick.marketType === 'spread' ? 'text-sky-400' : 'text-white/60';
   return (
-    <Link href={`/pick/${pick.gameId}?from=power20&selection=${encodeURIComponent(pick.selection)}`} className="block">
-      <div className={`flex items-center gap-3 rounded-xl border-2 p-3 transition-all hover:bg-white/[0.06] ${accent}`}>
-        <div className="w-6 h-6 shrink-0 rounded-full bg-white/5 flex items-center justify-center text-[10px] font-black text-white/40">
-          {index + 1}
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <div className="text-xs font-bold text-white truncate">{pick.selection}</div>
-            {badge && <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black ${badge.cls}`}>{badge.txt}</span>}
-          </div>
-          <div className="flex items-center gap-1.5 mt-0.5">
-            <span className="text-[10px] text-white/30 truncate">{pick.underdogName} · {pick.league}</span>
-            {!pick.isInjuryClear && (
-              <span className="text-[9px] text-amber-400/70 font-bold shrink-0">⚠ INJ</span>
-            )}
-          </div>
-          {scoreLine ? (
-            <div className="text-[10px] text-white/50 truncate font-mono">{scoreLine}</div>
-          ) : formatGameDateTimeET(pick.startTime) && (
-            <div className="text-[10px] text-white/30 truncate">{formatGameDateTimeET(pick.startTime)}</div>
-          )}
-          <div className="text-[10px] text-white/40 mt-1 truncate">{whyLine}</div>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <WinProbBadge pct={pick.winProbability} />
-          <span className={`text-sm font-black tabular-nums ${oddsPos ? 'text-emerald-400' : 'text-white/60'}`}>{pick.odds}</span>
-        </div>
+    <div className="flex items-center gap-3 rounded-xl border border-white/8 bg-white/[0.02] p-3 hover:bg-white/[0.04] transition-all">
+      <div className="w-6 h-6 shrink-0 rounded-full bg-white/5 flex items-center justify-center text-[10px] font-black text-white/40">
+        {index + 1}
       </div>
-    </Link>
+      <div className="flex-1 min-w-0">
+        <div className="text-xs font-bold text-white truncate">{pick.selection}</div>
+        <div className="flex items-center gap-1.5 mt-0.5">
+          <span className="text-[10px] text-white/30 truncate">{pick.underdogName} · {pick.league}</span>
+          {!pick.isInjuryClear && (
+            <span className="text-[9px] text-amber-400/70 font-bold shrink-0">⚠ INJ</span>
+          )}
+        </div>
+        {formatGameDateTimeET(pick.startTime) && (
+          <div className="text-[10px] text-white/30 truncate">{formatGameDateTimeET(pick.startTime)}</div>
+        )}
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        <WinProbBadge pct={pick.winProbability} />
+        <span className={`text-sm font-black tabular-nums ${oddsPos ? 'text-emerald-400' : 'text-white/60'}`}>{pick.odds}</span>
+      </div>
+    </div>
   );
 }
 
@@ -1246,7 +1004,7 @@ function Power20Section() {
               </div>
               <div className="relative space-y-2">
                 {activeParlay.legs.map((leg, i) => (
-                  <Power20Leg key={leg.gameId + leg.selection} pick={leg} index={i} live={liveMap[leg.gameId]} />
+                  <Power20Leg key={leg.gameId + leg.selection} pick={leg} index={i} />
                 ))}
               </div>
               <div className="relative pt-2 border-t border-white/5 text-[10px] text-white/30 font-semibold leading-relaxed">
@@ -1265,26 +1023,9 @@ function DeepResearchSection({ board }: { board: string }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const liveMap = useLiveScores();
-  // Late-news flags — fetched once on mount and refreshed every 5 min. Maps event_id →
-  // human-readable note ("Late news 22:45 UTC: Player X (OUT)"). Pick cards show a
-  // ⚠ badge + a warning line when a flag is present for their gameId.
-  const [lateNewsFlags, setLateNewsFlags] = useState<Record<string, string>>({});
-  useEffect(() => {
-    const loadLate = () => {
-      fetch('/api/picks/late-news', { cache: 'no-store' })
-        .then((r) => r.json())
-        .then((d) => { if (d?.success) setLateNewsFlags(d.flags || {}); })
-        .catch(() => {});
-    };
-    loadLate();
-    const iv = setInterval(loadLate, 5 * 60 * 1000);
-    return () => clearInterval(iv);
-  }, []);
   // Per-section stats (W-L, units, streak). Fetched from /api/records/summary, mapped to
   // each category tile so users see "Pressure Pack 12-5 (70%) +3.2u · 🔥 3W" inline.
   const [productStats, setProductStats] = useState<Record<string, TileStats>>({});
-  const [searchTerm, setSearchTerm] = useState("");
-  const [marketFilter, setMarketFilter] = useState<'all' | 'moneyline' | 'spread' | 'total'>('all');
 
   useEffect(() => {
     const loadStats = () => {
@@ -1310,37 +1051,6 @@ function DeepResearchSection({ board }: { board: string }) {
     const i = setInterval(loadStats, 60_000);
     return () => clearInterval(i);
   }, []);
-
-  const searchablePicks = useMemo(() => {
-    if (!data) return [] as DeepPick[];
-    const picks: DeepPick[] = [
-      data.grandSlam,
-      ...(data.pressurePack || []),
-      ...(data.vip4Pack || []),
-      ...(data.parlayPlan || []),
-      ...(data.asleepPicks || []),
-      ...(data.valuePlays || []),
-    ].filter((p): p is DeepPick => Boolean(p));
-    const term = searchTerm.trim().toLowerCase();
-
-    return picks.filter((pick) => {
-      if (marketFilter !== 'all' && pick.marketType !== marketFilter) return false;
-      if (!term) return true;
-      const haystack = [
-        pick.eventName,
-        pick.league,
-        pick.selection,
-        pick.homeTeam?.name,
-        pick.awayTeam?.name,
-        pick.tier,
-        pick.marketType,
-        pick.aiExplanation?.shortReason || '',
-      ].join(' ').toLowerCase();
-      return haystack.includes(term);
-    });
-  }, [data, marketFilter, searchTerm]);
-
-  const showSearchResults = searchTerm.trim().length > 0 || marketFilter !== 'all';
 
   // Map registry product-line name → CategoryTile title. The registry uses the productLine
   // we wrote when recording the pick (see recordBoardService.ts). Keep this lookup table
@@ -1446,130 +1156,137 @@ function DeepResearchSection({ board }: { board: string }) {
         </button>
       </div>
 
-      <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-4 grid gap-4 md:grid-cols-[1fr_auto]">
-        <div className="space-y-2">
-          <div className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30">Search / filter picks</div>
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
-            <input
-              value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Search team, league, market, tier..."
-              className="w-full rounded-2xl border border-white/10 bg-black/10 py-3 pl-10 pr-4 text-sm text-white placeholder:text-white/30 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-            />
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          {['all', 'moneyline', 'spread', 'total'].map((type) => (
-            <button
-              key={type}
-              type="button"
-              onClick={() => setMarketFilter(type as 'all' | 'moneyline' | 'spread' | 'total')}
-              className={`rounded-full border px-3 py-2 text-[10px] font-black uppercase tracking-[0.25em] transition-all ${
-                marketFilter === type
-                  ? 'border-white bg-white text-black'
-                  : 'border-white/10 bg-white/5 text-white/60 hover:border-white/30 hover:text-white'
-              }`}
-            >
-              {type === 'all' ? 'All markets' : type}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {showSearchResults && (
-        <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-4 space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <div className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30">Search results</div>
-              <p className="text-sm text-white/70">
-                Showing {searchablePicks.length} matching picks{marketFilter !== 'all' ? ` · ${marketFilter}` : ''}.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                setSearchTerm('');
-                setMarketFilter('all');
-              }}
-              className="text-[10px] font-black uppercase tracking-[0.3em] text-primary hover:text-white"
-            >
-              Clear filters
-            </button>
-          </div>
-          {searchablePicks.length > 0 ? (
-            <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
-              {searchablePicks.map((pick) => (
-                <DeepPickCard
-                  key={`${pick.gameId}-${pick.selection}`}
-                  pick={pick}
-                  variant="vip"
-                  href={`/pick/${pick.gameId}?board=${board}&from=/picks?board=${board}&selection=${encodeURIComponent(pick.selection)}`}
-                  live={computeLiveState(pick, liveMap[pick.gameId])}
-                  lateNewsNote={lateNewsFlags[pick.gameId] || null}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="rounded-2xl border border-white/10 bg-black/10 p-6 text-sm text-white/50">
-              No picks match that search or market filter. Try a different team name, league, tier, or reset the filters.
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Main board layout:
-          1. 3 BIG HERO TILES — Grand Slam, Pressure Pack, VIP 4-Pack (the flagship straights)
-          2. Secondary row — Personal Pick + $10 Parlay Plan (still prominent)
-          3. Footer link strip — everything else (Big Games, NRFI, Value, Edges, Tendencies, Asleep, Period Plays)
-          Each tile/link routes to its own dedicated page so every section has room to breathe. */}
+      {/* Main board layout: Grand Slam → Pressure Pack → 4-Pack → System Parlay */}
       {board === 'north-american' ? (
-        <div className="space-y-6">
-          {/* 1. HERO TILES — the 3 flagship straights products */}
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <HeroTile href="/grand-slam" icon={Crown} title="Grand Slam" subtitle="1 single pick" count={data.grandSlam ? 1 : 0} unit="pick" accent="emerald" restingLabel="Resting today" stats={statsFor('Grand Slam')} showStreak />
-            <HeroTile href="/pressure-pack" icon={Flame} title="Pressure Pack" subtitle="2 picks" count={data.pressurePack.length} unit="pick" accent="amber" stats={statsFor('Pressure Pack')} />
-            <HeroTile href="/vip-picks" icon={ShieldCheck} title="VIP 4-Pack" subtitle="4 picks" count={data.vip4Pack.length} unit="pick" accent="sky" stats={statsFor('VIP 4-Pack')} />
+        <div className="space-y-10">
+
+          {/* ── GRAND SLAM ─────────────────────────────────────────────────── */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <div className="w-7 h-7 rounded-full bg-primary/20 border border-primary/40 flex items-center justify-center shrink-0">
+                <Crown className="w-3.5 h-3.5 text-primary" />
+              </div>
+              <h2 className="text-[11px] font-black uppercase tracking-[0.3em] text-primary">Grand Slam</h2>
+              {statsFor('Grand Slam') && (() => {
+                const s = statsFor('Grand Slam')!;
+                return (s.wins + s.losses) > 0 ? (
+                  <span className="text-[10px] font-black text-white/30 tabular-nums">
+                    {s.wins}-{s.losses} · {s.winRate}
+                  </span>
+                ) : null;
+              })()}
+            </div>
+            {data.grandSlam ? (
+              <DeepPickCard
+                pick={data.grandSlam}
+                variant="grand-slam"
+                href={`/pick/${data.grandSlam.gameId}?board=north-american`}
+                live={computeLiveState(data.grandSlam, liveMap[data.grandSlam.gameId])}
+              />
+            ) : (
+              <div className="rounded-2xl border border-white/8 bg-white/[0.02] px-5 py-4 text-sm font-bold text-white/30">
+                Resting today — no Grand Slam on the board.
+              </div>
+            )}
           </div>
 
-          {/* HOW TO BET — the flagship products are STRAIGHTS (single bets). Tell customers not
-              to parlay them; the $10 Parlay Plan is the only parlay product. */}
-          <div className="rounded-2xl border border-amber-400/30 bg-amber-400/[0.07] px-4 py-3">
-            <p className="text-xs md:text-sm leading-relaxed text-white/75">
-              <span className="font-black uppercase tracking-wide text-amber-300">Bet the Grand Slam, Pressure Pack &amp; VIP as straights</span> — single bets, one ticket each.{" "}
-              <span className="font-black text-white">Don&apos;t parlay them.</span> Every play is priced to win on its own; combining them into a parlay just stacks the juice against you. The{" "}
-              <Link href="/parlay-plan" className="font-black text-primary hover:underline">$10 Parlay Plan</Link>{" "}is the only product built for parlays.
+          {/* ── 2-PICK PRESSURE PACK ───────────────────────────────────────── */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <div className="w-7 h-7 rounded-full bg-amber-500/20 border border-amber-500/40 flex items-center justify-center shrink-0">
+                <Flame className="w-3.5 h-3.5 text-amber-400" />
+              </div>
+              <h2 className="text-[11px] font-black uppercase tracking-[0.3em] text-amber-400">2-Pick Pressure Pack</h2>
+              {statsFor('Pressure Pack') && (() => {
+                const s = statsFor('Pressure Pack')!;
+                return (s.wins + s.losses) > 0 ? (
+                  <span className="text-[10px] font-black text-white/30 tabular-nums">
+                    {s.wins}-{s.losses} · {s.winRate}
+                  </span>
+                ) : null;
+              })()}
+            </div>
+            {data.pressurePack.length > 0 ? (
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                {data.pressurePack.map((pick) => (
+                  <DeepPickCard
+                    key={pick.gameId}
+                    pick={pick}
+                    variant="pressure"
+                    href={`/pick/${pick.gameId}?board=north-american`}
+                    live={computeLiveState(pick, liveMap[pick.gameId])}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-white/8 bg-white/[0.02] px-5 py-4 text-sm font-bold text-white/30">
+                No Pressure Pack plays today.
+              </div>
+            )}
+          </div>
+
+          {/* ── 4-PACK ─────────────────────────────────────────────────────── */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <div className="w-7 h-7 rounded-full bg-sky-500/20 border border-sky-500/40 flex items-center justify-center shrink-0">
+                <ShieldCheck className="w-3.5 h-3.5 text-sky-400" />
+              </div>
+              <h2 className="text-[11px] font-black uppercase tracking-[0.3em] text-sky-400">4-Pack</h2>
+              {statsFor('VIP 4-Pack') && (() => {
+                const s = statsFor('VIP 4-Pack')!;
+                return (s.wins + s.losses) > 0 ? (
+                  <span className="text-[10px] font-black text-white/30 tabular-nums">
+                    {s.wins}-{s.losses} · {s.winRate}
+                  </span>
+                ) : null;
+              })()}
+            </div>
+            {data.vip4Pack.length > 0 ? (
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                {data.vip4Pack.map((pick) => (
+                  <DeepPickCard
+                    key={pick.gameId}
+                    pick={pick}
+                    variant="vip"
+                    href={`/pick/${pick.gameId}?board=north-american`}
+                    live={computeLiveState(pick, liveMap[pick.gameId])}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-white/8 bg-white/[0.02] px-5 py-4 text-sm font-bold text-white/30">
+                No 4-Pack plays today.
+              </div>
+            )}
+          </div>
+
+          {/* ── HOW TO BET ─────────────────────────────────────────────────── */}
+          <div className="rounded-2xl border border-amber-400/25 bg-amber-400/[0.06] px-4 py-3">
+            <p className="text-xs leading-relaxed text-white/70">
+              <span className="font-black uppercase tracking-wide text-amber-300">Bet every pick above as a straight</span> — one ticket each, not parlayed together. Every play is priced to win on its own.
             </p>
           </div>
 
-          {/* 2. SECONDARY ROW — Sport Parlays + Parlay Plan (swapped with Personal Pick per owner) */}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <CategoryTile href="/sport-parlays" icon={Layers} title="Sport Parlays" count={(data as any).sportParlays?.length ?? 0} unit="parlay" restingLabel="Built across tonight's full slate" stats={statsFor('Sport Parlays')} />
-            <CategoryTile href="/parlay-plan" icon={DollarSign} title="$10 Parlay Plan" count={data.parlayPlan.length} unit="leg" restingLabel="Not enough legs today" stats={statsFor('Parlay Center')} />
-          </div>
-
-          {/* 3. FOOTER LINK STRIP — only products that actually have content tonight.
-              Empty/dead products (Value Plays, Period Plays, Big Games when no playoffs,
-              Trends) are hidden when count is 0 — no more "click for nothing" tiles. */}
-          <div>
-            <div className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30 mb-3 pl-1">More on tonight's board</div>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
-              <FooterLink href="/himothy-picks" icon={Crown} title="HIMOTHY Personal Pick" count={1} />
-              {(data.marquee?.length ?? 0) > 0 && (
-                <FooterLink href="/big-games" icon={Trophy} title="Big Games" count={data.marquee?.length ?? 0} />
-              )}
-              {(data.nrfi?.length ?? 0) > 0 && (
-                <FooterLink href="/nrfi" icon={Radio} title="NRFI" count={data.nrfi?.length ?? 0} />
-              )}
-              {(data.valuePlays?.length ?? 0) > 0 && (
-                <FooterLink href="/value" icon={Target} title="Value Plays" count={data.valuePlays?.length ?? 0} />
-              )}
-              {(data.asleepPicks?.length ?? 0) > 0 && (
-                <FooterLink href="/asleep" icon={Flame} title="Sleeper Picks" count={data.asleepPicks?.length ?? 0} />
-              )}
-              <FooterLink href="/stats" icon={Trophy} title="Full Record" count={null} />
+          {/* ── SYSTEM PARLAY (bottom) ──────────────────────────────────────── */}
+          {data.parlayPlan.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="w-7 h-7 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center shrink-0">
+                  <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
+                </div>
+                <h2 className="text-[11px] font-black uppercase tracking-[0.3em] text-emerald-400">System Parlay</h2>
+              </div>
+              <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.04] p-4 space-y-2">
+                {data.parlayPlan.map((pick, i) => (
+                  <CompactParlayLeg key={pick.gameId} pick={pick} index={i} />
+                ))}
+                <p className="text-[10px] text-white/30 pt-1 leading-relaxed">
+                  System-generated parlay — place as a single multi-leg ticket. Bet small; parlays are variance plays, not the main event.
+                </p>
+              </div>
             </div>
-          </div>
+          )}
+
         </div>
       ) : hasPicks ? (
         /* Soccer / Tennis / Overseas — flat "Picks We Like" (no product tiers) */
@@ -1580,7 +1297,7 @@ function DeepResearchSection({ board }: { board: string }) {
           </div>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {flatPicks.map((pick) => (
-              <DeepPickCard key={pick.gameId} pick={pick} variant="vip" href={`/pick/${pick.gameId}?board=${board}&from=/picks?board=${board}&selection=${encodeURIComponent(pick.selection)}`} live={computeLiveState(pick, liveMap[pick.gameId])} lateNewsNote={lateNewsFlags[pick.gameId] || null} />
+              <DeepPickCard key={pick.gameId} pick={pick} variant="vip" href={`/pick/${pick.gameId}?board=${board}&from=/picks?board=${board}`} live={computeLiveState(pick, liveMap[pick.gameId])} />
             ))}
           </div>
         </section>
@@ -1588,13 +1305,8 @@ function DeepResearchSection({ board }: { board: string }) {
         /* Individual (golf) / Racing — show outright tournament contenders */
         <OutrightTournaments tournaments={data.outrights} />
       ) : (
-        <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-8 text-center space-y-2">
-          <div className="text-white/50 text-sm font-bold">
-            {(data as any)?.emptyReason || 'No picks on this board today.'}
-          </div>
-          <div className="text-white/30 text-xs">
-            We only ship when the data is there. Check back once more games are scheduled.
-          </div>
+        <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-8 text-center text-white/30 text-sm font-semibold">
+          No picks on this board today. Check back once more games are scheduled.
         </div>
       )}
     </div>
@@ -1835,8 +1547,7 @@ function MainPickCard({ pick }: { pick: BoardPick }) {
     s === "loss" ? "border-red-500/80 bg-gradient-to-br from-red-950/70 via-red-900/30 to-slate-900 shadow-[0_0_46px_-10px_rgba(239,68,68,0.55)]" :
     "border-amber-500/30 bg-gradient-to-br from-amber-950/60 via-amber-900/30 to-slate-900 shadow-xl";
   return (
-    <Link href={`/pick-by-id/${pick.id}`} className="block">
-    <article className={`relative overflow-hidden rounded-3xl border p-6 md:p-8 ${cardAccent} hover:border-amber-400/60 transition-all`}>
+    <article className={`relative overflow-hidden rounded-3xl border p-6 md:p-8 ${cardAccent}`}>
       <div className="absolute -top-10 -right-10 h-40 w-40 rounded-full bg-amber-500/10 blur-3xl" />
       {graded && (
         <div className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center select-none">
@@ -1896,7 +1607,6 @@ function MainPickCard({ pick }: { pick: BoardPick }) {
         )}
       </div>
     </article>
-    </Link>
   );
 }
 
@@ -1904,7 +1614,6 @@ function PickCard({ pick }: { pick: BoardPick }) {
   const sc = statusConfig(pick.status);
   const StatusIcon = sc.icon;
   return (
-    <Link href={`/pick-by-id/${pick.id}`} className="block">
     <article className="flex flex-col rounded-2xl border border-white/8 bg-white/[0.03] p-5 gap-4 hover:border-white/15 hover:bg-white/[0.05] transition-all">
       <div className="flex items-start justify-between gap-2">
         <div>
@@ -1940,7 +1649,6 @@ function PickCard({ pick }: { pick: BoardPick }) {
         <p className="text-xs text-white/40 leading-relaxed border-t border-white/5 pt-3">{pick.reasoning}</p>
       )}
     </article>
-    </Link>
   );
 }
 
@@ -1948,7 +1656,6 @@ function CompactPickRow({ pick, index }: { pick: BoardPick; index: number }) {
   const sc = statusConfig(pick.status);
   const StatusIcon = sc.icon;
   return (
-    <Link href={`/pick-by-id/${pick.id}`} className="block">
     <div className="flex items-center gap-3 rounded-xl border border-white/8 bg-white/[0.02] p-3 hover:bg-white/[0.04] transition-all">
       <div className="w-6 h-6 rounded-full bg-white/5 flex items-center justify-center text-[10px] font-black text-white/40 shrink-0">
         {index + 1}
@@ -1969,7 +1676,6 @@ function CompactPickRow({ pick, index }: { pick: BoardPick; index: number }) {
         <StatusIcon className="h-2.5 w-2.5" /> {sc.label}
       </span>
     </div>
-    </Link>
   );
 }
 
@@ -2018,10 +1724,7 @@ function PicksHubPageClient() {
     return new URLSearchParams(window.location.search);
   }, []);
 
-  const [selectedBoard, setSelectedBoard] = useState(() => {
-    if (typeof window === "undefined") return "north-american";
-    return (new URLSearchParams(window.location.search).get("board") || "north-american").toLowerCase();
-  });
+  const selectedBoard = "north-american";
 
   const [board, setBoard] = useState<StructuredBoardResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -2031,7 +1734,7 @@ function PicksHubPageClient() {
 
     const fetchBoard = async () => {
       try {
-        const res = await fetch(`/api/board/structured?board=${encodeURIComponent(selectedBoard)}`, { cache: "no-store" });
+        const res = await fetch(`/api/board/structured?board=north-american`, { cache: "no-store" });
         const json = (await res.json()) as StructuredBoardResponse;
         if (mounted && json.success) setBoard(json);
       } catch (error) {
@@ -2044,7 +1747,7 @@ function PicksHubPageClient() {
     fetchBoard();
     const interval = setInterval(fetchBoard, 30000);
     return () => { mounted = false; clearInterval(interval); };
-  }, [selectedBoard]);
+  }, []);
 
   const counts = board?.counts || { officialStraightPicks: 0, officialGroupedProducts: 0, parlays: 0, totalUniquePicks: 0 };
   const mainPick = board?.sections.mainPick || null;
@@ -2054,20 +1757,6 @@ function PicksHubPageClient() {
   const isFallback = isLiveSlateFallback(board?.source);
   const hasOfficialPicks = !isFallback && counts.totalUniquePicks > 0;
 
-  const isPower20 = selectedBoard === 'power20';
-
-  const boardOptions = [
-    ...(board?.boardOptions || [
-      { key: "north-american", label: "HIMOTHY Board" },
-      { key: "soccer", label: "Soccer" },
-      { key: "tennis", label: "Tennis" },
-      { key: "combat", label: "UFC / Boxing" },
-      { key: "individual", label: "Golf" },
-      { key: "racing", label: "Racing" },
-      { key: "global", label: "Global" },
-    ]),
-    { key: "power20", label: "⚡ Power 20" },
-  ];
 
   return (
     <div className="min-h-screen bg-background text-white pb-20">
@@ -2094,54 +1783,8 @@ function PicksHubPageClient() {
 
       <div className="mx-auto max-w-7xl px-4 py-8 md:px-8">
 
-        {/* Board selector */}
-        <div className="mb-8">
-          <div className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30 mb-3">Select Board</div>
-          <nav className="flex flex-wrap gap-2">
-            {boardOptions.map((option) => {
-              const active = selectedBoard === option.key;
-              return (
-                <button
-                  key={option.key}
-                  type="button"
-                  onClick={() => {
-                    setSelectedBoard(option.key);
-                    setBoard(null);
-                    setLoading(true);
-                    window.history.replaceState(null, "", `/picks?board=${option.key}`);
-                  }}
-                  className={`rounded-full border px-5 py-2 text-xs font-black uppercase tracking-wider transition-all ${
-                    active
-                      ? "border-white bg-white text-black"
-                      : "border-white/10 bg-white/[0.03] text-white/50 hover:border-white/30 hover:text-white"
-                  }`}
-                >
-                  {option.label}
-                </button>
-              );
-            })}
-          </nav>
-        </div>
-
-        {/* Power 20 view */}
-        {isPower20 && (
-          <section>
-            <div className="mb-6 flex items-center gap-3">
-              <Zap className="h-5 w-5 text-emerald-400" />
-              <div>
-                <h2 className="text-sm font-black uppercase tracking-widest text-white">Power 20 — Heavy Favorites</h2>
-                <p className="text-[10px] text-white/30 font-semibold mt-0.5">
-                  Top 20 highest win-probability favorites · grouped into 4 mini-parlays · all sports all leagues
-                </p>
-              </div>
-            </div>
-            <Power20Section />
-          </section>
-        )}
 
         {/* Standard board view */}
-        {!isPower20 && (
-          <>
         {/* Board notice */}
         {!loading && isFallback && (
           <div className="mb-8 flex items-start gap-3 rounded-2xl border border-primary/25 bg-primary/5 p-4">
@@ -2149,7 +1792,7 @@ function PicksHubPageClient() {
             <div>
               <div className="text-sm font-black text-primary">Today's HIMOTHY Board</div>
               <p className="mt-1 text-xs text-white/50 leading-relaxed">
-                Today's plays — the Grand Slam, Pressure Pack, VIP 4-Pack, and $10 Parlay Plan below. Every play comes with the reason we like it.
+                Grand Slam · Pressure Pack · 4-Pack — the top 7 picks of the day across every sport and market, ranked by confidence. System parlay at the bottom when earned.
               </p>
             </div>
           </div>
@@ -2275,8 +1918,6 @@ function PicksHubPageClient() {
             <span className="flex items-center gap-1.5"><TrendingUp className="h-3 w-3" /> Board: {board?.boardDate || "—"}</span>
             <span className="flex items-center gap-1.5"><Zap className="h-3 w-3" /> Auto-refresh 30s</span>
           </div>
-        )}
-          </>
         )}
       </div>
     </div>

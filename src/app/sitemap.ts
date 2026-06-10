@@ -17,30 +17,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { path: '',                       priority: 1.0,  changeFrequency: 'daily' },
     { path: '/picks',                 priority: 0.95, changeFrequency: 'hourly' },
 
-    // Edge tools (new this build)
-    { path: '/asleep',                priority: 0.9,  changeFrequency: 'daily' },
-    { path: '/edges',                 priority: 0.9,  changeFrequency: 'daily' },
-    { path: '/trends',                priority: 0.9,  changeFrequency: 'daily' },
-    { path: '/value',                 priority: 0.85, changeFrequency: 'daily' },
-
-    // Product tiles
-    { path: '/grand-slam',            priority: 0.9,  changeFrequency: 'daily' },
-    { path: '/pressure-pack',         priority: 0.9,  changeFrequency: 'daily' },
-    { path: '/vip-picks',             priority: 0.9,  changeFrequency: 'daily' },
-    { path: '/parlay-plan',           priority: 0.9,  changeFrequency: 'daily' },
-    { path: '/hailmary',              priority: 0.7,  changeFrequency: 'daily' },
-    { path: '/overnight',             priority: 0.7,  changeFrequency: 'daily' },
-    { path: '/himothy-picks',         priority: 0.7,  changeFrequency: 'daily' },
-    { path: '/big-games',             priority: 0.7,  changeFrequency: 'daily' },
-    { path: '/nrfi',                  priority: 0.7,  changeFrequency: 'daily' },
-
-    // Board variants (each is its own SEO landing for that sport category)
-    { path: '/picks?board=soccer',    priority: 0.85, changeFrequency: 'daily' },
-    { path: '/picks?board=tennis',    priority: 0.85, changeFrequency: 'daily' },
-    { path: '/picks?board=combat',    priority: 0.85, changeFrequency: 'daily' },
-    { path: '/picks?board=individual',priority: 0.85, changeFrequency: 'daily' },
-    { path: '/picks?board=racing',    priority: 0.8,  changeFrequency: 'daily' },
-    { path: '/picks?board=global',    priority: 0.8,  changeFrequency: 'daily' },
+    // Sport pack pages
+    { path: '/soccer-picks',          priority: 0.85, changeFrequency: 'daily' },
+    { path: '/tennis-picks',          priority: 0.85, changeFrequency: 'daily' },
+    { path: '/ufc-picks',             priority: 0.85, changeFrequency: 'daily' },
+    { path: '/golf-picks',            priority: 0.8,  changeFrequency: 'daily' },
+    { path: '/racing-picks',          priority: 0.8,  changeFrequency: 'daily' },
+    { path: '/global-picks',          priority: 0.8,  changeFrequency: 'daily' },
 
     // Sport-specific landings (long-tail SEO targets)
     { path: '/nba-picks-today',       priority: 0.85, changeFrequency: 'daily' },

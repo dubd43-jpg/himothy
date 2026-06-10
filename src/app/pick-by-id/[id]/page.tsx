@@ -22,7 +22,12 @@ export default function PickByIdRedirect() {
         }
         const j = await r.json();
         if (j?.pick?.eventId) {
-          if (!cancelled) router.replace(`/pick/${j.pick.eventId}?from=/picks`);
+          // FIX 2026-06-03: include the pick's selection so the destination page
+          // matches the right pick when two products share a gameId. Was dropping
+          // selection entirely — second admin-published pick on the same game
+          // always landed on the first one.
+          const sel = j.pick.selection ? `&selection=${encodeURIComponent(j.pick.selection)}` : '';
+          if (!cancelled) router.replace(`/pick/${j.pick.eventId}?from=/picks${sel}`);
         } else {
           if (!cancelled) router.replace("/picks");
         }

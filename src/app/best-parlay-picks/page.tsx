@@ -4,12 +4,12 @@ import { pageMeta } from "@/lib/seo";
 import { BarChart3 } from "lucide-react";
 
 export const metadata = pageMeta({
-  title: "Best Parlay Picks Today — Parlay Plan, Power of Parlays",
-  description: "Today's strategic parlay picks built on real math. The $10 Parlay Plan, Power of Parlays heavy-chalk stack, and Power 10 daily. Legs capped at -450.",
+  title: "Best Parlay Picks Today — HIMOTHY System Parlay",
+  description: "Today's system parlay built on real math. Only posted when enough picks clear the confidence bar. Legs capped at -450, max 2 legs.",
   path: "/best-parlay-picks",
   keywords: [
-    "best parlay picks", "best parlays today", "daily parlay picks", "$10 parlay",
-    "parlay of the day", "sgp picks", "same game parlay", "power 20 parlay",
+    "best parlay picks", "best parlays today", "daily parlay picks",
+    "parlay of the day", "sgp picks", "same game parlay",
     "parlay strategy", "free parlay picks today",
   ],
 });
