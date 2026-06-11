@@ -13,7 +13,7 @@ import { getOddsInsightForPick, getTotalsInsightForPick, hasOddsApi } from '@/se
 import { getOddsBucketStats } from '@/services/pickRegistryService';
 import { oddsBucket } from '@/lib/oddsBucket';
 import { hasDatabase } from '@/lib/hasDatabase';
-import { prisma } from '@/lib/prisma';
+import { prisma, withRetry } from '@/lib/prisma';
 
 export const boardCache = new Map<string, { data: any; generatedAt: number }>();
 
@@ -21,7 +21,7 @@ let _slateCacheSchemaReady = false;
 async function ensureSlateCacheSchema() {
   if (_slateCacheSchemaReady || !hasDatabase()) return;
   try {
-    await prisma.$executeRawUnsafe(`
+    await withRetry(() => prisma.$executeRawUnsafe(`
       CREATE TABLE IF NOT EXISTS "DailySlateCache" (
         "version" TEXT NOT NULL,
         "etDate" TEXT NOT NULL,
@@ -30,7 +30,7 @@ async function ensureSlateCacheSchema() {
         "generatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         PRIMARY KEY ("version", "etDate", "board")
       )
-    `);
+    `));
     _slateCacheSchemaReady = true;
   } catch (err) {
     console.error('[dailyBoardCache] ensureSlateCacheSchema failed', err);
@@ -46,10 +46,10 @@ export async function readPersistedSlate(etDate: string, board: string): Promise
   if (!hasDatabase()) return null;
   await ensureSlateCacheSchema();
   try {
-    const rows = await prisma.$queryRawUnsafe<any[]>(
+    const rows = await withRetry(() => prisma.$queryRawUnsafe<any[]>(
       `SELECT "data" FROM "DailySlateCache" WHERE "etDate" = $1 AND "board" = $2 ORDER BY "generatedAt" DESC LIMIT 1`,
       etDate, board,
-    );
+    ));
     return rows[0]?.data ?? null;
   } catch (err) {
     console.error('[dailyBoardCache] readPersistedSlate failed', err);
@@ -67,12 +67,12 @@ async function writePersistedSlate(version: string, etDate: string, board: strin
     // Guard against replacing a board already frozen under a DIFFERENT version this ET-day.
     const existing = await readPersistedSlate(etDate, board);
     if (existing) return;
-    await prisma.$executeRawUnsafe(
+    await withRetry(() => prisma.$executeRawUnsafe(
       `INSERT INTO "DailySlateCache" ("version", "etDate", "board", "data", "generatedAt")
        VALUES ($1, $2, $3, $4::jsonb, NOW())
        ON CONFLICT ("version", "etDate", "board") DO NOTHING`,
       version, etDate, board, JSON.stringify(data),
-    );
+    ));
   } catch (err) {
     console.error('[dailyBoardCache] writePersistedSlate failed', err);
   }
